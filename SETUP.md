@@ -67,6 +67,7 @@ The server expects this layout. The folder *above* `pure-tech-lead-cmd-center` i
     ├── prs                      start / stop script
     ├── public/index.html        the page
     ├── hooks/report.sh          tells the server what a Claude session is doing
+    ├── README.md                what it does and how it works
     ├── SETUP.md                 this guide
     ├── .gitignore               keeps data/ and hooks/settings.json out of git
     └── data/                    made on first start; your local state (see section 7)

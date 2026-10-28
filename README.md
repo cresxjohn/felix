@@ -1,0 +1,112 @@
+# PURE Tech Lead Command Center
+
+A small page on your Mac at `http://localhost:4777` for the work a tech lead does every day. Today it is **Open PRs**: your PRs and the PRs waiting on your review in fm (`purepm/frontend-monorepo`) and bm (`purepm/backend-monorepo`). Claude Code can review or fix them for you in the background.
+
+It is the first piece of a bigger home screen, with cards for Incident Commander, Calendar, Tasks, Team out of office and Jira. The plan is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
+
+New Mac or reinstall? Follow [SETUP.md](SETUP.md).
+
+
+## What it does
+
+**Two lists**
+- **My PRs** (`/mine`) and **Needs my review** (`/review`), straight from GitHub.
+- Each PR shows its Jira ticket, review state, checks, merge conflicts and size (XS to XL).
+- Search, status filters, repo filter, sorting and grouping. Every view has its own link, for example `/review?status=failing&pr=fm-12247`.
+- **Copy link** on every PR, and **Remove me** to drop yourself from a PR's reviewers on GitHub. Remove me asks for a second click first.
+
+**Details panel** (the right half of the screen)
+- **Conversation:** the description, reviews, comments and inline code comments, plus reviewers, labels and assignees.
+- **Commits** and **Checks**, each check with a link to its details.
+- **Files changed:** each file's changes, with line numbers.
+- The panel is rebuilt from the GitHub API, because GitHub pages can't be shown inside another page.
+
+**Claude review** (other people's PRs)
+- Runs your `/review-pr` skill in a hidden session on your Mac, with Remote Control on, so you can follow it in the Claude phone app.
+- It shows live progress, a live terminal view and a step log, then the full review.
+- You pick **A–D** for what to post. Nothing goes to GitHub before you do, and posting needs a second click.
+- **Review several at once:** at most 3 run at a time; the rest wait in a queue.
+- A **Re-review** button appears when the author pushes after your review.
+
+**Claude fix** (your own PRs)
+- Fixes failing checks, resolves a merge conflict, works through review comments, or does what you type.
+- It works in its own git worktree (`<repo>-wt-pr-<n>`), so your checkout isn't touched.
+- Claude commits there but can't push. You read the commits and diff in the **Changes** tab, then press **Push** (never forced) or **Discard**.
+
+**Around it**
+- A model picker: a global default at the top, and a per-PR override in the panel.
+- Mac notifications when a review or fix needs you, or a new review request arrives.
+- Starts at login. Idle Claude sessions close on their own.
+
+
+## How it works
+
+```
+Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh auth token`)
+                │
+                ├─► tmux ─► claude --remote-control … "/review-pr <url>"   (review)
+                │      └─► claude … in <repo>-wt-pr-<n>                    (fix)
+                │
+                └─◄ hooks/report.sh ◄─ Claude Code hooks (progress, done, waiting)
+```
+
+- `server.mjs`: the whole server. Plain Node 22.5+, no npm packages. It serves the page, talks to GitHub, and starts and tracks Claude sessions.
+- `public/index.html`: the whole page (HTML, CSS and JS in one file). It reloads without a server restart.
+- `hooks/report.sh`: a Claude Code hook that forwards session events to the server. It only runs in sessions this server starts.
+- `prs`: start, stop, install at login (macOS LaunchAgent), status and logs.
+- `data/`: local state (sessions, logs). It is not in git.
+
+**Safety**
+- The server only listens on `127.0.0.1`.
+- Write requests must be JSON from the page itself, so other websites can't trigger them.
+- Fix sessions can't run `git push` or post on PRs.
+- No secrets are stored in this folder.
+
+
+## Commands
+
+```bash
+./prs install     # start now and at every login
+./prs status
+./prs restart     # after editing server.mjs
+./prs logs
+./prs stop
+./prs uninstall   # stop starting at login
+```
+
+
+## API
+
+All routes are local only.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/prs` | Both PR lists from GitHub, plus Claude sessions |
+| `GET /api/reviews` | Claude sessions only (the page polls this) |
+| `GET /api/pr?repo=fm&number=1` | One PR's details for the panel |
+| `GET /api/review/screen?key=` | A session's terminal screen |
+| `POST /api/review` | Start or queue a Claude review `{ url, model? }` |
+| `POST /api/review/batch` | Review several PRs `{ urls, model? }` |
+| `POST /api/review/answer` | Answer A–D `{ url, answer }` |
+| `POST /api/review/stop` | Interrupt a session, or take a review out of the queue `{ key }` |
+| `POST /api/review/end` | Close a session `{ key }` |
+| `POST /api/review/open` | Open a session in Warp or the Claude app `{ key, where }` |
+| `POST /api/fix` | Start a fix on my PR `{ url, kind, request?, model? }` |
+| `GET /api/fix/changes?url=` | The fix's commits and diff |
+| `POST /api/fix/push` | Push the fix to the PR branch `{ url }` |
+| `POST /api/fix/discard` | Close the fix and remove its worktree `{ url }` |
+| `POST /api/remove-me` | Remove me from a PR's reviewers `{ url }` |
+| `POST /api/review-event` | Hook events from Claude sessions |
+
+A session `key` is the PR link for a review, or `fix:<PR link>` for a fix.
+
+
+## Roadmap
+
+From the plan:
+
+1. Home page with cards; the PR page moves to `/prs`.
+2. Incident Commander (Datadog on-call).
+3. Calendar and Team out of office (Google Calendar).
+4. Tasks.
+5. Jira board card, a Jira tab in the panel, and a Team view of everyone's open PRs.
