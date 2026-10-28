@@ -200,15 +200,25 @@ On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 
 ## 10. Coming later: command center keys
 
-The command center plan needs a few keys. They go into the Mac's Keychain, never into files or chat. Each command asks for the value without showing it on screen:
+The command center plan needs a few keys. They go into the Mac's Keychain, never into files or chat. Each command asks for the value twice, without showing it on screen.
 
-```bash
-security add-generic-password -s cmd-center-datadog-api -a datadog -w
-```
+**Datadog** (Incident Commander card) needs one token and no API key. Your Datadog role is Read Only, so you can't make API keys, and you don't need one:
+
+1. In Datadog (us5), open **Organization Settings → Access Tokens → New Access Token**.
+2. Name it `Tech Lead Command Center` and pick the longest expiry offered (the default is 1 day).
+3. Under scopes, tick only **on_call_read**, then save and copy the token. It is shown only once.
+4. Save it:
 
 ```bash
 security add-generic-password -s cmd-center-datadog-app -a datadog -w
 ```
+
+The server sends it in the `DD-APPLICATION-KEY` header. Make a new one when it expires. The two schedules it reads:
+
+- PURE Incident Commanders Schedule (Americas): `a39cd3b9-f39f-4c6c-8c2f-017fca628d36`
+- Kastl Incident Commanders (Philippines): `1a2e4a4e-f27a-424c-999e-1cb8d6062c85`
+
+**Jira:**
 
 ```bash
 security add-generic-password -s cmd-center-jira -a <your Jira email> -w
