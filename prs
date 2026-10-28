@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Start or stop the Open PRs page.
+#   ./prs install    start it now and every time you log in (macOS LaunchAgent)
+#   ./prs uninstall  stop starting it at login
+#   ./prs start | stop | restart | logs | status
+# It runs as a small background program on this Mac (no Docker), so it can start Claude Code reviews.
+set -euo pipefail
+cd "$(dirname "$0")"
+HERE="$(pwd)"
+URL=http://localhost:4777
+PID_FILE=data/server.pid
+LOG=data/server.log
+LABEL=local.open-prs
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+mkdir -p data
+
+installed() { [ -f "$PLIST" ]; }
+loaded() { launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; }
+manual_running() { [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; }
+wait_up() { for _ in $(seq 1 40); do curl -s -o /dev/null "$URL" && return 0; sleep 0.25; done; return 1; }
+open_page() { [ "${NO_OPEN:-}" = 1 ] || open "$URL"; }
+
+stop_manual() {
+  if manual_running; then kill "$(cat "$PID_FILE")"; fi
+  rm -f "$PID_FILE"
+}
+
+write_plist() {
+  local node
+  node="$(command -v node || true)"
+  [ -n "$node" ] || { echo "node was not found on your PATH." >&2; exit 1; }
+  mkdir -p "$(dirname "$PLIST")"
+  # PATH covers node, gh and tmux (Homebrew) and claude (~/.local/bin).
+  cat >"$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>$node</string><string>$HERE/server.mjs</string></array>
+  <key>WorkingDirectory</key><string>$HERE</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>$(dirname "$node"):/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$HERE/$LOG</string>
+  <key>StandardErrorPath</key><string>$HERE/$LOG</string>
+</dict>
+</plist>
+EOF
+}
+
+case "${1:-start}" in
+  install)
+    stop_manual
+    loaded && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    write_plist
+    launchctl bootstrap "$DOMAIN" "$PLIST"
+    wait_up || { echo "The server did not start. See $LOG" >&2; exit 1; }
+    echo "Open PRs on $URL — it now starts by itself when you log in."
+    open_page
+    ;;
+  uninstall)
+    loaded && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    rm -f "$PLIST"
+    echo "Removed. It won't start at login anymore."
+    ;;
+  start)
+    if installed; then
+      loaded || launchctl bootstrap "$DOMAIN" "$PLIST"
+    elif ! manual_running; then
+      NODE="$(command -v node || true)"
+      [ -n "$NODE" ] || { echo "node was not found on your PATH." >&2; exit 1; }
+      nohup "$NODE" server.mjs >>"$LOG" 2>&1 &
+      echo $! >"$PID_FILE"
+    fi
+    wait_up || { echo "The server did not start. See $LOG" >&2; exit 1; }
+    echo "Open PRs on $URL"
+    open_page
+    ;;
+  stop)
+    # Review sessions keep running in tmux and show up again on the next start.
+    if loaded; then launchctl bootout "$DOMAIN/$LABEL" && echo "Stopped (starts again at next login, or ./prs start)."
+    elif manual_running; then stop_manual && echo "Stopped."
+    else echo "Not running."; fi
+    ;;
+  restart)
+    if loaded; then launchctl kickstart -k "$DOMAIN/$LABEL"; wait_up && echo "Restarted."
+    else "$0" stop && "$0" start; fi
+    ;;
+  status)
+    if loaded; then echo "Running (starts at login)."
+    elif manual_running; then echo "Running (until you stop it or log out)."
+    else echo "Not running."; fi
+    installed && echo "Start at login: on" || echo "Start at login: off (./prs install to turn on)"
+    ;;
+  logs) tail -f "$LOG" ;;
+  *) echo "Usage: ./prs install | uninstall | start | stop | restart | status | logs" >&2; exit 1 ;;
+esac

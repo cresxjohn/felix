@@ -1,0 +1,2092 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open PRs · fm + bm</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%232563EB' d='M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+/* Layout: list column on the left; the PR details panel takes the right half of the screen when open.
+   Colors and type follow PURE PM Hub (pms-spa TailwindColors.js, Roboto). */
+:root {
+  --bg: #E8EEF2;          /* indigo-50 */
+  --surface: #FFFFFF;
+  --fg: #343B53;          /* gray-800 */
+  --muted: #636C82;       /* gray-700 */
+  --line: #DDE1E7;        /* gray-300 */
+  --accent: #2563EB;      /* blue-600 */
+  --accent-hover: #1D4ED8;
+  --accent-bg: #E1EDF6;   /* blue-50 */
+  --link: #0891B2;        /* cyan-600 */
+  --mark: #FFE29B;        /* yellow-200 */
+  --ok: #047857;   --ok-bg: #D1FAE5;     /* green-700 / 100 */
+  --warn: #8D6747; --warn-bg: #FFF2D8;   /* yellow-800 / 100 */
+  --alert: #C2410C; --alert-bg: #FFEDD5; /* orange-700 / 100 */
+  --bad: #B91C1C;  --bad-bg: #FEE2E2;    /* red-700 / 100 */
+  --neutral-bg: #EBEEEF;  /* gray-100 */
+  --code-bg: #F4F8FD;     /* gray-1000 */
+  --sans: Roboto, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #292E3F;          /* gray-900 */
+    --surface: #343B53;     /* gray-800 */
+    --fg: #F6F7F8;          /* gray-75 */
+    --muted: #939EB1;       /* gray-500 */
+    --line: #4A5270;
+    --accent: #4593FF;      /* blue-500 */
+    --accent-hover: #6BB8FE;
+    --accent-bg: #2B3A63;
+    --link: #22D3EE;        /* cyan-400 */
+    --mark: #664833;        /* yellow-900 */
+    --ok: #77E3A9;   --ok-bg: #1F4136;
+    --warn: #FFC122; --warn-bg: #4A3E22;
+    --alert: #FF8E31; --alert-bg: #4D3020;
+    --bad: #F87171;  --bad-bg: #4F2A33;
+    --neutral-bg: #3E4561;
+    --code-bg: #2C3247;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+.main { padding: 16px 16px 64px; }
+body.panel-open .main, body.panel-empty .main { margin-right: 50vw; }
+.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 20px; container-type: inline-size; }
+a { color: inherit; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+header .who { color: var(--muted); font-family: var(--mono); font-size: 13px; }
+header .spacer { flex: 1; }
+.updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.refresh {
+  display: inline-grid; place-items: center;
+  width: 36px; height: 36px; border: 0; border-radius: 6px;
+  background: var(--accent); color: #fff; cursor: pointer;
+}
+.refresh:hover { background: var(--accent-hover); }
+.bell { height: 36px; padding: 0 12px; font-size: 13px; }
+/* Narrow list column: the bell shows just its icon (its tooltip keeps the words) so the header stays on one line. */
+@container (max-width: 760px) { .bell { width: 36px; padding: 0; justify-content: center; } .bell span { display: none; } .bell svg { width: 16px; height: 16px; } }
+.bell[data-state="on"] { color: var(--ok); border-color: var(--ok); }
+.bell[data-state="blocked"] { color: var(--bad); }
+.refresh svg { width: 18px; height: 18px; }
+.refresh.spinning svg, .spin { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh.spinning svg, .spin { animation: none; } }
+
+/* Tabs on the left, the Claude model picker at the right end of the same row */
+.tabs-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 4px; overflow-x: auto; flex: 1; min-width: 0; }
+.tabs-row .model { margin-left: auto; padding-bottom: 4px; }
+.tabs-row .model select { height: 32px; }
+.tabs a {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 10px 14px; margin-bottom: -1px; text-decoration: none;
+  border-bottom: 2px solid transparent; color: var(--muted); font-weight: 500; white-space: nowrap;
+}
+.tabs a:hover { color: var(--fg); }
+.tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+.tabs .n { padding: 0 7px; border-radius: 999px; background: var(--neutral-bg); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tabs a[aria-current="page"] .n { background: var(--accent-bg); }
+.sub { margin: -8px 0 0; color: var(--muted); }
+
+.banner { padding: 10px 14px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); }
+.banner code { font-family: var(--mono); }
+
+.toolbar { display: grid; gap: 10px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.search { position: relative; flex: 1 1 260px; min-width: 0; }
+.search svg { position: absolute; left: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search input {
+  width: 100%; height: 36px; padding: 0 64px 0 34px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+}
+.search input::placeholder { color: var(--muted); }
+.search input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-bg); }
+.search .hint {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 5px;
+}
+.search .clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: var(--neutral-bg); border-radius: 4px; padding: 1px 6px; font-size: 12px; cursor: pointer; color: var(--muted);
+}
+.seg { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 2px; }
+.seg button {
+  border: 0; background: none; padding: 0 12px; height: 30px; border-radius: 4px; cursor: pointer; color: var(--muted);
+  font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.seg .n { opacity: 0.75; margin-left: 4px; }
+.sort { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.sort select { height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 13px; color: var(--muted); cursor: pointer;
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.chip b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.chip.zero { opacity: 0.55; }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); opacity: 1; }
+.chip[aria-pressed="true"] b { color: var(--accent); }
+.filters .spacer { flex: 1; }
+.linkbtn { border: 0; background: none; padding: 4px 2px; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 500; }
+.linkbtn:hover { text-decoration: underline; }
+.showing { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+#repos { display: grid; gap: 20px; }
+section { display: grid; gap: 8px; }
+section h2 { margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+section h2 .repo { font-family: var(--mono); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+section h2 .count { margin-left: auto; font-weight: 500; color: var(--muted); letter-spacing: 0; text-transform: none; }
+section h2 a { text-decoration: none; }
+section h2 a:hover { color: var(--accent); }
+
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; container-type: inline-size; }
+/* When the list is narrow (panel open, small window), buttons go under the title instead of squeezing it. */
+@container (max-width: 640px) {
+  .list .pr { grid-template-columns: minmax(0, 1fr); }
+  .list .pr .num { display: flex; gap: 8px; }
+  .list .pr .meta, .list .pr .pills { grid-column: 1; }
+  .list .pr .head { flex-direction: column; gap: 8px; }
+  .list .pr .actions { justify-content: flex-start; order: 2; }
+}
+.pr {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 4px 12px;
+  padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.pr:first-child { border-top: 0; }
+.pr:hover { background: color-mix(in srgb, var(--accent-bg) 45%, transparent); }
+.pr.selected { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.pr .num { font-family: var(--mono); font-size: 13px; color: var(--muted); padding-top: 1px; display: grid; align-content: start; gap: 2px; }
+.pr .num .rk { font-family: var(--sans); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.pr .head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.pr .title { flex: 1; min-width: 0; font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
+.pr .title:hover { color: var(--accent); }
+.pr .meta { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); font-size: 12px; }
+.author b { font-weight: 500; color: var(--fg); }
+.pr .branch { font-family: var(--mono); overflow-wrap: anywhere; }
+.size { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.add { color: var(--ok); }
+.del { color: var(--bad); }
+mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
+.pills { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 500;
+  background: var(--neutral-bg); color: var(--muted);
+}
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.alert { background: var(--alert-bg); color: var(--alert); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.run { background: var(--accent-bg); color: var(--accent); }
+.pill.run::before { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+.pill.claude { font-weight: 600; }
+.ticket {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent);
+  color: var(--accent); font-family: var(--mono); font-size: 12px; font-weight: 500; text-decoration: none;
+}
+.ticket svg { width: 12px; height: 12px; }
+.ticket:hover { background: var(--accent-bg); }
+.tag { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; }
+
+.actions { flex: none; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.btn {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none;
+  white-space: nowrap;
+}
+.btn svg { width: 13px; height: 13px; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-hover); color: #fff; }
+.btn.done { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
+.btn.confirm { border-color: var(--bad); color: #fff; background: var(--bad); }
+/* Batch review: row checkboxes and the selection bar */
+.pick { display: inline-flex; align-items: center; margin-bottom: 2px; cursor: pointer; }
+.pick input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-bg); font-size: 13px; }
+/* Fix with Claude */
+.answer:disabled { opacity: 0.5; cursor: not-allowed; }
+.custom-fix { display: grid; gap: 8px; }
+.custom-fix textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); resize: vertical; }
+.custom-fix textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.custom-fix .row { justify-content: flex-end; }
+.local-model select { height: 30px; }
+.fix-files { display: grid; gap: 10px; }
+details.file > summary { list-style: none; }
+details.file > summary::-webkit-details-marker { display: none; }
+details.file > summary .chev { transition: transform 0.15s; }
+details.file[open] > summary .chev { transform: rotate(90deg); }
+.warnbox { padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.another { border-top: 1px solid var(--line); padding-top: 12px; }
+.another > summary { cursor: pointer; font-weight: 500; }
+.btn:disabled { opacity: 0.6; cursor: progress; }
+
+.empty { padding: 20px 16px; color: var(--muted); text-align: center; }
+/* Loading: placeholder shapes that match real rows, with a soft shimmer */
+.sk {
+  display: block; height: 12px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--neutral-bg) 30%, color-mix(in srgb, var(--neutral-bg) 45%, var(--surface)) 50%, var(--neutral-bg) 70%);
+  background-size: 300% 100%; animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+.skeleton .pr { cursor: default; }
+.skeleton .pr:hover { background: none; }
+.skeleton .head { display: grid; gap: 8px; }
+.sk.pillsk { display: inline-block; width: 84px; height: 18px; border-radius: 999px; }
+.chip.sk-chip { width: 120px; height: 30px; padding: 0; border-color: transparent; border-radius: 999px; cursor: default; }
+.chip.sk-chip::before { display: none; }
+.tabs .n.sk { display: inline-block; width: 22px; height: 16px; }
+.loadbar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 30; overflow: hidden; }
+.loadbar::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--accent);
+  animation: loadbar 1.1s ease-in-out infinite;
+}
+@keyframes loadbar { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .loadbar::after { animation: none; left: 0; width: 100%; opacity: 0.5; } }
+.stale { color: var(--warn); }
+
+/* Details panel: right half of the screen */
+.panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 50vw; z-index: 20;
+  display: flex; flex-direction: column;
+  background: var(--surface); border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px rgba(41, 46, 63, 0.08);
+}
+.panel-head { padding: 16px 20px 0; display: grid; gap: 8px; border-bottom: 1px solid var(--line); }
+.panel-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+.panel-top .id { font-family: var(--mono); font-weight: 500; color: var(--fg); }
+.panel-top .spacer { flex: 1; }
+.close { border: 0; background: none; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1; }
+.close:hover { background: var(--neutral-bg); color: var(--fg); }
+.panel h2 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.panel .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12px; }
+.panel .meta .branch { font-family: var(--mono); }
+.panel .pills { padding: 0; grid-column: auto; }
+.ptabs { display: flex; gap: 2px; overflow-x: auto; margin-top: 4px; }
+.ptabs button {
+  border: 0; background: none; padding: 8px 12px; cursor: pointer; color: var(--muted); font-weight: 500; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.ptabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.ptabs .n { font-size: 12px; opacity: 0.8; margin-left: 4px; }
+/* max-content rows: items that clip their own overflow (file boxes, check lists) must keep full height; the body scrolls. */
+/* One column that never grows past the panel: wide things (terminal, diffs, tables) scroll inside themselves. */
+.panel-body {
+  flex: 1; overflow-y: auto; overflow-x: hidden; padding: 18px 20px 48px;
+  display: grid; gap: 18px; align-content: start; grid-auto-rows: max-content; grid-template-columns: minmax(0, 1fr);
+}
+.panel-body > * { min-width: 0; }
+.panel-body h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.loading { color: var(--muted); }
+
+.md { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md h1, .md h2, .md h3, .md h4 { font-size: 15px; margin: 18px 0 6px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.md h1, .md h2 { font-size: 16px; }
+.md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin: 0 0 10px; }
+.md ul, .md ol { padding-left: 22px; }
+.md code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 4px; border-radius: 4px; }
+.md pre { background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+.md blockquote { border-left: 3px solid var(--line); padding-left: 10px; color: var(--muted); }
+.md img { max-width: 100%; }
+.md a { color: var(--accent); }
+.md hr { border: 0; border-top: 1px solid var(--line); }
+
+.panel-body { container-type: inline-size; }
+.state { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; background: #047857; }
+.state.draft { background: #748095; }
+.state.merged { background: #82517D; }
+.state.closed { background: #B91C1C; }
+.state-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--muted); font-size: 13px; }
+.state-line b { color: var(--fg); font-weight: 500; }
+.ref { font-family: var(--mono); font-size: 12px; background: var(--accent-bg); color: var(--accent); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.panel h2 .n { color: var(--muted); font-weight: 400; }
+.ptabs .diffstat { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 12px; white-space: nowrap; padding: 0 4px; }
+
+/* Conversation: thread on the left, GitHub-style sidebar on the right (stacks when narrow) */
+.convo { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 20px; align-items: start; }
+@container (max-width: 760px) { .convo { grid-template-columns: minmax(0, 1fr); } }
+.thread { display: grid; gap: 12px; min-width: 0; }
+.side { display: grid; gap: 14px; font-size: 13px; }
+.side > div { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.side h3 { margin-bottom: 8px; }
+.people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.people li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.people .who { font-weight: 500; overflow-wrap: anywhere; }
+.none { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.label { display: inline-block; margin: 0 4px 4px 0; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--lc); background: color-mix(in srgb, var(--lc) 18%, transparent); }
+.event { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.event-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; background: var(--code-bg); font-size: 12px; color: var(--muted); }
+.event-head b { color: var(--fg); font-weight: 500; }
+.event-head a { margin-left: auto; color: var(--muted); display: inline-flex; }
+.event-head a svg { width: 13px; height: 13px; }
+.event > .md { padding: 10px 12px; }
+.code-comments { border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 10px; }
+.cc { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cc-path { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: var(--code-bg); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.cc-body { padding: 8px 10px; display: grid; gap: 4px; font-size: 13px; }
+.cc-body + .cc-body { border-top: 1px solid var(--line); }
+.cc-body b { font-weight: 500; }
+
+/* Commits and checks */
+.rows { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.rows li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.rows li:first-child { border-top: 0; }
+.rows .grow { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.rows .grow a { font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
+.rows .grow a:hover { color: var(--accent); text-decoration: underline; }
+.rows code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.check-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.check-dot.passed { background: var(--ok); }
+.check-dot.failed { background: var(--bad); }
+.check-dot.pending { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+.check-dot.skipped { background: transparent; border: 2px solid var(--muted); }
+.check-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+/* Files changed: one box per file with its diff */
+.files-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.files-bar .spacer { flex: 1; }
+.file { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.file-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 0; background: var(--code-bg); }
+.file-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 0 8px 12px; border: 0; background: none; cursor: pointer; text-align: left; }
+.file-head .name { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.file-head .st { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.file-head .size { font-size: 12px; white-space: nowrap; }
+.file-head a { color: var(--muted); display: inline-flex; }
+.file-head a svg, .chev { width: 13px; height: 13px; flex: none; }
+.chev { color: var(--muted); transition: transform 0.15s; }
+.file-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.diff-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+.diff { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.55; }
+.diff td { padding: 0 8px; vertical-align: top; white-space: pre; }
+.diff td.ln { width: 1%; min-width: 44px; text-align: right; color: var(--muted); user-select: none; border-right: 1px solid var(--line); }
+.diff tr.add { background: color-mix(in srgb, var(--ok-bg) 80%, transparent); }
+.diff tr.del { background: color-mix(in srgb, var(--bad-bg) 80%, transparent); }
+.diff tr.hunk td { background: var(--accent-bg); color: var(--muted); padding-block: 2px; }
+.diff .sign { user-select: none; color: var(--muted); padding-right: 6px; }
+.diff tr.add .sign { color: var(--ok); }
+.diff tr.del .sign { color: var(--bad); }
+.diff-missing { padding: 12px; color: var(--muted); font-size: 13px; }
+
+.claude-box { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; }
+.claude-box .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.claude-box .note { color: var(--muted); font-size: 13px; }
+.progress { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.progress .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); border-top-color: transparent; }
+.answers { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.answer { text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; display: grid; gap: 2px; }
+.answer b { font-weight: 600; }
+.answer span { font-size: 12px; color: var(--muted); }
+.answer:hover { border-color: var(--accent); }
+.answer.confirm { border-color: var(--bad); background: var(--bad-bg); }
+.answer.confirm b, .answer.confirm span { color: var(--bad); }
+.answer:disabled { opacity: 0.6; cursor: progress; }
+.cost { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.panel-body h3 .cost { text-transform: none; letter-spacing: 0; font-weight: 400; }
+/* Terminal look for the live view in both themes: the screen is plain text from tmux. */
+.term {
+  margin: 0; max-height: 420px; overflow: auto; padding: 12px 14px; border-radius: 8px;
+  background: #1E293B; color: #E2E8F0; border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 12px; line-height: 1.45; white-space: pre;
+}
+/* Sub-tabs inside the Claude review tab */
+.subtabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); justify-self: start; }
+.subtabs button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; }
+.subtabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.subtabs .n { font-size: 12px; opacity: 0.8; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+.term { max-height: calc(100vh - 330px); min-height: 240px; }
+.steps { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 2px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; }
+.steps li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
+.steps .t { color: var(--muted); font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.steps li.you { color: var(--accent); }
+.steps li.done { color: var(--ok); font-weight: 500; }
+.steps li.error { color: var(--bad); }
+.steps li.wait { color: var(--warn); }
+
+.panel-empty-state { margin: auto; padding: 24px; max-width: 380px; display: grid; gap: 10px; justify-items: center; text-align: center; color: var(--muted); }
+.panel-empty-state svg { width: 40px; height: 40px; color: var(--line); }
+.panel-empty-state h2 { color: var(--fg); font-size: 17px; }
+.panel-empty-state p { margin: 0; }
+.glance { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; width: 100%; }
+.glance a { display: block; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; color: var(--fg); }
+.glance a:hover { border-color: var(--accent); color: var(--accent); }
+.glance b { font-variant-numeric: tabular-nums; }
+.keys { font-size: 12px; }
+kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; margin: 0 2px 0 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--fg); }
+kbd:first-child { margin-left: 0; }
+
+@media (max-width: 900px) {
+  .panel { width: 100vw; }
+  .panel.empty { display: none; }
+  body.panel-open .main, body.panel-empty .main { margin-right: 0; }
+  body.panel-open { overflow: hidden; }
+}
+@media (max-width: 560px) {
+  .main { padding-top: 12px; }
+  .pr { grid-template-columns: minmax(0, 1fr); }
+  .pr .num { display: flex; gap: 8px; }
+  .pr .meta, .pills { grid-column: 1; }
+  .search .hint { display: none; }
+}
+
+/* Dropdowns: our own button + menu over a hidden native select */
+.dd-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.dd-btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
+  height: 36px; min-width: 120px; padding: 0 10px 0 12px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  color: var(--fg); font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap;
+}
+.dd-btn:hover { border-color: var(--accent); }
+.dd-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.dd-btn svg { width: 14px; height: 14px; flex: none; color: var(--muted); transition: transform 0.15s; }
+.dd-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.tabs-row .model .dd-btn, .local-model .dd-btn { height: 32px; }
+.dd-menu {
+  position: fixed; z-index: 60; padding: 4px; max-height: 320px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(41, 46, 63, 0.18);
+}
+.dd-item {
+  display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 6px; border-radius: 6px;
+  font-size: 13px; color: var(--fg); cursor: pointer; white-space: nowrap;
+}
+.dd-item:hover, .dd-item:focus { background: var(--accent-bg); outline: none; }
+.dd-item[aria-selected="true"] { color: var(--accent); font-weight: 500; }
+.dd-check { width: 16px; height: 16px; flex: none; display: inline-grid; place-items: center; }
+.dd-check svg { width: 14px; height: 14px; }
+@media (prefers-reduced-motion: reduce) { .dd-btn svg { transition: none; } }
+</style>
+</head>
+<body>
+<div class="loadbar" id="loadbar" hidden></div>
+<div class="main">
+<div class="wrap">
+  <header>
+    <h1>Open PRs</h1>
+    <span class="who" id="who"></span>
+    <span class="spacer"></span>
+    <span class="updated" id="updated">Loading your PRs from GitHub…</span>
+    <button class="btn bell" id="bell" type="button" hidden></button>
+    <button class="refresh" id="refresh" type="button" title="Refresh (R)" aria-label="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="tabs-row">
+  <nav class="tabs" id="tabs" aria-label="Lists"></nav>
+  <label class="sort model" title="Model used when you start a Claude review">Claude model
+        <select id="model">
+          <option value="">Default</option>
+          <option value="opus">Opus 5.5</option>
+          <option value="sonnet">Sonnet 5.5</option>
+          <option value="haiku">Haiku 5.5</option>
+          <option value="fable">Fable 5.1</option>
+        </select>
+  </label>
+  </div>
+  <p class="sub" id="subheading"></p>
+
+  <div class="banner" id="error" hidden></div>
+
+  <div class="toolbar">
+    <div class="controls">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Search title, branch, PMHUB key, #number, person" aria-label="Search PRs">
+        <span class="hint" id="hint">/</span>
+        <button class="clear" id="clearq" type="button" hidden>Clear</button>
+      </label>
+      <div class="seg" id="repo" role="group" aria-label="Repository"></div>
+      <label class="sort">Sort
+        <select id="sort">
+          <option value="attention">Needs attention first</option>
+          <option value="updated">Recently updated</option>
+          <option value="stale">Least recently updated</option>
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="largest">Largest</option>
+          <option value="smallest">Smallest</option>
+          <option value="number">PR number</option>
+        </select>
+      </label>
+    </div>
+    <div class="filters">
+      <div class="filters" id="chips" role="group" aria-label="Status filters"></div>
+      <button class="linkbtn" id="reset" type="button" hidden>Clear filters</button>
+      <span class="spacer"></span>
+      <div class="seg" role="group" aria-label="Layout">
+        <button type="button" id="grouped" aria-pressed="true">By repo</button>
+        <button type="button" id="flat" aria-pressed="false">One list</button>
+      </div>
+    </div>
+    <div class="selbar" id="selbar" hidden></div>
+    <span class="showing" id="showing"></span>
+  </div>
+
+  <div id="repos" aria-busy="true"></div>
+</div>
+</div>
+
+<aside class="panel" id="panel" hidden aria-label="PR details"></aside>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const REPO_LABEL = { fm: "frontend-monorepo", bm: "backend-monorepo" };
+const REPO_KEY = { "purepm/frontend-monorepo": "fm", "purepm/backend-monorepo": "bm" };
+const JIRA = "https://purepm.atlassian.net/browse/";
+const ICON = {
+  ticket: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a3 3 0 0 0 0 6v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a3 3 0 0 0 0-6Z"/><path d="M14 5v14" stroke-dasharray="2 2"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`,
+  userMinus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/></svg>`,
+  spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>`,
+  stop: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>`,
+  external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>`,
+};
+
+const TABS = [
+  { id: "mine", label: "My PRs", sub: "Your open PRs in frontend-monorepo and backend-monorepo.",
+    ghQuery: (login) => `is:pr is:open author:${login}`, empty: "You have no open PRs in fm or bm." },
+  { id: "review", label: "Needs my review", sub: "Other people's open PRs where you are added as a reviewer, plus ones you reviewed here with Claude.",
+    ghQuery: (login) => `is:pr is:open user-review-requested:${login}`, empty: "Nobody is waiting on your review right now." },
+];
+
+// The skill's own posting choices (review-pr Step 5).
+const ANSWERS = [
+  { id: "A", label: "Post suggested verdict", note: "Approves or requests changes on GitHub", posts: true },
+  { id: "B", label: "Comment issues only", note: "Posts the issues as comments, no verdict", posts: true },
+  { id: "C", label: "Comment issues + verdict", note: "Posts the issues and the verdict", posts: true },
+  { id: "D", label: "Do nothing", note: "Keeps the review here only", posts: false },
+];
+
+// ---------- State and URL ----------
+// Path picks the list (/mine or /review). Search params hold the rest, so any view can be bookmarked:
+// ?q=portal&repo=fm&sort=oldest&status=failing,conflict&view=list&pr=fm-12247&panel=files
+const DEFAULT_VIEW = { tab: "mine", q: "", repo: "all", sort: "attention", statuses: [], group: true, pr: null, panel: "conversation" };
+let view = { ...DEFAULT_VIEW };
+let data = null;
+let reviews = {};
+let loading = false;
+const details = new Map(); // "fm-12247" -> { loading, data, error }
+
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  view = {
+    tab: location.pathname.startsWith("/review") ? "review" : "mine",
+    q: p.get("q") || "",
+    repo: ["fm", "bm"].includes(p.get("repo")) ? p.get("repo") : "all",
+    sort: SORTS[p.get("sort")] ? p.get("sort") : "attention",
+    statuses: (p.get("status") || "").split(",").filter((s) => STATUSES.some((x) => x.id === s)),
+    group: p.get("view") !== "list",
+    pr: /^(fm|bm)-\d+$/.test(p.get("pr") || "") ? p.get("pr") : null,
+    panel: PANEL_TABS.includes(p.get("panel")) ? p.get("panel") : "conversation",
+  };
+}
+
+function urlFor(v) {
+  const p = new URLSearchParams();
+  if (v.q) p.set("q", v.q);
+  if (v.repo !== "all") p.set("repo", v.repo);
+  if (v.sort !== "attention") p.set("sort", v.sort);
+  if (v.statuses.length) p.set("status", v.statuses.join(","));
+  if (!v.group) p.set("view", "list");
+  if (v.pr) p.set("pr", v.pr);
+  if (v.pr && v.panel !== "conversation") p.set("panel", v.panel);
+  const qs = p.toString().replace(/%2C/g, ",");
+  return `/${v.tab}${qs ? `?${qs}` : ""}`;
+}
+
+// Tab and panel changes add a history entry (Back undoes them); filter typing just replaces it.
+function update(patch, { push = false } = {}) {
+  view = { ...view, ...patch };
+  const url = urlFor(view);
+  if (url !== location.pathname + location.search) history[push ? "pushState" : "replaceState"](null, "", url);
+  render();
+}
+
+window.addEventListener("popstate", () => { readUrl(); $("q").value = view.q; render(); });
+
+// ---------- Helpers ----------
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function ago(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return "just now";
+  const m = s / 60; if (m < 60) return `${Math.floor(m)}m ago`;
+  const h = m / 60; if (h < 24) return `${Math.floor(h)}h ago`;
+  const d = h / 24; if (d < 30) return `${Math.floor(d)}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function duration(ms) {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+// Same size buckets as the PR Slack post.
+function sizeLabel(lines) {
+  if (lines < 50) return "XS";
+  if (lines < 100) return "S";
+  if (lines < 500) return "M";
+  if (lines < 1000) return "L";
+  return "XL";
+}
+
+// GitHub already sanitizes its HTML; DOMPurify is a second guard. Without it, show plain text.
+function safeHtml(html) {
+  return window.DOMPurify ? DOMPurify.sanitize(html, { ADD_ATTR: ["target"] }) : esc(html.replace(/<[^>]+>/g, ""));
+}
+
+function markdown(text) {
+  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(text || ""));
+  return `<pre>${esc(text)}</pre>`;
+}
+
+function prKey(p) {
+  return `${p.repoKey}-${p.number}`;
+}
+
+function needsReview(p) {
+  return !p.isDraft && p.reviewDecision !== "APPROVED" && !p.changesRequestedBy.length;
+}
+
+// ---------- Claude review status ----------
+// Order matters: a running session wins, then my newest GitHub review, then the session's own state.
+function claudeState(p) {
+  const r = reviews[p.url];
+  const my = p.myReview;
+  if (r?.status === "running") return { id: "running", cls: "run", label: `On-going · ${r.steps} step${r.steps === 1 ? "" : "s"}` };
+  if (r?.status === "answering") return { id: "running", cls: "run", label: "Working on your answer…" };
+  if (r?.status === "waiting") return { id: "ready", cls: "warn", label: "Needs your approval" };
+  if (r?.status === "queued") return { id: "queued", cls: "", label: "Queued for Claude" };
+  if (my && (!r || my.submittedAt >= r.startedAt)) {
+    if (my.state === "APPROVED") return { id: "done", cls: "ok", label: "Done · you approved" };
+    if (my.state === "CHANGES_REQUESTED") return { id: "changes", cls: "alert", label: "You requested changes" };
+    if (my.state === "COMMENTED") return { id: "commented", cls: "", label: "You commented" };
+  }
+  if (r?.status === "ready") return { id: "ready", cls: "warn", label: "Complete · needs your action" };
+  if (r?.status === "answered") return { id: "answered", cls: "", label: r.answer === "D" ? "Kept in chat only" : `Answered ${r.answer}` };
+  if (r?.status === "failed") return { id: "failed", cls: "bad", label: "Review failed" };
+  if (r?.status === "stopped") return { id: "stopped", cls: "", label: "Review stopped" };
+  if (r?.status === "ended") return { id: "ended", cls: "", label: "Session ended" };
+  return null;
+}
+
+// Status filters. A PR shows when it matches ANY selected status. `only` limits a filter to one tab.
+const STATUSES = [
+  { id: "claude-running", only: "review", label: "Claude reviewing", color: "var(--accent)", test: (p) => claudeState(p)?.id === "running" },
+  { id: "claude-ready", only: "review", label: "Needs your action", color: "var(--warn)", test: (p) => claudeState(p)?.id === "ready" },
+  { id: "new-commits", only: "review", label: "New commits", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
+  { id: "needs", label: "Need review", color: "var(--warn)", test: (p) => needsReview(p) },
+  { id: "approved", label: "Approved", color: "var(--ok)", test: (p) => p.reviewDecision === "APPROVED" },
+  { id: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
+  { id: "failing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
+  { id: "running", label: "Checks running", color: "var(--accent)", test: (p) => p.checks.state === "pending" },
+  { id: "conflict", label: "Conflicts", color: "var(--bad)", test: (p) => p.mergeable === "CONFLICTING" },
+  { id: "draft", label: "Drafts", color: "var(--muted)", test: (p) => p.isDraft },
+];
+
+// Lower rank = needs your attention sooner.
+function attentionRank(p) {
+  const c = claudeState(p)?.id;
+  if (c === "ready" || p.newCommits) return -1;
+  if (p.checks.state === "failing" || p.mergeable === "CONFLICTING" || p.changesRequestedBy.length) return 0;
+  if (p.isDraft) return 4;
+  if (p.reviewDecision === "APPROVED") return 1;
+  if (p.checks.state === "pending") return 3;
+  return 2;
+}
+
+const SORTS = {
+  attention: (a, b) => attentionRank(a) - attentionRank(b) || b.updatedAt.localeCompare(a.updatedAt),
+  updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
+  stale: (a, b) => a.updatedAt.localeCompare(b.updatedAt),
+  newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
+  oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
+  largest: (a, b) => (b.additions + b.deletions) - (a.additions + a.deletions),
+  smallest: (a, b) => (a.additions + a.deletions) - (b.additions + b.deletions),
+  number: (a, b) => b.number - a.number,
+};
+
+function tokens() {
+  return view.q.toLowerCase().split(/\s+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
+}
+
+// Every word in the search box must appear somewhere in the PR.
+function matchesSearch(p, toks) {
+  if (!toks.length) return true;
+  const hay = [p.repoKey, p.number, `#${p.number}`, p.author, p.title, p.branch, p.base, ...p.labels, ...(p.tickets || []),
+    ...p.approvedBy, ...p.changesRequestedBy, ...p.reviewRequests].join(" ").toLowerCase();
+  return toks.every((t) => hay.includes(t));
+}
+
+function highlight(text, toks) {
+  if (!toks.length) return esc(text);
+  const re = new RegExp(`(${toks.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return String(text).split(re).map((part, i) => (i % 2 ? `<mark>${esc(part)}</mark>` : esc(part))).join("");
+}
+
+// ---------- Pills ----------
+function checksPill(c) {
+  if (c.state === "failing") return `<span class="pill bad" title="${esc(c.failing.join("\n"))}">${c.failed} check${c.failed > 1 ? "s" : ""} failing</span>`;
+  if (c.state === "pending") return `<span class="pill run">${c.pending} check${c.pending > 1 ? "s" : ""} running</span>`;
+  if (c.state === "passing") return `<span class="pill ok">Checks pass</span>`;
+  return `<span class="pill">No checks</span>`;
+}
+
+function reviewPill(p) {
+  if (p.isDraft) return `<span class="pill">Draft</span>`;
+  if (p.changesRequestedBy.length) return `<span class="pill alert">Changes requested by ${esc(p.changesRequestedBy.join(", "))}</span>`;
+  if (p.reviewDecision === "APPROVED") return `<span class="pill ok">Approved</span>`;
+  const n = p.approvedBy.length;
+  if (n) return `<span class="pill warn" title="Approved by ${esc(p.approvedBy.join(", "))}">${n} approval${n > 1 ? "s" : ""}, needs more</span>`;
+  return `<span class="pill warn">Needs review</span>`;
+}
+
+function claudePill(p) {
+  const s = isMine(p) ? fixState(p) : claudeState(p);
+  return s ? `<span class="pill claude ${s.cls}" title="${isMine(p) ? "Claude fix" : "Claude review"}">${esc(s.label)}</span>` : "";
+}
+
+function isMine(p) {
+  return Boolean(data && p.author === data.login);
+}
+
+function fixKey(p) {
+  return `fix:${p.url}`;
+}
+
+// Where a Claude fix on one of my PRs stands.
+function fixState(p) {
+  const f = reviews[fixKey(p)];
+  if (!f) return null;
+  const steps = `${f.steps} step${f.steps === 1 ? "" : "s"}`;
+  return {
+    running: { id: "running", cls: "run", label: `Claude fixing · ${steps}` },
+    answering: { id: "running", cls: "run", label: `Claude fixing · ${steps}` },
+    waiting: { id: "ready", cls: "warn", label: "Fix needs your approval" },
+    ready: { id: "ready", cls: "warn", label: "Fix ready · check and push" },
+    pushed: { id: "pushed", cls: "ok", label: "Fix pushed" },
+    failed: { id: "failed", cls: "bad", label: "Fix failed" },
+    stopped: { id: "stopped", cls: "", label: "Fix stopped" },
+    ended: { id: "ended", cls: "", label: "Fix session ended" },
+  }[f.status] || null;
+}
+
+function ticketLinks(p, toks = []) {
+  return (p.tickets || []).map((k) =>
+    `<a class="ticket" href="${JIRA}${encodeURIComponent(k)}" target="_blank" rel="noopener" title="Open ${esc(k)} in Jira">${ICON.ticket}${highlight(k, toks)}</a>`).join("");
+}
+
+function allPills(p, toks = []) {
+  const conflict = p.mergeable === "CONFLICTING" ? `<span class="pill bad">Merge conflict</span>` : "";
+  const labels = p.labels.map((l) => `<span class="tag">${highlight(l, toks)}</span>`).join("");
+  const fresh = p.newCommits ? `<span class="pill alert" title="The author pushed after your last review">New commits since your review</span>` : "";
+  return `${fresh}${claudePill(p)}${ticketLinks(p, toks)}${reviewPill(p)}${checksPill(p.checks)}${conflict}${labels}`;
+}
+
+// The Claude button that fits the PR's current review state.
+function claudeButton(p, { big = false } = {}) {
+  const r = reviews[p.url];
+  const cls = big ? "btn primary" : "btn";
+  if (r?.status === "running" || r?.status === "answering") return `<button class="btn" type="button" data-stop="${esc(p.url)}" title="Interrupt what Claude is doing">${ICON.stop}<span>Stop</span></button>`;
+  if (r?.status === "queued") return `<button class="btn" type="button" data-stop="${esc(p.url)}" title="Take this review out of the queue">${ICON.stop}<span>Cancel</span></button>`;
+  if ((r?.status === "ready" || r?.status === "waiting") && claudeState(p)?.id === "ready") return `<button class="btn primary" type="button" data-decide="${esc(prKey(p))}">${ICON.spark}<span>Decide</span></button>`;
+  if (p.newCommits) return `<button class="btn primary" type="button" data-review="${esc(p.url)}" title="Review the new commits with Claude">${ICON.spark}<span>Re-review</span></button>`;
+  return `<button class="${cls}" type="button" data-review="${esc(p.url)}">${ICON.spark}<span>${r ? "Review again" : "Review with Claude"}</span></button>`;
+}
+
+// ---------- List ----------
+function renderPr(p, toks, showRepo) {
+  const lines = p.additions + p.deletions;
+  const others = view.tab === "review";
+  const waitingOn = p.reviewRequests.filter((r) => !others || r !== data.login);
+  const waiting = waitingOn.length ? `<span>${others ? "Also asked" : "Waiting on"}: ${highlight(waitingOn.join(", "), toks)}</span>` : "";
+  const author = others ? `<span class="author">by <b>${highlight(p.author, toks)}</b> · opened ${ago(p.createdAt)}</span>` : "";
+  const notRequested = others && !p.requested ? `<span>Review request cleared</span>` : "";
+  return `<div class="pr${view.pr === prKey(p) ? " selected" : ""}" data-open="${esc(prKey(p))}">
+    <span class="num">${others ? `<label class="pick" title="Select for batch review"><input type="checkbox" data-pick="${esc(p.url)}"${selected.has(p.url) ? " checked" : ""} aria-label="Select #${p.number}"></label>` : ""}${showRepo ? `<span class="rk">${esc(p.repoKey)}</span>` : ""}<span>#${highlight(p.number, toks)}</span></span>
+    <div class="head">
+      <a class="title" href="${esc(p.url)}" data-open="${esc(prKey(p))}">${highlight(p.title, toks)}</a>
+      <div class="actions">
+        ${others ? claudeButton(p) : `<button class="btn" type="button" data-fixopen="${esc(prKey(p))}" title="Ask Claude to fix checks, conflicts or review comments">${ICON.spark}<span>Fix with Claude</span></button>`}
+        <button class="btn" type="button" data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}">${ICON.copy}<span>Copy link</span></button>
+        ${others && p.requested ? `<button class="btn" type="button" data-remove="${esc(p.url)}" title="Remove you from this PR's reviewers on GitHub">${ICON.userMinus}<span>Remove me</span></button>` : ""}
+      </div>
+    </div>
+    <div class="meta">
+      ${author}
+      <span class="branch">${highlight(p.branch, toks)}</span>
+      <span class="size" title="${p.changedFiles} files">${sizeLabel(lines)} <span class="add">+${p.additions}</span> <span class="del">−${p.deletions}</span></span>
+      <span title="Opened ${esc(new Date(p.createdAt).toLocaleString())}">updated ${ago(p.updatedAt)}</span>
+      ${waiting}${notRequested}
+    </div>
+    <div class="pills">${allPills(p, toks)}</div>
+  </div>`;
+}
+
+function currentTab() {
+  return TABS.find((t) => t.id === view.tab) || TABS[0];
+}
+
+function listFor(tabId) {
+  return (data?.lists?.[tabId] || []).flatMap((r) => r.prs.map((p) => ({ ...p, repoKey: r.key })));
+}
+
+function repos() {
+  return data?.lists?.[currentTab().id] || [];
+}
+
+function findPr(key) {
+  return [...listFor("review"), ...listFor("mine")].find((p) => prKey(p) === key) || null;
+}
+
+function tabStatuses() {
+  return STATUSES.filter((s) => !s.only || s.only === view.tab);
+}
+
+function renderControls(all, toks) {
+  const tab = currentTab();
+  $("tabs").innerHTML = TABS.map((t) => {
+    const n = listFor(t.id).length;
+    const href = urlFor({ ...view, tab: t.id, statuses: [], pr: null });
+    return `<a href="${esc(href)}" data-tab="${t.id}"${t.id === tab.id ? ' aria-current="page"' : ""}>${t.label}<span class="n">${n}</span></a>`;
+  }).join("");
+  $("subheading").textContent = tab.sub;
+
+  // Repo counts follow the search; status counts follow search + repo.
+  const searched = all.filter((p) => matchesSearch(p, toks));
+  const repoOpts = [["all", "All"], ...repos().map((r) => [r.key, r.key])];
+  $("repo").innerHTML = repoOpts.map(([key, label]) => {
+    const n = key === "all" ? searched.length : searched.filter((p) => p.repoKey === key).length;
+    return `<button type="button" data-repo="${esc(key)}" aria-pressed="${view.repo === key}">${esc(label)}<span class="n">${n}</span></button>`;
+  }).join("");
+
+  const scoped = searched.filter((p) => view.repo === "all" || p.repoKey === view.repo);
+  $("chips").innerHTML = tabStatuses().map((s) => {
+    const n = scoped.filter(s.test).length;
+    const on = view.statuses.includes(s.id);
+    return `<button type="button" class="chip${n === 0 && !on ? " zero" : ""}" data-status="${s.id}" aria-pressed="${on}" style="--c: ${s.color}"><b>${n}</b>${s.label}</button>`;
+  }).join("");
+
+  $("sort").value = view.sort;
+  $("sort")._ddSync?.();
+  $("grouped").setAttribute("aria-pressed", String(view.group));
+  $("flat").setAttribute("aria-pressed", String(!view.group));
+  $("clearq").hidden = !view.q;
+  $("hint").hidden = !!view.q;
+  $("reset").hidden = !(view.q || view.repo !== "all" || view.statuses.length);
+}
+
+function renderList() {
+  if (!data) return;
+  $("who").textContent = `@${data.login}`;
+  const all = listFor(view.tab);
+  const toks = tokens();
+  renderControls(all, toks);
+
+  const active = tabStatuses().filter((s) => view.statuses.includes(s.id));
+  const shown = all
+    .filter((p) => view.repo === "all" || p.repoKey === view.repo)
+    .filter((p) => matchesSearch(p, toks))
+    .filter((p) => !active.length || active.some((s) => s.test(p)))
+    .sort(SORTS[view.sort] || SORTS.attention);
+
+  lastShown = shown.map((p) => p.url);
+  renderSelbar();
+  $("showing").textContent = shown.length === all.length ? `${all.length} open PRs` : `Showing ${shown.length} of ${all.length} open PRs`;
+
+  if (!shown.length) {
+    $("repos").innerHTML = all.length
+      ? `<div class="list"><div class="empty">No PRs match. <button class="linkbtn" type="button" data-reset>Clear filters</button></div></div>`
+      : `<div class="list"><div class="empty">${esc(currentTab().empty)}</div></div>`;
+    return;
+  }
+
+  if (!view.group) {
+    $("repos").innerHTML = `<div class="list">${shown.map((p) => renderPr(p, toks, true)).join("")}</div>`;
+    return;
+  }
+
+  const visible = repos().filter((r) => view.repo === "all" || r.key === view.repo);
+  $("repos").innerHTML = visible.map((r) => {
+    const prs = shown.filter((p) => p.repoKey === r.key);
+    const total = all.filter((p) => p.repoKey === r.key).length;
+    const listUrl = `https://github.com/${r.repo}/pulls?q=${encodeURIComponent(currentTab().ghQuery(data.login))}`;
+    const body = prs.length ? prs.map((p) => renderPr(p, toks, false)).join("") : `<div class="empty">No matching PRs in ${esc(r.key)}.</div>`;
+    return `<section>
+      <h2><a href="${esc(listUrl)}" target="_blank" rel="noopener">${esc(r.key)}</a><span class="repo">${esc(REPO_LABEL[r.key] || r.repo)}</span><span class="count">${prs.length} of ${total}</span></h2>
+      <div class="list">${body}</div>
+    </section>`;
+  }).join("");
+}
+
+// ---------- Details panel ----------
+async function loadDetails(key, force = false) {
+  const cur = details.get(key);
+  if (cur && !force && (cur.loading || cur.data)) return;
+  details.set(key, { loading: true, data: cur?.data || null });
+  renderPanel();
+  const [repo, number] = key.split("-");
+  try {
+    const res = await fetch(`/api/pr?repo=${repo}&number=${number}`, { cache: "no-store" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+    details.set(key, { loading: false, data: body });
+  } catch (e) {
+    details.set(key, { loading: false, data: cur?.data || null, error: e.message });
+  }
+  renderPanel();
+}
+
+const PANEL_TABS = ["conversation", "commits", "checks", "files", "claude"];
+const CHEVRON = `<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`;
+const REVIEW_LABEL = {
+  APPROVED: ["ok", "approved these changes"],
+  CHANGES_REQUESTED: ["alert", "requested changes"],
+  COMMENTED: ["", "reviewed"],
+  DISMISSED: ["", "review dismissed"],
+};
+
+function loadingBlock(det) {
+  return det?.error ? `<p class="none">Couldn't load this part. ${esc(det.error)}</p>` : `<p class="loading">Loading from GitHub…</p>`;
+}
+
+// Unified diff to table rows. Hunk headers reset the line counters; `numbers: false` hides the number columns.
+function renderPatch(patch, { numbers = true } = {}) {
+  let oldN = 0, newN = 0;
+  const row = (cls, a, b, sign, text) => `<tr${cls ? ` class="${cls}"` : ""}>${numbers ? `<td class="ln">${a}</td><td class="ln">${b}</td>` : ""}<td class="code"><span class="sign">${sign}</span>${esc(text)}</td></tr>`;
+  return String(patch).split("\n").map((line) => {
+    if (line.startsWith("@@")) {
+      const m = /@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
+      if (m) { oldN = Number(m[1]); newN = Number(m[2]); }
+      return `<tr class="hunk">${numbers ? `<td class="ln"></td><td class="ln"></td>` : ""}<td class="code">${esc(line)}</td></tr>`;
+    }
+    if (line.startsWith("\\")) return row("", "", "", "", line);
+    if (line[0] === "+") return row("add", "", newN++, "+", line.slice(1));
+    if (line[0] === "-") return row("del", oldN++, "", "-", line.slice(1));
+    return row("", oldN++, newN++, " ", line.slice(1));
+  }).join("");
+}
+
+function sidebar(p, d) {
+  const reviewer = (r) => {
+    const [cls, text] = r.requested && r.state ? ["warn", "Re-requested"]
+      : r.requested ? ["warn", "Waiting"]
+      : r.state === "APPROVED" ? ["ok", "Approved"]
+      : r.state === "CHANGES_REQUESTED" ? ["alert", "Changes requested"]
+      : r.state === "DISMISSED" ? ["", "Dismissed"] : ["", "Commented"];
+    return `<li><span class="who">${esc(r.login)}${r.team ? " (team)" : ""}</span><span class="pill ${cls}">${text}</span></li>`;
+  };
+  const decision = { APPROVED: "Approved to merge.", CHANGES_REQUESTED: "Changes were requested.", REVIEW_REQUIRED: "More approving reviews are required to merge." }[d.reviewDecision];
+  const labels = d.labels.map((l) => `<span class="label" style="--lc: #${/^[0-9a-f]{6}$/i.test(l.color) ? l.color : "939EB1"}">${esc(l.name)}</span>`).join("");
+  return `<aside class="side">
+    <div><h3>Reviewers</h3>${d.reviewers.length ? `<ul class="people">${d.reviewers.map(reviewer).join("")}</ul>` : `<p class="none">No reviewers</p>`}${decision ? `<p class="none">${decision}</p>` : ""}</div>
+    <div><h3>Assignees</h3><p class="none">${d.assignees.length ? esc(d.assignees.join(", ")) : "No one"}</p></div>
+    <div><h3>Labels</h3>${labels || `<p class="none">None yet</p>`}</div>
+    <div><h3>Milestone</h3>${d.milestone ? `<a href="${esc(d.milestone.url)}" target="_blank" rel="noopener">${esc(d.milestone.title)}</a>` : `<p class="none">No milestone</p>`}</div>
+    <div><h3>Jira</h3>${d.tickets.length ? ticketLinks(d) : `<p class="none">No ticket found</p>`}</div>
+  </aside>`;
+}
+
+function eventCard({ author, verb, pill = "", at, html, url, extra = "" }) {
+  return `<div class="event">
+    <div class="event-head"><b>${esc(author || "someone")}</b>${pill || `<span>${esc(verb)}</span>`}<span>${ago(at)}</span>
+      <a href="${esc(url)}" target="_blank" rel="noopener" title="Open on GitHub">${ICON.external}</a></div>
+    ${html ? `<div class="md">${safeHtml(html)}</div>` : ""}${extra}
+  </div>`;
+}
+
+// Inline code comments: the first comment of a thread shows the code it points at; replies follow it.
+function codeThreads(comments) {
+  const roots = comments.filter((c) => !c.replyTo || !comments.some((x) => x.id === c.replyTo));
+  return roots.map((root) => {
+    const replies = comments.filter((c) => c.replyTo === root.id);
+    const body = (c) => `<div class="cc-body"><div><b>${esc(c.author)}</b> <span class="cost">${ago(c.at)}</span></div><div class="md">${safeHtml(c.html)}</div></div>`;
+    return `<div class="cc">
+      <div class="cc-path">${esc(root.path)}${root.line ? `:${root.line}` : ""}${root.outdated ? ` <span class="pill">Outdated</span>` : ""}</div>
+      ${root.hunk && !root.replyTo ? `<div class="diff-wrap"><table class="diff">${renderPatch(root.hunk, { numbers: false })}</table></div>` : ""}
+      ${body(root)}${replies.map(body).join("")}
+    </div>`;
+  }).join("");
+}
+
+function panelConversation(p, d, det) {
+  if (!d) return loadingBlock(det);
+  const description = eventCard({
+    author: d.author, verb: "opened this pull request", at: d.createdAt, url: d.url,
+    html: d.bodyHtml || "<p><em>No description provided.</em></p>",
+  });
+  const items = d.timeline.map((t) => {
+    if (t.kind === "comment") return eventCard({ author: t.author, verb: "commented", at: t.at, html: t.html, url: t.url });
+    const [cls, text] = REVIEW_LABEL[t.state] || ["", t.state.toLowerCase()];
+    const extra = t.codeComments.length ? `<div class="code-comments">${codeThreads(t.codeComments)}</div>` : "";
+    return eventCard({ author: t.author, pill: `<span class="pill ${cls}">${text}</span>`, at: t.at, html: t.html, url: t.url, extra });
+  }).join("");
+  return `<div class="convo"><div class="thread">${description}${items}</div>${sidebar(p, d)}</div>`;
+}
+
+function panelCommits(d, det) {
+  if (!d) return loadingBlock(det);
+  const days = new Map();
+  for (const c of d.commits) {
+    const day = new Date(c.date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    days.set(day, [...(days.get(day) || []), c]);
+  }
+  const more = d.commitCount > d.commits.length ? `<p class="cost">Showing ${d.commits.length} of ${d.commitCount} commits.</p>` : "";
+  return [...days].map(([day, list]) => `<div><h3>Commits on ${esc(day)}</h3><ul class="rows">${list.map((c) => `<li>
+      <span class="grow"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.message)}</a><span class="cost">${esc(c.author || "")} · ${ago(c.date)}</span></span>
+      <code>${esc(c.sha)}</code></li>`).join("")}</ul></div>`).join("") + more;
+}
+
+function panelChecks(d, det) {
+  if (!d) return loadingBlock(det);
+  if (!d.checks.length) return `<p class="none">No checks ran on the latest commit.</p>`;
+  const order = { failed: 0, pending: 1, passed: 2, skipped: 3 };
+  const count = (o) => d.checks.filter((c) => c.outcome === o).length;
+  const took = (c) => (c.startedAt && c.completedAt ? duration(new Date(c.completedAt) - new Date(c.startedAt)) : "");
+  const summary = [["failed", "bad", "failed"], ["pending", "warn", "running"], ["passed", "ok", "passed"], ["skipped", "", "skipped or cancelled"]]
+    .filter(([o]) => count(o)).map(([o, cls, text]) => `<span class="pill ${cls}">${count(o)} ${text}</span>`).join("");
+  const rows = [...d.checks].sort((a, b) => order[a.outcome] - order[b.outcome] || a.name.localeCompare(b.name)).map((c) => `<li>
+      <span class="check-dot ${c.outcome}" title="${esc(c.result || c.outcome)}"></span>
+      <span class="grow"><span>${c.workflow ? `<span class="cost">${esc(c.workflow)} /</span> ` : ""}${esc(c.name)}</span>
+        <span class="cost">${esc((c.result || c.outcome).toLowerCase())}${took(c) ? ` · ${took(c)}` : ""}${c.description ? ` · ${esc(c.description)}` : ""}</span></span>
+      ${c.url ? `<a class="btn" href="${esc(c.url)}" target="_blank" rel="noopener">Details</a>` : ""}</li>`).join("");
+  return `<div class="check-sum">${summary}</div><ul class="rows">${rows}</ul>`;
+}
+
+// Which files are expanded, per PR. Small PRs open fully; big ones start collapsed.
+const expanded = new Map();
+function panelFiles(p, d, det) {
+  if (!d) return loadingBlock(det);
+  const key = prKey(p);
+  if (!expanded.has(key)) {
+    const lines = d.files.reduce((n, f) => n + (f.patch ? f.patch.split("\n").length : 0), 0);
+    expanded.set(key, new Set(lines <= 1500 ? d.files.map((f) => f.name) : []));
+  }
+  const open = expanded.get(key);
+  const more = d.changedFiles > d.files.length ? `<p class="cost">Showing the first ${d.files.length} of ${d.changedFiles} files. Open on GitHub for the rest.</p>` : "";
+  const files = d.files.map((f) => {
+    const isOpen = open.has(f.name);
+    const body = !isOpen ? "" : f.patch
+      ? `<div class="diff-wrap"><table class="diff">${renderPatch(f.patch)}</table></div>`
+      : `<div class="diff-missing">GitHub doesn't include this file's changes (it's too large or binary). <a href="${esc(f.url)}" target="_blank" rel="noopener">See it on GitHub</a></div>`;
+    return `<div class="file">
+      <div class="file-head">
+        <button class="file-toggle" type="button" data-file="${esc(f.name)}" aria-expanded="${isOpen}">
+          ${CHEVRON}<span class="name">${f.previousName ? `${esc(f.previousName)} → ` : ""}${esc(f.name)}</span>
+          <span class="st">${esc(f.status)}</span>
+          <span class="size"><span class="add">+${f.additions}</span> <span class="del">−${f.deletions}</span></span>
+        </button>
+        <a href="${esc(f.url)}" target="_blank" rel="noopener" title="See this file on GitHub">${ICON.external}</a>
+      </div>${body}
+    </div>`;
+  }).join("");
+  return `<div class="files-bar"><span>${d.changedFiles} files · <span class="add">+${d.additions}</span> <span class="del">−${d.deletions}</span></span><span class="spacer"></span>
+      <button class="btn" type="button" data-files-all="open">Expand all</button><button class="btn" type="button" data-files-all="close">Collapse all</button></div>
+    ${files}${more}`;
+}
+
+function panelClaude(p) {
+  const r = reviews[p.url];
+  const s = claudeState(p);
+  if (!r) {
+    return `<div class="claude-box">
+      <div class="note">Claude runs your <code>/review-pr</code> skill on this PR in a hidden session on your Mac, with Remote Control on so you can also follow it in the Claude phone app or on claude.ai. Nothing is posted until you choose what to do with the review.</div>
+      <div class="row">${claudeButton(p, { big: true })}${modelPicker()}</div>
+    </div>`;
+  }
+  // Where to continue the session by hand: phone/claude.ai while it's live, this Mac any time.
+  const open = `
+    ${r.alive && r.rcUrl ? `<a class="btn" href="${esc(r.rcUrl)}" target="_blank" rel="noopener">${ICON.external}<span>Open on phone or claude.ai</span></a>` : ""}
+    <button class="btn" type="button" data-open-session="warp" data-key="${esc(p.url)}">${r.alive ? "Watch in Warp" : "Resume in Warp"}</button>
+    ${r.alive ? `<button class="btn" type="button" data-end="${esc(p.url)}" title="Close the hidden session">End session</button>`
+      : `<button class="btn" type="button" data-open-session="app" data-key="${esc(p.url)}">Resume in Claude app</button>`}`;
+  const head = `<div class="row"><span class="pill claude ${s?.cls || ""}">${esc(s?.label || r.status)}</span>
+    <span class="cost">Started ${ago(r.startedAt)} · ${esc(MODEL_NAMES[r.model || ""] || r.model)}${r.alive ? " · Remote Control on" : ""}</span></div>`;
+  let body = "";
+  if (r.status === "running" || r.status === "answering") {
+    body = `<div class="progress"><span class="dot spin"></span><span>${esc(r.lastStep || "Working")}</span><span class="cost">${r.steps} step${r.steps === 1 ? "" : "s"}</span></div>
+      <div class="row">${claudeButton(p)}${open}</div>`;
+  } else if (r.status === "waiting") {
+    body = `<div class="note">${esc(r.note || "Claude is waiting for your approval.")} Answer it on your phone, on claude.ai, or in Warp.</div><div class="row">${open}</div>`;
+  } else if (r.status === "failed" || r.status === "stopped") {
+    body = `<div class="note">${esc(r.error || "The review stopped before finishing.")}</div><div class="row">${claudeButton(p, { big: true })}${modelPicker()}</div><div class="row">${open}</div>`;
+  } else {
+    const decide = r.status === "ready" && r.alive && s?.id === "ready" ? `
+      <h3>What should Claude do?</h3>
+      <div class="answers">${ANSWERS.map((a) => `<button class="answer" type="button" data-answer="${a.id}" data-url="${esc(p.url)}" data-posts="${a.posts}">
+        <b>${a.id}. ${esc(a.label)}</b><span>${esc(a.note)}</span></button>`).join("")}</div>` : "";
+    body = `${decide}${decide ? "" : `<div class="row">${claudeButton(p)}${modelPicker()}</div>`}<div class="row">${open}</div>`;
+  }
+  const report = r.result && r.status !== "failed" ? `<div class="md">${markdown(r.result)}</div>` : "";
+  // Sub-tabs under the status box: the report, the live terminal, and the step log.
+  const sub = currentClaudeSub(r);
+  const subs = [
+    ["review", "Review"],
+    ["live", r.alive ? `Live view <span class="live-dot" title="Session is running"></span>` : "Live view"],
+    ["steps", `Steps <span class="n">${(r.log || []).length}</span>`],
+  ];
+  const subBody = sub === "live"
+    ? (r.alive ? liveView(p.url, r) : `<p class="none">This review's session has ended, so there is nothing live to show. Resume it in Warp or the Claude app to keep going.</p>`)
+    : sub === "steps" ? stepList(r)
+    : (report || `<p class="none">${r.status === "failed" ? "There is no review to show." : "Claude's review will show here when it finishes. Watch it in Live view meanwhile."}</p>`);
+  return `<div class="claude-box">${head}${body}</div>
+    <div class="subtabs" role="tablist">${subs.map(([id, label]) =>
+      `<button type="button" role="tab" data-csub="${id}" aria-selected="${sub === id}">${label}</button>`).join("")}</div>
+    <div>${subBody}</div>`;
+}
+
+// Which Claude review sub-tab is open. Until you pick one: Live view while Claude works, Review once there is one.
+let claudeSub = null;
+function currentClaudeSub(r) {
+  return claudeSub || (r?.result && !["running", "answering"].includes(r.status) ? "review" : r?.alive ? "live" : "review");
+}
+
+// ---------- Review logs ----------
+// Live view: the hidden session's terminal screen, fetched while the Claude tab is open.
+const screens = new Map(); // session key -> { text, at }
+
+function liveView(key, r) {
+  if (!r.alive) return "";
+  const s = screens.get(key);
+  if (!s || Date.now() - s.at > 2500) fetchScreen(key);
+  return `<pre class="term" id="term" data-key="${esc(key)}">${s ? esc(s.text) : "Loading…"}</pre>`;
+}
+
+let screenBusy = false;
+async function fetchScreen(key) {
+  if (screenBusy) return;
+  screenBusy = true;
+  try {
+    const res = await fetch(`/api/review/screen?key=${encodeURIComponent(key)}`, { cache: "no-store" });
+    const body = await res.json();
+    if (res.ok) {
+      const before = screens.get(key)?.text;
+      screens.set(key, { text: body.text || "", at: Date.now() });
+      const term = $("term");
+      if (term && term.dataset.key === key && before !== body.text) {
+        const atBottom = term.scrollTop + term.clientHeight >= term.scrollHeight - 20;
+        term.textContent = body.text || "";
+        if (atBottom || before === undefined) term.scrollTop = term.scrollHeight;
+      }
+    }
+  } catch {}
+  screenBusy = false;
+}
+
+// Steps: everything the session did, newest last.
+function stepList(r) {
+  const log = r.log || [];
+  if (!log.length) return `<p class="none">No steps recorded yet.</p>`;
+  const time = (at) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  return `<ol class="steps">${log.map((l) => `<li class="${esc(l.kind)}"><span class="t">${time(l.at)}</span><span>${esc(l.text)}</span></li>`).join("")}</ol>`;
+}
+
+// While Live view is showing, keep fetching the session's screen.
+setInterval(() => {
+  const p = view.pr && findPr(view.pr);
+  const key = p && (isMine(p) ? fixKey(p) : p.url);
+  const r = key && reviews[key];
+  if (view.panel === "claude" && r?.alive && $("term")?.dataset.key === key && document.visibilityState === "visible") fetchScreen(key);
+}, 3000);
+
+// A PR that isn't in either list (say, you were removed as reviewer) is built from its details instead.
+function prFromDetails(key, d) {
+  const outcome = (o) => d.checks.filter((c) => c.outcome === o);
+  const failed = outcome("failed"), pending = outcome("pending");
+  return {
+    repoKey: key.split("-")[0], number: d.number, title: d.title, url: d.url, author: d.author,
+    branch: d.head, base: d.base, isDraft: d.draft, createdAt: d.createdAt, updatedAt: d.updatedAt,
+    additions: d.additions, deletions: d.deletions, changedFiles: d.changedFiles,
+    labels: d.labels.map((l) => l.name), tickets: d.tickets, reviewDecision: d.reviewDecision,
+    approvedBy: d.reviewers.filter((r) => r.state === "APPROVED").map((r) => r.login),
+    changesRequestedBy: d.reviewers.filter((r) => r.state === "CHANGES_REQUESTED").map((r) => r.login),
+    reviewRequests: d.reviewers.filter((r) => r.requested).map((r) => r.login),
+    mergeable: d.mergeableState === "dirty" ? "CONFLICTING" : null, myReview: null, requested: false,
+    checks: {
+      total: d.checks.length, failed: failed.length, pending: pending.length,
+      passed: d.checks.length - failed.length - pending.length, failing: failed.map((c) => c.name),
+      state: !d.checks.length ? "none" : failed.length ? "failing" : pending.length ? "pending" : "passing",
+    },
+  };
+}
+
+// What the panel shows with no PR open: a pointer to the list, a quick count, and the shortcuts.
+function emptyPanel() {
+  const running = Object.values(reviews).filter((r) => r.status === "running" || r.status === "answering").length;
+  const ready = listFor("review").filter((p) => claudeState(p)?.id === "ready").length;
+  const go = (patch, text) => `<li><a href="${esc(urlFor({ ...view, ...patch, pr: null }))}">${text}</a></li>`;
+  const glance = data ? `<ul class="glance">
+      ${go({ tab: "mine", statuses: [] }, `<b>${listFor("mine").length}</b> of your PRs are open`)}
+      ${go({ tab: "review", statuses: [] }, `<b>${listFor("review").length}</b> PRs are waiting on your review`)}
+      ${ready ? go({ tab: "review", statuses: ["claude-ready"] }, `<b>${ready}</b> Claude review${ready === 1 ? " needs" : "s need"} your answer`) : ""}
+      ${running ? go({ tab: "review", statuses: ["claude-running"] }, `<b>${running}</b> Claude review${running === 1 ? " is" : "s are"} running`) : ""}
+    </ul>` : "";
+  return `<div class="panel-empty-state">
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z"/></svg>
+    <h2>Select a PR</h2>
+    <p>Click any PR on the left to see its conversation, commits, checks and code changes here.</p>
+    ${glance}
+    <p class="keys"><kbd>/</kbd> search <kbd>R</kbd> refresh <kbd>Esc</kbd> close a PR</p>
+  </div>`;
+}
+
+function renderPanel() {
+  const panel = $("panel");
+  if (["fixreq", "localmodel"].includes(document.activeElement?.id) || ddMenu) return;
+  panel.hidden = false;
+  document.body.classList.toggle("panel-open", Boolean(view.pr));
+  document.body.classList.toggle("panel-empty", !view.pr);
+  panel.classList.toggle("empty", !view.pr);
+  if (!view.pr) { panel.innerHTML = emptyPanel(); panel.dataset.shown = ""; return; }
+  const key = view.pr;
+  const det = details.get(key);
+  if (!det) loadDetails(key);
+  const d = det?.data;
+  const p = findPr(key) || (d && prFromDetails(key, d));
+  if (!p) {
+    panel.innerHTML = `<div class="panel-head"><div class="panel-top"><span class="id">${esc(key.replace("-", " #").toUpperCase())}</span><span class="spacer"></span>
+      <button class="close" type="button" data-close aria-label="Close details" title="Close (Esc)">×</button></div></div>
+      <div class="panel-body">${loadingBlock(det)}</div>`;
+    panel.dataset.shown = "";
+    return;
+  }
+  const state = d?.state === "merged" ? ["merged", "Merged"] : d?.state === "closed" ? ["closed", "Closed"] : (d?.draft ?? p.isDraft) ? ["draft", "Draft"] : ["open", "Open"];
+  const commits = d?.commitCount;
+  const tabs = [
+    ["conversation", "Conversation", d ? d.timeline.length + 1 : ""],
+    ["commits", "Commits", d ? commits : ""],
+    ["checks", "Checks", d ? d.checks.length : p.checks.total],
+    ["files", "Files changed", d ? d.changedFiles : p.changedFiles],
+    ["claude", isMine(p) ? "Claude fix" : "Claude review", ""],
+  ];
+  const content = {
+    conversation: () => panelConversation(p, d, det),
+    commits: () => panelCommits(d, det),
+    checks: () => panelChecks(d, det),
+    files: () => panelFiles(p, d, det),
+    claude: () => (isMine(p) ? panelFix(p) : panelClaude(p)),
+  }[view.panel]();
+  // Keep the reading position when the panel re-renders for a status update.
+  const scroll = panel.querySelector(".panel-body")?.scrollTop || 0;
+  const sameTab = panel.dataset.shown === `${key}:${view.panel}`;
+  panel.innerHTML = `
+    <div class="panel-head">
+      <div class="panel-top">
+        <span class="id">${esc(p.repoKey.toUpperCase())} #${p.number}</span>
+        <a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener">${ICON.external}<span>Open on GitHub</span></a>
+        <button class="btn" type="button" data-copy="${esc(p.url)}">${ICON.copy}<span>Copy link</span></button>
+        <span class="spacer"></span>
+        <button class="close" type="button" data-close aria-label="Close details" title="Close (Esc)">×</button>
+      </div>
+      <h2>${esc(p.title)} <span class="n">#${p.number}</span></h2>
+      <div class="state-line">
+        <span class="state ${state[0]}">${state[1]}</span>
+        <span><b>${esc(p.author)}</b> wants to merge ${commits ? `${commits} commit${commits === 1 ? "" : "s"}` : "into"}${commits ? " into" : ""}</span>
+        <code class="ref">${esc(p.base)}</code><span>from</span><code class="ref">${esc(p.branch)}</code>
+      </div>
+      <div class="pills">${allPills(p)}</div>
+      ${det?.error ? `<div class="banner">Couldn't load all details. ${esc(det.error)}</div>` : ""}
+      <div class="ptabs" role="tablist">${tabs.map(([id, label, n]) =>
+        `<button type="button" role="tab" data-ptab="${id}" aria-selected="${view.panel === id}">${label}${n !== "" && n != null ? `<span class="n">${n}</span>` : ""}</button>`).join("")}
+        <span class="diffstat"><span class="add">+${p.additions}</span> <span class="del">−${p.deletions}</span></span></div>
+    </div>
+    <div class="panel-body">${content}</div>`;
+  panel.dataset.shown = `${key}:${view.panel}`;
+  if (sameTab) panel.querySelector(".panel-body").scrollTop = scroll;
+  enhanceSelect($("localmodel"));
+}
+
+// First visit, before GitHub answers: the page's real layout with placeholder shapes.
+function renderSkeleton() {
+  const tab = currentTab();
+  $("tabs").innerHTML = TABS.map((t) =>
+    `<a href="${esc(urlFor({ ...view, tab: t.id, pr: null }))}" data-tab="${t.id}"${t.id === tab.id ? ' aria-current="page"' : ""}>${t.label}<span class="n sk"></span></a>`).join("");
+  $("subheading").textContent = tab.sub;
+  $("repo").innerHTML = ["All", "fm", "bm"].map((l, i) => `<button type="button" aria-pressed="${i === 0}" disabled>${l}</button>`).join("");
+  $("chips").innerHTML = Array.from({ length: 6 }, () => `<span class="chip sk sk-chip"></span>`).join("");
+  $("showing").textContent = "";
+  const row = (w) => `<div class="pr">
+    <span class="num"><span class="sk" style="width: 48px"></span></span>
+    <div class="head"><span class="sk" style="width: ${w}%; height: 14px"></span><span class="sk" style="width: ${w - 25}%"></span></div>
+    <div class="pills"><span class="sk pillsk"></span><span class="sk pillsk"></span><span class="sk pillsk" style="width: 64px"></span></div>
+  </div>`;
+  $("repos").innerHTML = ["fm", "bm"].map((k) => `<section class="skeleton">
+    <h2>${k}<span class="repo">${REPO_LABEL[k]}</span></h2>
+    <div class="list">${row(72)}${row(58)}${row(66)}</div>
+  </section>`).join("");
+}
+
+function render() {
+  if (!data) { renderSkeleton(); renderPanel(); return; }
+  $("repos").removeAttribute("aria-busy");
+  renderList();
+  renderPanel();
+}
+
+// ---------- Loading and polling ----------
+// The last good list is kept in this browser so the page can show it at once on the next visit.
+const CACHE_KEY = "open-prs:last";
+let fromCache = false;
+
+function saveCache(body) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(body)); } catch {}
+}
+
+function readCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch { return null; }
+}
+
+function renderUpdated() {
+  $("loadbar").hidden = !loading;
+  if (!data) { $("updated").textContent = loading ? "Loading your PRs from GitHub…" : ""; return; }
+  const time = new Date(data.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const when = fromCache ? `Saved list from ${time}` : `Updated ${ago(data.fetchedAt)} · ${time}`;
+  $("updated").innerHTML = loading ? `${esc(when)} · <span class="stale">refreshing…</span>` : esc(when);
+}
+
+async function load() {
+  if (loading) return;
+  loading = true;
+  $("refresh").classList.add("spinning");
+  renderUpdated();
+  try {
+    let res;
+    try {
+      res = await fetch("/api/prs", { cache: "no-store" });
+    } catch {
+      throw new Error("Can't reach the local server. Start it with <code>./prs start</code> in the open-prs folder.");
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(esc(body.error || `The server answered ${res.status}.`));
+    data = body;
+    reviews = body.reviews || {};
+    fromCache = false;
+    saveCache(body);
+    notifyListChanges();
+    $("error").hidden = true;
+    if (view.pr) loadDetails(view.pr, true);
+  } catch (e) {
+    $("error").innerHTML = `Couldn't refresh. ${e.message}${data ? " Showing the last list." : ""}`;
+    $("error").hidden = false;
+    if (!data) $("repos").innerHTML = `<div class="list"><div class="empty">Nothing to show yet. Fix the problem above, then press refresh.</div></div>`;
+  } finally {
+    loading = false;
+    $("refresh").classList.remove("spinning");
+    if (data) render();
+    renderUpdated();
+    schedulePoll();
+  }
+}
+
+// Ask the local server about review sessions (no GitHub calls): every 3s while one is working, every
+// 15s while one sits open (you might answer it from your phone). When one finishes a turn, reload
+// everything so GitHub's verdict shows up.
+const BUSY = ["running", "answering", "waiting"];
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  const all = Object.values(reviews);
+  if (all.some((r) => BUSY.includes(r.status))) pollTimer = setTimeout(poll, 3000);
+  else if (all.some((r) => r.alive || r.status === "queued")) pollTimer = setTimeout(poll, 15000);
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/api/reviews", { cache: "no-store" });
+    const body = await res.json();
+    const before = reviews;
+    reviews = body.reviews || {};
+    notifyReviewChanges(before, reviews);
+    const changed = Object.entries(reviews).some(([url, r]) => before[url]?.status !== r.status);
+    const finished = Object.entries(reviews).some(([url, r]) => BUSY.includes(before[url]?.status) && !BUSY.includes(r.status));
+    if (finished) { fixDiffs.clear(); return load(); }
+    if (changed || Object.values(reviews).some((r) => BUSY.includes(r.status))) render();
+  } catch {}
+  schedulePoll();
+}
+
+async function post(path, payload) {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+  if (body.reviews) reviews = body.reviews;
+  return body;
+}
+
+function showError(text) {
+  $("error").textContent = text;
+  $("error").hidden = false;
+}
+
+// ---------- Actions ----------
+// The model picker in the header; remembered in this browser.
+const MODEL_KEY = "open-prs:model";
+const MODEL_NAMES = { "": "Default model", opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5", fable: "Fable 5.1" };
+try { $("model").value = localStorage.getItem(MODEL_KEY) || ""; } catch {}
+$("model").addEventListener("change", (e) => { try { localStorage.setItem(MODEL_KEY, e.target.value); } catch {} renderPanel(); });
+
+// Per-PR model picker in the panel. It starts on the global "Claude model" choice (shown as
+// "default"); a pick here applies only to this PR and resets when another PR is opened.
+let panelModel = null;
+
+function panelModelValue() {
+  return panelModel ?? $("model").value;
+}
+
+function modelPicker() {
+  const global = $("model").value;
+  const options = Object.entries(MODEL_NAMES).map(([value, name]) =>
+    `<option value="${esc(value)}"${value === panelModelValue() ? " selected" : ""}>${esc(value === "" ? "Claude's default" : name)}${value === global ? " (your default)" : ""}</option>`).join("");
+  return `<label class="sort local-model" title="Model for this PR only. Your default comes from Claude model at the top.">Model <select id="localmodel">${options}</select></label>`;
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "localmodel") { panelModel = e.target.value; e.target.blur(); renderPanel(); }
+});
+
+async function startReview(button, url) {
+  button.disabled = true;
+  button.querySelector("span").textContent = "Starting…";
+  try {
+    await post("/api/review", { url, model: button.closest("#panel") ? panelModelValue() : $("model").value });
+    $("error").hidden = true;
+  } catch (e) {
+    showError(`Couldn't start the review. ${e.message}`);
+  }
+  render();
+  schedulePoll();
+}
+
+async function stopReview(button, key) {
+  button.disabled = true;
+  try { await post("/api/review/stop", { key }); } catch (e) { showError(`Couldn't stop the review. ${e.message}`); }
+  setTimeout(poll, 800);
+}
+
+async function endSession(button, key) {
+  button.disabled = true;
+  try { await post("/api/review/end", { key }); } catch (e) { showError(`Couldn't end the session. ${e.message}`); }
+  render();
+  schedulePoll();
+}
+
+// Posting answers need a second click within 4 seconds; "Do nothing" goes straight through.
+async function answer(button) {
+  const posts = button.dataset.posts === "true";
+  if (posts && !button.classList.contains("confirm")) {
+    button.classList.add("confirm");
+    button.querySelector("span").textContent = "Click again to post this to GitHub";
+    setTimeout(() => { if (button.isConnected && !button.disabled) renderPanel(); }, 4000);
+    return;
+  }
+  button.disabled = true;
+  try {
+    await post("/api/review/answer", { url: button.dataset.url, answer: button.dataset.answer });
+    $("error").hidden = true;
+  } catch (e) {
+    showError(`Couldn't send your answer. ${e.message}`);
+  }
+  render();
+  schedulePoll();
+}
+
+async function openSession(button) {
+  try { await post("/api/review/open", { key: button.dataset.key, where: button.dataset.openSession }); }
+  catch (e) { showError(`Couldn't open the session. ${e.message}`); }
+}
+
+async function copyLink(button) {
+  const url = button.dataset.copy;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    // Older browsers: copy through a hidden text box.
+    const box = Object.assign(document.createElement("textarea"), { value: url });
+    document.body.append(box);
+    box.select();
+    document.execCommand("copy");
+    box.remove();
+  }
+  const label = button.querySelector("span");
+  button.classList.add("done");
+  label.textContent = "Copied";
+  setTimeout(() => { button.classList.remove("done"); label.textContent = "Copy link"; }, 1500);
+}
+
+// First click asks to confirm; a second click within 4 seconds removes you on GitHub.
+async function removeMe(button) {
+  const label = button.querySelector("span");
+  if (!button.classList.contains("confirm")) {
+    button.classList.add("confirm");
+    label.textContent = "Click again to remove";
+    setTimeout(() => {
+      if (button.isConnected && !button.disabled) { button.classList.remove("confirm"); label.textContent = "Remove me"; }
+    }, 4000);
+    return;
+  }
+  button.disabled = true;
+  label.textContent = "Removing…";
+  const url = button.dataset.remove;
+  try {
+    await post("/api/remove-me", { url });
+    for (const r of data.lists.review) r.prs = r.prs.filter((p) => p.url !== url);
+    $("error").hidden = true;
+    render();
+  } catch (e) {
+    showError(`Couldn't remove you from that PR. ${e.message}`);
+    button.disabled = false;
+    button.classList.remove("confirm");
+    label.textContent = "Remove me";
+  }
+}
+
+function toggleFile(name) {
+  const open = expanded.get(view.pr);
+  if (!open) return;
+  if (open.has(name)) open.delete(name); else open.add(name);
+  renderPanel();
+}
+
+function toggleAllFiles(show) {
+  const d = details.get(view.pr)?.data;
+  if (!d) return;
+  expanded.set(view.pr, new Set(show ? d.files.map((f) => f.name) : []));
+  renderPanel();
+}
+
+// ---------- Batch review ----------
+const selected = new Set(); // PR links ticked on the Needs my review tab
+let lastShown = [];
+
+function renderSelbar() {
+  const bar = $("selbar");
+  if (view.tab !== "review" || !selected.size) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.innerHTML = `<span><b>${selected.size}</b> selected</span>
+    <button class="btn primary" type="button" data-batch>${ICON.spark}<span>Review ${selected.size} with Claude</span></button>
+    <button class="linkbtn" type="button" data-select-all>Select all shown</button>
+    <button class="linkbtn" type="button" data-clear-sel>Clear</button>
+    <span class="cost">${esc(MODEL_NAMES[$("model").value] || "Default model")} · at most 3 run at once, the rest wait in a queue</span>`;
+}
+
+$("selbar").addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.hasAttribute("data-select-all")) { lastShown.forEach((u) => selected.add(u)); return renderList(); }
+  if (b.hasAttribute("data-clear-sel")) { selected.clear(); return renderList(); }
+  if (!b.hasAttribute("data-batch")) return;
+  b.disabled = true;
+  try {
+    const out = await post("/api/review/batch", { urls: [...selected], model: $("model").value });
+    selected.clear();
+    $("error").hidden = true;
+    if (out.skipped) showError(`${out.skipped} PR${out.skipped === 1 ? " was" : "s were"} skipped because a review is already running or queued for ${out.skipped === 1 ? "it" : "them"}.`);
+  } catch (err) {
+    showError(`Couldn't start the reviews. ${err.message}`);
+  }
+  render();
+  schedulePoll();
+});
+
+// ---------- Fix with Claude (my PRs) ----------
+const FIX_KINDS = { checks: "Fix failing checks", conflict: "Resolve merge conflict", comments: "Address review comments", custom: "Your request" };
+const fixDiffs = new Map(); // fix key -> { loading, data, error }
+let fixDraft = "";
+
+function fixOptions(p) {
+  const failing = p.checks.state === "failing";
+  const conflict = p.mergeable === "CONFLICTING";
+  const opts = [
+    ["checks", FIX_KINDS.checks, failing ? `${p.checks.failed} failing: ${p.checks.failing.slice(0, 3).join(", ")}` : "No checks are failing", failing],
+    ["conflict", FIX_KINDS.conflict, conflict ? `Merge ${p.base} into this branch` : "No conflict right now", conflict],
+    ["comments", FIX_KINDS.comments, p.changesRequestedBy.length ? `Changes requested by ${p.changesRequestedBy.join(", ")}` : "Work through reviewers' comments", true],
+  ];
+  return `<div class="row">${modelPicker()}</div>
+    <div class="answers">${opts.map(([kind, label, note, on]) =>
+      `<button class="answer" type="button" data-fix="${kind}" data-url="${esc(p.url)}"${on ? "" : " disabled"}><b>${esc(label)}</b><span>${esc(note)}</span></button>`).join("")}</div>
+    <div class="custom-fix">
+      <textarea id="fixreq" placeholder="Or describe something else, e.g. rename the helper and update its tests">${esc(fixDraft)}</textarea>
+      <div class="row"><button class="btn primary" type="button" data-fix="custom" data-url="${esc(p.url)}">${ICON.spark}<span>Ask Claude</span></button></div>
+    </div>`;
+}
+
+function panelFix(p) {
+  const key = fixKey(p);
+  const f = reviews[key];
+  if (!f) {
+    return `<div class="claude-box">
+      <div class="note">Claude works on this PR in its own copy of the repo (a git worktree), so your checkout isn't touched. It commits there but can't push: you check the changes here and press Push.</div>
+      <h3>What should Claude fix?</h3>
+      ${fixOptions(p)}
+    </div>`;
+  }
+  const s = fixState(p);
+  const busy = BUSY.includes(f.status);
+  const open = `
+    ${f.alive && f.rcUrl ? `<a class="btn" href="${esc(f.rcUrl)}" target="_blank" rel="noopener">${ICON.external}<span>Open on phone or claude.ai</span></a>` : ""}
+    <button class="btn" type="button" data-open-session="warp" data-key="${esc(key)}">${f.alive ? "Watch in Warp" : "Resume in Warp"}</button>
+    ${f.alive ? `<button class="btn" type="button" data-end="${esc(key)}" title="Close the hidden session">End session</button>`
+      : `<button class="btn" type="button" data-open-session="app" data-key="${esc(key)}">Resume in Claude app</button>`}
+    ${busy ? `<button class="btn" type="button" data-stop="${esc(key)}" title="Interrupt what Claude is doing">${ICON.stop}<span>Stop</span></button>` : ""}`;
+  const head = `<div class="row"><span class="pill claude ${s?.cls || ""}">${esc(s?.label || f.status)}</span>
+    <span class="cost">${esc(FIX_KINDS[f.kind] || "Fix")} · started ${ago(f.startedAt)} · ${esc(MODEL_NAMES[f.model || ""] || f.model)}${f.pushedAt ? ` · pushed ${ago(f.pushedAt)}` : ""}</span></div>`;
+  const progress = busy
+    ? `<div class="progress"><span class="dot spin"></span><span>${esc(f.status === "waiting" ? f.note || "Waiting for your approval" : f.lastStep || "Working")}</span><span class="cost">${f.steps} step${f.steps === 1 ? "" : "s"}</span></div>`
+    : f.error && f.status === "failed" ? `<div class="note">${esc(f.error)}</div>` : "";
+  const sub = claudeSub || (busy ? "live" : f.status === "ready" ? "changes" : "summary");
+  const subs = [
+    ["summary", "Summary"],
+    ["changes", "Changes"],
+    ["live", f.alive ? `Live view <span class="live-dot"></span>` : "Live view"],
+    ["steps", `Steps <span class="n">${(f.log || []).length}</span>`],
+  ];
+  const body = sub === "changes" ? fixChangesView(p, f)
+    : sub === "live" ? (f.alive ? liveView(key, f) : `<p class="none">The session has ended, so there is nothing live to show.</p>`)
+    : sub === "steps" ? stepList(f)
+    : (f.result ? `<div class="md">${markdown(f.result)}</div>` : `<p class="none">Claude's summary will show here when it finishes.</p>`);
+  const another = busy ? "" : `<details class="another"><summary>Ask Claude for another fix</summary>${fixOptions(p)}</details>`;
+  return `<div class="claude-box">${head}${progress}<div class="row">${open}</div></div>
+    <div class="subtabs" role="tablist">${subs.map(([id, label]) =>
+      `<button type="button" role="tab" data-csub="${id}" aria-selected="${sub === id}">${label}</button>`).join("")}</div>
+    <div>${body}</div>${another}`;
+}
+
+// The Changes sub-tab: commits Claude made in the worktree and what pushing would change.
+function fixChangesView(p, f) {
+  const key = fixKey(p);
+  const c = fixDiffs.get(key);
+  if (!c) { loadFixChanges(key, p.url); return `<p class="loading">Reading the worktree…</p>`; }
+  if (c.loading && !c.data) return `<p class="loading">Reading the worktree…</p>`;
+  if (c.error && !c.data) return `<p class="none">Couldn't read the worktree. ${esc(c.error)}</p>`;
+  const d = c.data;
+  const busy = BUSY.includes(f.status);
+  const files = d.files.map((file) => `<details class="file" open>
+      <summary class="file-head"><span class="file-toggle">${CHEVRON}<span class="name">${file.previousName ? `${esc(file.previousName)} → ` : ""}${esc(file.name)}</span>
+        <span class="st">${esc(file.status)}</span><span class="size"><span class="add">+${file.additions}</span> <span class="del">−${file.deletions}</span></span></span></summary>
+      ${file.patch ? `<div class="diff-wrap"><table class="diff">${renderPatch(file.patch)}</table></div>` : `<div class="diff-missing">Too large or binary to show here.</div>`}
+    </details>`).join("");
+  const commits = d.commits.length ? `<ul class="rows">${d.commits.map((cm) => `<li><span class="grow"><span>${esc(cm.message)}</span><span class="cost">${esc(cm.author)} · ${ago(cm.date)}</span></span><code>${esc(cm.sha)}</code></li>`).join("")}</ul>` : "";
+  const warn = [
+    d.behind ? `The PR branch has ${d.behind} new commit${d.behind === 1 ? "" : "s"} that aren't in this worktree, so a push would be refused. Ask Claude to merge them first.` : "",
+    d.uncommitted ? `${d.uncommitted} changed file${d.uncommitted === 1 ? " is" : "s are"} not committed yet and won't be pushed.` : "",
+  ].filter(Boolean).map((t) => `<div class="warnbox">${esc(t)}</div>`).join("");
+  const canPush = d.ahead > 0 && !busy && !d.behind;
+  return `<div class="fix-files">
+    <div class="files-bar"><span><b>${d.ahead}</b> new commit${d.ahead === 1 ? "" : "s"} for <code class="ref">${esc(d.head)}</code> · ${d.files.length} file${d.files.length === 1 ? "" : "s"}</span><span class="spacer"></span>
+      <button class="btn" type="button" data-discard="${esc(p.url)}" title="Close the session and delete the worktree">Discard</button>
+      <button class="btn primary" type="button" data-push="${esc(p.url)}"${canPush ? "" : " disabled"} title="${canPush ? `Push to ${esc(d.head)} on GitHub` : busy ? "Wait for Claude to finish" : "Nothing to push"}">Push</button></div>
+    ${warn}${commits}
+    ${files || `<p class="none">${busy ? "No commits yet. Claude is still working." : "Claude didn't commit any changes."}</p>`}
+    <p class="cost">Worktree: <code>${esc(d.worktree)}</code> · local branch <code>${esc(d.branch)}</code></p>
+  </div>`;
+}
+
+async function loadFixChanges(key, url) {
+  const prev = fixDiffs.get(key);
+  fixDiffs.set(key, { loading: true, data: prev?.data || null });
+  try {
+    const res = await fetch(`/api/fix/changes?url=${encodeURIComponent(url)}`, { cache: "no-store" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+    fixDiffs.set(key, { loading: false, data: body });
+  } catch (e) {
+    fixDiffs.set(key, { loading: false, data: prev?.data || null, error: e.message });
+  }
+  renderPanel();
+}
+
+async function startFix(button) {
+  const kind = button.dataset.fix;
+  const request = kind === "custom" ? ($("fixreq")?.value || "").trim() : "";
+  if (kind === "custom" && !request) { $("fixreq")?.focus(); return; }
+  button.disabled = true;
+  const label = button.querySelector("b, span");
+  if (label) label.textContent = "Starting… (making the worktree can take a minute)";
+  try {
+    await post("/api/fix", { url: button.dataset.url, kind, request, model: panelModelValue() });
+    fixDraft = "";
+    claudeSub = null;
+    fixDiffs.delete(`fix:${button.dataset.url}`);
+    $("error").hidden = true;
+  } catch (e) {
+    showError(`Couldn't start the fix. ${e.message}`);
+  }
+  if (document.activeElement?.id === "fixreq") document.activeElement.blur();
+  render();
+  schedulePoll();
+}
+
+// Push and Discard both need a second click within 4 seconds.
+function confirmFirst(button, text) {
+  if (button.classList.contains("confirm")) return true;
+  button.classList.add("confirm");
+  button.dataset.label = button.textContent;
+  button.textContent = text;
+  setTimeout(() => { if (button.isConnected && !button.disabled) { button.classList.remove("confirm"); button.textContent = button.dataset.label; } }, 4000);
+  return false;
+}
+
+async function pushFix(button) {
+  const head = fixDiffs.get(`fix:${button.dataset.push}`)?.data?.head || "the PR branch";
+  if (!confirmFirst(button, `Click again to push to ${head}`)) return;
+  button.disabled = true;
+  button.textContent = "Pushing…";
+  try {
+    await post("/api/fix/push", { url: button.dataset.push });
+    fixDiffs.delete(`fix:${button.dataset.push}`);
+    $("error").hidden = true;
+    load();
+  } catch (e) {
+    showError(`Couldn't push. ${e.message}`);
+    render();
+  }
+}
+
+async function discardFix(button) {
+  if (!confirmFirst(button, "Click again to delete the worktree (unpushed commits are lost)")) return;
+  button.disabled = true;
+  try {
+    await post("/api/fix/discard", { url: button.dataset.discard });
+    fixDiffs.delete(`fix:${button.dataset.discard}`);
+    claudeSub = null;
+    $("error").hidden = true;
+  } catch (e) {
+    showError(`Couldn't discard. ${e.message}`);
+  }
+  render();
+}
+
+document.addEventListener("input", (e) => { if (e.target.id === "fixreq") fixDraft = e.target.value; });
+document.addEventListener("focusout", (e) => { if (e.target.id === "fixreq") setTimeout(renderPanel, 0); });
+
+function openPanel(key, panel) {
+  if (key !== view.pr) { claudeSub = null; panelModel = null; }
+  update({ pr: key, panel: panel || (view.pr === key ? view.panel : "conversation") }, { push: view.pr !== key });
+}
+
+function closePanel() {
+  update({ pr: null, panel: "conversation" }, { push: true });
+}
+
+// One click handler for the list and the panel.
+function onClick(e) {
+  const t = e.target;
+  const pick = (sel) => t.closest(sel);
+  let b;
+  if (pick("[data-reset]")) return resetFilters();
+  if ((b = pick("[data-pick]"))) { if (b.checked) selected.add(b.dataset.pick); else selected.delete(b.dataset.pick); return renderSelbar(); }
+  if (pick(".pick")) return; // the checkbox's label
+  if ((b = pick("[data-fixopen]"))) return openPanel(b.dataset.fixopen, "claude");
+  if ((b = pick("[data-fix]"))) return startFix(b);
+  if ((b = pick("[data-push]"))) return pushFix(b);
+  if ((b = pick("[data-discard]"))) return discardFix(b);
+  if ((b = pick("[data-copy]"))) return copyLink(b);
+  if ((b = pick("[data-remove]"))) return removeMe(b);
+  if ((b = pick("[data-review]"))) return startReview(b, b.dataset.review);
+  if ((b = pick("[data-stop]"))) return stopReview(b, b.dataset.stop);
+  if ((b = pick("[data-end]"))) return endSession(b, b.dataset.end);
+  if ((b = pick("[data-decide]"))) return openPanel(b.dataset.decide, "claude");
+  if ((b = pick("[data-answer]"))) return answer(b);
+  if ((b = pick("[data-open-session]"))) return openSession(b);
+  if (pick("[data-close]")) return closePanel();
+  if ((b = pick("[data-ptab]"))) return update({ panel: b.dataset.ptab });
+  if ((b = pick("[data-csub]"))) { claudeSub = b.dataset.csub; return renderPanel(); }
+  if ((b = pick("[data-file]"))) return toggleFile(b.dataset.file);
+  if ((b = pick("[data-files-all]"))) return toggleAllFiles(b.dataset.filesAll === "open");
+  // Links (Jira, GitHub, files) keep their normal behavior; the title opens the panel unless a modifier is held.
+  const link = pick("a");
+  if (link && !link.dataset.open) return;
+  if ((b = pick("[data-open]"))) {
+    if (link && (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1)) return;
+    e.preventDefault();
+    openPanel(b.dataset.open);
+  }
+}
+
+function resetFilters() {
+  $("q").value = "";
+  update({ q: "", repo: "all", statuses: [] });
+}
+
+$("repos").addEventListener("click", onClick);
+$("panel").addEventListener("click", onClick);
+$("refresh").addEventListener("click", load);
+$("tabs").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-tab]");
+  if (!a || e.metaKey || e.ctrlKey) return;
+  e.preventDefault();
+  if (a.dataset.tab !== view.tab) update({ tab: a.dataset.tab, statuses: [], pr: null }, { push: true });
+});
+$("q").addEventListener("input", (e) => update({ q: e.target.value }));
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { e.target.value = ""; update({ q: "" }); e.target.blur(); }
+});
+$("clearq").addEventListener("click", () => { $("q").value = ""; update({ q: "" }); $("q").focus(); });
+$("repo").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-repo]");
+  if (b) update({ repo: b.dataset.repo });
+});
+$("chips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-status]");
+  if (!b) return;
+  const id = b.dataset.status;
+  update({ statuses: view.statuses.includes(id) ? view.statuses.filter((s) => s !== id) : [...view.statuses, id] });
+});
+$("sort").addEventListener("change", (e) => update({ sort: e.target.value }));
+$("grouped").addEventListener("click", () => update({ group: true }));
+$("flat").addEventListener("click", () => update({ group: false }));
+$("reset").addEventListener("click", resetFilters);
+
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(e.target.tagName)) return;
+  if (e.key === "Escape" && view.pr) closePanel();
+  else if (e.key === "/") { e.preventDefault(); $("q").focus(); }
+  else if (e.key === "r") load();
+});
+// Coming back to the tab after a while refreshes the list.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && data && Date.now() - new Date(data.fetchedAt) > 5 * 60 * 1000) load();
+});
+setInterval(renderUpdated, 30000);
+
+// ---------- Notifications ----------
+// Mac notifications from this page (it must stay open in a tab; a pinned tab works well).
+// Clicking one opens that PR. Turned on with the bell button, which asks the browser once.
+const NOTIFY_KEY = "open-prs:notify";
+const SEEN_KEY = "open-prs:seen";
+
+function notifyOn() {
+  let off = false;
+  try { off = localStorage.getItem(NOTIFY_KEY) === "off"; } catch {}
+  return "Notification" in window && Notification.permission === "granted" && !off;
+}
+
+function renderBell() {
+  const bell = $("bell");
+  if (!("Notification" in window)) { bell.hidden = true; return; }
+  bell.hidden = false;
+  const state = Notification.permission === "denied" ? "blocked" : notifyOn() ? "on" : "off";
+  bell.dataset.state = state;
+  bell.innerHTML = `${ICON.bell}<span>${{ on: "Notifications on", off: "Turn on notifications", blocked: "Notifications blocked" }[state]}</span>`;
+  bell.title = state === "blocked" ? "Notifications blocked. Your browser blocks them for this page; allow them in the site settings (the icon left of the address)."
+    : state === "on" ? "Notifications on. Click to turn them off."
+    : "Notifications off. Click to get a Mac notification when a review is ready, needs approval, or a new review request arrives.";
+  bell.setAttribute("aria-label", bell.title);
+}
+
+$("bell").addEventListener("click", async () => {
+  if (Notification.permission === "default") await Notification.requestPermission();
+  else if (Notification.permission === "granted") {
+    try { localStorage.setItem(NOTIFY_KEY, notifyOn() ? "off" : "on"); } catch {}
+  }
+  renderBell();
+  if (notifyOn()) notify("Notifications are on", "You'll hear about finished reviews and new review requests.", null);
+});
+
+function keyFromUrl(url) {
+  const m = /github\.com\/purepm\/(frontend|backend)-monorepo\/pull\/(\d+)/.exec(url);
+  return m ? `${m[1] === "frontend" ? "fm" : "bm"}-${m[2]}` : null;
+}
+
+function notify(title, body, key, panel = "conversation") {
+  if (!notifyOn()) return;
+  const n = new Notification(title, { body, tag: key ? `${key}:${title}` : title });
+  n.onclick = () => {
+    window.focus();
+    if (key) { if (view.tab !== "review" && !findPr(key)) update({ tab: "review" }, { push: true }); openPanel(key, panel); }
+    n.close();
+  };
+}
+
+// Review sessions: tell when one finishes, needs approval, fails, or finishes your answer.
+function notifyReviewChanges(before, after) {
+  for (const [url, r] of Object.entries(after)) {
+    const was = before[url]?.status;
+    if (!was || was === r.status) continue;
+    const key = keyFromUrl(url);
+    const pr = key && findPr(key);
+    const name = `${(key || "").replace("-", " #").toUpperCase()}${pr ? ` · ${pr.title}` : ""}`;
+    if (url.startsWith("fix:")) {
+      if (r.status === "ready") notify("Fix ready: check and push", `${name}\nClaude committed changes in its worktree.`, key, "claude");
+      else if (r.status === "waiting") notify("Claude needs your approval", `${name}\n${r.note || ""}`, key, "claude");
+      else if (r.status === "failed") notify("Fix failed", `${name}\n${r.error || ""}`, key, "claude");
+      continue;
+    }
+    if (r.status === "ready") notify("Review ready: your call", `${name}\nChoose A, B, C or D.`, key, "claude");
+    else if (r.status === "waiting") notify("Claude needs your approval", `${name}\n${r.note || ""}`, key, "claude");
+    else if (r.status === "failed") notify("Review failed", `${name}\n${r.error || ""}`, key, "claude");
+    else if (r.status === "answered") notify("Claude finished your answer", `${name}\nAnswer ${r.answer || ""} is done.`, key, "claude");
+  }
+}
+
+// The list: new review requests, and PRs that got new commits since your review.
+// The first load only records what exists, so you aren't flooded.
+function notifyListChanges() {
+  const review = listFor("review");
+  const now = { requests: review.filter((p) => p.requested).map((p) => p.url), commits: review.filter((p) => p.newCommits).map((p) => `${p.url}@${p.updatedAt}`) };
+  let seen = null;
+  try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) || "null"); } catch {}
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify(now)); } catch {}
+  if (!seen) return;
+  const fresh = review.filter((p) => p.requested && !seen.requests.includes(p.url));
+  for (const p of fresh.slice(0, 3)) notify("New review request", `${prKey(p).replace("-", " #").toUpperCase()} · ${p.title}\nby ${p.author}`, prKey(p));
+  if (fresh.length > 3) notify(`${fresh.length - 3} more review requests`, "Open the page to see them.", null);
+  const commitUrls = new Set(seen.commits.map((c) => c.split("@")[0]));
+  for (const p of review.filter((x) => x.newCommits && !commitUrls.has(x.url)).slice(0, 3)) {
+    notify("New commits since your review", `${prKey(p).replace("-", " #").toUpperCase()} · ${p.title}`, prKey(p), "commits");
+  }
+}
+
+// Check GitHub every 5 minutes so new requests show up without a click (also while the tab is in the background).
+setInterval(() => { if (!loading) load(); }, 5 * 60e3);
+renderBell();
+
+readUrl();
+if (location.pathname === "/" || location.pathname === "/index.html") history.replaceState(null, "", urlFor(view));
+$("q").value = view.q;
+const cached = readCache();
+if (cached?.lists) { data = cached; reviews = cached.reviews || {}; fromCache = true; }
+render();
+load();
+
+// ---------- Dropdowns ----------
+// The native <select> menu is drawn by macOS and ignores the page's look, so each select gets a button
+// and a menu in the design system's style. The select stays the source of truth: choosing an item sets
+// its value and fires "change", so every existing handler keeps working.
+var ddMenu = null, ddBtn = null, ddSel = null, ddOpenedAt = 0;
+
+function ddIcon(kind) {
+  return kind === "check"
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+}
+
+function enhanceSelect(sel) {
+  if (!sel || sel.dataset.dd) return;
+  sel.dataset.dd = "1";
+  sel.classList.add("dd-native");
+  sel.tabIndex = -1;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "dd-btn";
+  btn.id = `${sel.id}-dd`;
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+  sel.after(btn);
+  sel._ddSync = () => { btn.innerHTML = `<span>${esc(sel.selectedOptions[0]?.textContent || "")}</span>${ddIcon("chevron")}`; };
+  sel._ddSync();
+  sel.addEventListener("change", sel._ddSync);
+  btn.addEventListener("click", (e) => { e.stopPropagation(); if (ddSel === sel) closeDd(); else openDd(sel, btn); });
+  btn.addEventListener("keydown", (e) => {
+    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); openDd(sel, btn); }
+  });
+}
+
+function openDd(sel, btn) {
+  closeDd();
+  const menu = document.createElement("div");
+  menu.className = "dd-menu";
+  menu.setAttribute("role", "listbox");
+  for (const o of sel.options) {
+    const item = document.createElement("div");
+    item.className = "dd-item";
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(o.selected));
+    item.tabIndex = -1;
+    item.dataset.value = o.value;
+    item.innerHTML = `<span class="dd-check">${o.selected ? ddIcon("check") : ""}</span><span>${esc(o.textContent)}</span>`;
+    item.addEventListener("click", (e) => { e.stopPropagation(); chooseDd(o.value); });
+    menu.append(item);
+  }
+  menu.addEventListener("keydown", (e) => {
+    // The menu's keys stay with the menu: Escape here must not also close the PR panel.
+    if (e.key !== "Tab") e.stopPropagation();
+    const items = [...menu.querySelectorAll(".dd-item")];
+    const at = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); items.at(Math.min(at + 1, items.length - 1))?.focus({ preventScroll: true }); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); items.at(Math.max(at - 1, 0))?.focus({ preventScroll: true }); }
+    else if (e.key === "Home") { e.preventDefault(); items.at(0)?.focus({ preventScroll: true }); }
+    else if (e.key === "End") { e.preventDefault(); items.at(-1)?.focus({ preventScroll: true }); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (at >= 0) chooseDd(items.at(at).dataset.value); }
+    else if (e.key === "Escape") { e.preventDefault(); const b = ddBtn; closeDd(); b?.focus(); }
+    else if (e.key === "Tab") closeDd();
+  });
+  document.body.append(menu);
+  // Fixed position under the button (above it when there's no room), kept inside the window.
+  const r = btn.getBoundingClientRect();
+  menu.style.minWidth = `${Math.round(r.width)}px`;
+  const below = innerHeight - r.bottom >= menu.offsetHeight + 8;
+  menu.style.top = `${Math.round(below ? r.bottom + 4 : r.top - menu.offsetHeight - 4)}px`;
+  menu.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)))}px`;
+  ddMenu = menu; ddBtn = btn; ddSel = sel;
+  btn.setAttribute("aria-expanded", "true");
+  ddOpenedAt = Date.now();
+  (menu.querySelector('[aria-selected="true"]') || menu.firstElementChild)?.focus({ preventScroll: true });
+}
+
+function chooseDd(value) {
+  const sel = ddSel, btnId = ddBtn?.id;
+  closeDd();
+  if (!sel) return;
+  if (sel.value !== value) { sel.value = value; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+  sel._ddSync?.();
+  document.getElementById(btnId)?.focus(); // the button may have been redrawn by the change
+}
+
+function closeDd() {
+  ddMenu?.remove();
+  ddBtn?.setAttribute("aria-expanded", "false");
+  ddMenu = ddBtn = ddSel = null;
+}
+
+document.addEventListener("click", (e) => { if (ddMenu && !ddMenu.contains(e.target)) closeDd(); });
+window.addEventListener("resize", closeDd);
+// Scrolling the page closes the menu, but not the small scroll some browsers make as it opens.
+document.addEventListener("scroll", (e) => { if (ddMenu && !ddMenu.contains(e.target) && Date.now() - ddOpenedAt > 250) closeDd(); }, true);
+enhanceSelect($("sort"));
+enhanceSelect($("model"));
+enhanceSelect($("localmodel"));
+</script>
+</body>
+</html>

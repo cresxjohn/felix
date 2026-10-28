@@ -1,0 +1,4 @@
+# Local state: Claude sessions, logs, pid. Never commit it.
+data/
+# Rewritten by the server on every start, with this Mac's paths.
+hooks/settings.json
