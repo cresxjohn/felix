@@ -214,11 +214,9 @@ security add-generic-password -s cmd-center-datadog-app -a datadog -w
 security add-generic-password -s cmd-center-jira -a <your Jira email> -w
 ```
 
-```bash
-security add-generic-password -s cmd-center-calendar-ics -a google -w
-```
+Google Calendar (both your calendar and the Tech Team Vacation Tracker) needs no command. The page will have a one-time "Sign in with Google" button that saves its own token to the Keychain as `cmd-center-google-oauth`. On a new Mac, you sign in again once.
 
-On a new Mac, add them again the same way. The plan doc's "What I need from you" section says where each key comes from.
+On a new Mac, add the other keys again the same way. The plan doc's "What I need from you" section says where each key comes from.
 
 
 ## 11. Remove it
