@@ -1,6 +1,9 @@
-# PURE Tech Lead Command Center
+# Felix
 
-A small page on your Mac at `http://localhost:4777` for the work a tech lead does every day. The home page is a grid of cards:
+Felix: my buddy. Formerly the PURE Tech Lead Command Center.
+
+
+A small app on your Mac at `http://localhost:4777`. Today it is the Work view, for the work a tech lead does every day. Its home page is a grid of cards:
 
 - **Incident Commander** (live): who is on call now and next, today's and tomorrow's people on the Philippines and Americas schedules, and your next shift. From Datadog On-Call.
 - **Open PRs** (live): counts that need you, each opening the PR page already filtered.

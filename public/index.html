@@ -454,7 +454,7 @@ kbd:first-child { margin-left: 0; }
 <div class="main">
 <div class="wrap">
   <header>
-    <a class="home" href="/" title="Command center" aria-label="Back to the command center">
+    <a class="home" href="/" title="Felix home" aria-label="Back to Felix home">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
     </a>
     <h1>Open PRs</h1>
@@ -1318,7 +1318,7 @@ async function load() {
     try {
       res = await fetch("/api/prs", { cache: "no-store" });
     } catch {
-      throw new Error("Can't reach the local server. Start it with <code>./prs start</code> in the pure-tech-lead-cmd-center folder.");
+      throw new Error("Can't reach the local server. Start it with <code>./prs start</code> in the felix folder.");
     }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(esc(body.error || `The server answered ${res.status}.`));

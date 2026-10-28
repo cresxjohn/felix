@@ -1,6 +1,6 @@
-# PURE Tech Lead Command Center — setup guide
+# Felix — setup guide
 
-This project runs the Tech Lead Command Center on your Mac at `http://localhost:4777`. The home page has an Incident Commander card (from Datadog) and an Open PRs card; the rest are placeholders for now. The Open PRs page (`/prs`) lists your PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
+This project runs Felix (formerly the Tech Lead Command Center) on your Mac at `http://localhost:4777`. The home page has an Incident Commander card (from Datadog) and an Open PRs card; the rest are placeholders for now. The Open PRs page (`/prs`) lists your PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
 
 The plan for the rest is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
 
@@ -55,14 +55,14 @@ claude auth status
 
 ## 3. Folder layout
 
-The server expects this layout. The folder *above* `pure-tech-lead-cmd-center` is the workspace that review sessions run in.
+The server expects this layout. The folder *above* `felix` is the workspace that review sessions run in.
 
 ```
 ~/dev/pure/repo/                 the workspace
 ├── fm/                          git clone of purepm/frontend-monorepo
 ├── bm/                          git clone of purepm/backend-monorepo
 ├── .claude/skills/review-pr     a link to the skill in this project (the server makes it on first start)
-└── pure-tech-lead-cmd-center/   this project
+└── felix/                       this project
     ├── server.mjs               the server (no npm packages needed)
     ├── datadog.mjs              the Incident Commander card's data
     ├── prs                      start / stop script
@@ -78,7 +78,7 @@ The server expects this layout. The folder *above* `pure-tech-lead-cmd-center` i
     └── data/                    made on first start; your local state (see section 7)
 ```
 
-This project lives in a private repo on your personal GitHub account: https://github.com/cresxjohn/pure-tech-lead-cmd-center
+This project lives in a private repo on your personal GitHub account: https://github.com/cresxjohn/felix
 
 It is pushed and pulled with your personal SSH key, through the `github.com-personal` host alias, so your work `gh` login doesn't matter here. On a new Mac, first add that alias to `~/.ssh/config` with your personal key:
 
@@ -99,7 +99,7 @@ ssh -T git@github.com-personal
 Then, inside `~/dev/pure/repo/`, get this project:
 
 ```bash
-git clone git@github.com-personal:cresxjohn/pure-tech-lead-cmd-center.git
+git clone git@github.com-personal:cresxjohn/felix.git
 ```
 
 Clone fm and bm next to it, with your work login:
@@ -116,14 +116,14 @@ Bring these over from the old Mac by hand (they are not in this repo):
 
 - `repo/.claude/skills/review-staged/` if you use it. The review-pr skill comes with this repo: on first start the server links it into `repo/.claude/skills/`. If that folder already has a review-pr, the server leaves it alone.
 - `repo/.claude/settings.local.json` if you want the same Claude permissions in the workspace,
-- `pure-tech-lead-cmd-center/data/` only if you want your old review history; otherwise it starts fresh.
+- `felix/data/` only if you want your old review history; otherwise it starts fresh.
 
 Commits in this repo use your personal identity (`cresxjohn`), which is your global git setting. If that ever changes, set it for this repo only: `git config user.email cresellejohn@gmail.com`.
 
 
 ## 4. Install and start
 
-From the `pure-tech-lead-cmd-center` folder:
+From the `felix` folder:
 
 ```bash
 ./prs install
@@ -170,7 +170,7 @@ The Open PRs page sends these, so keep `/prs` open in a pinned tab; the home pag
 - `data/reviews.json`: every Claude review and fix session, its status, its step log and its report
 - `data/server.log`: the server's log
 - `hooks/settings.json`: rewritten on every server start; don't edit it
-- `~/Library/LaunchAgents/local.pure-tech-lead-cmd-center.plist`: the start-at-login entry (made by `./prs install`)
+- `~/Library/LaunchAgents/local.felix.plist`: the start-at-login entry (made by `./prs install`)
 - `~/.warp/launch_configurations/openprs-*.yaml`: short-lived files that open Warp windows; they delete themselves
 - `repo/<fm|bm>-wt-pr-<number>/` and local branch `openprs/pr-<number>`: worktrees made by **Fix with Claude**. **Discard** on the page removes both
 - tmux sessions named `openprs-*`: the hidden Claude sessions (`tmux ls` lists them). Idle ones close by themselves: 30 minutes after you answer, or 24 hours if Claude is still waiting on you
@@ -204,14 +204,14 @@ On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 - **The page looks stuck on old data**: press **R** or the refresh button. The header says "Saved list from …" until fresh data arrives.
 
 
-## 10. Command center keys
+## 10. Keys
 
-The command center plan needs a few keys. They go into the Mac's Keychain, never into files or chat. Each command asks for the value twice, without showing it on screen.
+Felix needs a few keys. They go into the Mac's Keychain, never into files or chat. Each command asks for the value twice, without showing it on screen. The Keychain names still start with `cmd-center-` from the old name; that's fine, nobody sees them.
 
 **Datadog** (Incident Commander card) needs one token and no API key. Your Datadog role is Read Only, so you can't make API keys, and you don't need one:
 
 1. In Datadog (us5), open **Organization Settings → Access Tokens → New Access Token**.
-2. Name it `Tech Lead Command Center` and pick the longest expiry offered (the default is 1 day).
+2. Name it `Felix` and pick the longest expiry offered (the default is 1 day).
 3. Under scopes, tick only **on_call_read**, then save and copy the token. It is shown only once.
 4. Save it:
 

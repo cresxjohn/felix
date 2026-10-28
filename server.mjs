@@ -1,9 +1,9 @@
-// Small local server for the Tech Lead Command Center. No dependencies; runs on the Mac (not in Docker)
+// Small local server for Felix (formerly the Tech Lead Command Center). No dependencies; runs on the Mac (not in Docker)
 // so it can start Claude Code reviews in hidden tmux sessions with Remote Control on.
 //
 // On start it also links the skills in skills/ (e.g. /review-pr) into the workspace's .claude/skills if missing.
 //
-// GET  /                      -> the command center home (cards)
+// GET  /                      -> Felix's home (cards)
 // GET  /prs, /prs/mine, /prs/review -> the Open PRs page (/mine and /review redirect here)
 // GET  /api/incident-commander[?fresh=1] -> Datadog on-call shifts for today, tomorrow and my next shift
 // GET  /api/prs               -> my PRs and PRs waiting on my review, fresh from GitHub, plus review sessions
@@ -74,7 +74,7 @@ function ghToken(refresh = false) {
 async function github(pathname, init = {}, retry = true) {
   const res = await fetch(`https://api.github.com${pathname}`, {
     ...init,
-    headers: { Authorization: `Bearer ${await ghToken()}`, "User-Agent": "pure-tech-lead-cmd-center", Accept: "application/vnd.github+json", ...init.headers },
+    headers: { Authorization: `Bearer ${await ghToken()}`, "User-Agent": "felix", Accept: "application/vnd.github+json", ...init.headers },
     signal: AbortSignal.timeout(30000),
   });
   if (res.status === 401 && retry) { await ghToken(true); return github(pathname, init, false); }
@@ -400,7 +400,11 @@ function installSkills() {
   if (!existsSync(from)) return;
   for (const name of readdirSync(from)) {
     const target = path.join(to, name);
-    try { lstatSync(target); continue; } catch {}
+    // Keep anything that resolves; replace a link left dangling by a moved or renamed project folder.
+    try {
+      if (!lstatSync(target).isSymbolicLink() || existsSync(target)) continue;
+      unlinkSync(target);
+    } catch {}
     try {
       mkdirSync(to, { recursive: true });
       symlinkSync(path.relative(to, path.join(from, name)), target);
@@ -919,7 +923,7 @@ function checkWrite(req) {
   const origin = req.headers.origin;
   const okOrigin = !origin || origin === `http://localhost:${PORT}` || origin === `http://127.0.0.1:${PORT}`;
   if (!okOrigin || !String(req.headers["content-type"] || "").startsWith("application/json")) {
-    throw httpError(403, "Requests must come from the command center page.");
+    throw httpError(403, "Requests must come from the Felix page.");
   }
 }
 
@@ -1000,4 +1004,4 @@ createServer(async (req, res) => {
   } catch (e) {
     json(res, e.status || 502, { error: e.message });
   }
-}).listen(PORT, "127.0.0.1", () => console.log(`Command center on http://localhost:${PORT}`));
+}).listen(PORT, "127.0.0.1", () => console.log(`Felix on http://localhost:${PORT}`));
