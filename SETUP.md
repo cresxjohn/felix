@@ -1,10 +1,10 @@
-# Open PRs — setup guide
+# PURE Tech Lead Command Center — setup guide
 
-Open PRs is a small page on your Mac at `http://localhost:4777`. It lists your open PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
+This project runs a small page on your Mac at `http://localhost:4777`. Today that page is **Open PRs**: your open PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
+
+It is the first piece of the Tech Lead Command Center. The plan for the rest is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
 
 This guide sets it up on a new Mac, or after a reinstall. Follow the steps in order. It takes about 20 minutes, most of it installing tools.
-
-It is also the first piece of the Tech Lead Command Center. The plan for that is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
 
 
 ## 1. What you need
@@ -55,14 +55,14 @@ claude auth status
 
 ## 3. Folder layout
 
-The server expects this layout. The folder *above* `open-prs` is the workspace that review sessions run in.
+The server expects this layout. The folder *above* `pure-tech-lead-cmd-center` is the workspace that review sessions run in.
 
 ```
 ~/dev/pure/repo/                 the workspace
 ├── fm/                          git clone of purepm/frontend-monorepo
 ├── bm/                          git clone of purepm/backend-monorepo
 ├── .claude/skills/review-pr/    the /review-pr skill (SKILL.md + references/)
-└── open-prs/                    this project
+└── pure-tech-lead-cmd-center/   this project
     ├── server.mjs               the server (no npm packages needed)
     ├── prs                      start / stop script
     ├── public/index.html        the page
@@ -72,7 +72,7 @@ The server expects this layout. The folder *above* `open-prs` is the workspace t
     └── data/                    made on first start; your local state (see section 7)
 ```
 
-This project lives in a private repo on your personal GitHub account: https://github.com/cresxjohn/open-prs
+This project lives in a private repo on your personal GitHub account: https://github.com/cresxjohn/pure-tech-lead-cmd-center
 
 It is pushed and pulled with your personal SSH key, through the `github.com-personal` host alias, so your work `gh` login doesn't matter here. On a new Mac, first add that alias to `~/.ssh/config` with your personal key:
 
@@ -93,7 +93,7 @@ ssh -T git@github.com-personal
 Then, inside `~/dev/pure/repo/`, get this project:
 
 ```bash
-git clone git@github.com-personal:cresxjohn/open-prs.git
+git clone git@github.com-personal:cresxjohn/pure-tech-lead-cmd-center.git
 ```
 
 Clone fm and bm next to it, with your work login:
@@ -110,14 +110,14 @@ Bring these over from the old Mac by hand (they are not in this repo):
 
 - `repo/.claude/skills/` (the review-pr and review-staged skills),
 - `repo/.claude/settings.local.json` if you want the same Claude permissions in the workspace,
-- `open-prs/data/` only if you want your old review history; otherwise it starts fresh.
+- `pure-tech-lead-cmd-center/data/` only if you want your old review history; otherwise it starts fresh.
 
 Commits in this repo use your personal identity (`cresxjohn`), which is your global git setting. If that ever changes, set it for this repo only: `git config user.email cresellejohn@gmail.com`.
 
 
 ## 4. Install and start
 
-From the `open-prs` folder:
+From the `pure-tech-lead-cmd-center` folder:
 
 ```bash
 ./prs install
@@ -161,10 +161,10 @@ The tab must stay open; the page checks GitHub every 5 minutes. Claude's built-i
 
 ## 7. Where things are saved
 
-- `open-prs/data/reviews.json`: every Claude review and fix session, its status, its step log and its report
-- `open-prs/data/server.log`: the server's log
-- `open-prs/hooks/settings.json`: rewritten on every server start; don't edit it
-- `~/Library/LaunchAgents/local.open-prs.plist`: the start-at-login entry (made by `./prs install`)
+- `data/reviews.json`: every Claude review and fix session, its status, its step log and its report
+- `data/server.log`: the server's log
+- `hooks/settings.json`: rewritten on every server start; don't edit it
+- `~/Library/LaunchAgents/local.pure-tech-lead-cmd-center.plist`: the start-at-login entry (made by `./prs install`)
 - `~/.warp/launch_configurations/openprs-*.yaml`: short-lived files that open Warp windows; they delete themselves
 - `repo/<fm|bm>-wt-pr-<number>/` and local branch `openprs/pr-<number>`: worktrees made by **Fix with Claude**. **Discard** on the page removes both
 - tmux sessions named `openprs-*`: the hidden Claude sessions (`tmux ls` lists them). Idle ones close by themselves: 30 minutes after you answer, or 24 hours if Claude is still waiting on you
@@ -202,19 +202,19 @@ On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 The command center plan needs a few keys. They go into the Mac's Keychain, never into files or chat. Each command asks for the value without showing it on screen:
 
 ```bash
-security add-generic-password -s open-prs-datadog-api -a datadog -w
+security add-generic-password -s cmd-center-datadog-api -a datadog -w
 ```
 
 ```bash
-security add-generic-password -s open-prs-datadog-app -a datadog -w
+security add-generic-password -s cmd-center-datadog-app -a datadog -w
 ```
 
 ```bash
-security add-generic-password -s open-prs-jira -a <your Jira email> -w
+security add-generic-password -s cmd-center-jira -a <your Jira email> -w
 ```
 
 ```bash
-security add-generic-password -s open-prs-calendar-ics -a google -w
+security add-generic-password -s cmd-center-calendar-ics -a google -w
 ```
 
 On a new Mac, add them again the same way. The plan doc's "What I need from you" section says where each key comes from.

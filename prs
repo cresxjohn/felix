@@ -10,7 +10,7 @@ HERE="$(pwd)"
 URL=http://localhost:4777
 PID_FILE=data/server.pid
 LOG=data/server.log
-LABEL=local.open-prs
+LABEL=local.pure-tech-lead-cmd-center
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
 mkdir -p data

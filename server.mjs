@@ -69,7 +69,7 @@ function ghToken(refresh = false) {
 async function github(pathname, init = {}, retry = true) {
   const res = await fetch(`https://api.github.com${pathname}`, {
     ...init,
-    headers: { Authorization: `Bearer ${await ghToken()}`, "User-Agent": "open-prs-local", Accept: "application/vnd.github+json", ...init.headers },
+    headers: { Authorization: `Bearer ${await ghToken()}`, "User-Agent": "pure-tech-lead-cmd-center", Accept: "application/vnd.github+json", ...init.headers },
     signal: AbortSignal.timeout(30000),
   });
   if (res.status === 401 && retry) { await ghToken(true); return github(pathname, init, false); }

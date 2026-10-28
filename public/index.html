@@ -1395,7 +1395,7 @@ async function load() {
     try {
       res = await fetch("/api/prs", { cache: "no-store" });
     } catch {
-      throw new Error("Can't reach the local server. Start it with <code>./prs start</code> in the open-prs folder.");
+      throw new Error("Can't reach the local server. Start it with <code>./prs start</code> in the pure-tech-lead-cmd-center folder.");
     }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(esc(body.error || `The server answered ${res.status}.`));
