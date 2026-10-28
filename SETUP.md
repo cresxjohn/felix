@@ -1,8 +1,8 @@
 # PURE Tech Lead Command Center — setup guide
 
-This project runs a small page on your Mac at `http://localhost:4777`. Today that page is **Open PRs**: your open PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
+This project runs the Tech Lead Command Center on your Mac at `http://localhost:4777`. The home page has an Incident Commander card (from Datadog) and an Open PRs card; the rest are placeholders for now. The Open PRs page (`/prs`) lists your PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
 
-It is the first piece of the Tech Lead Command Center. The plan for the rest is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
+The plan for the rest is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
 
 This guide sets it up on a new Mac, or after a reinstall. Follow the steps in order. It takes about 20 minutes, most of it installing tools.
 
@@ -61,11 +61,16 @@ The server expects this layout. The folder *above* `pure-tech-lead-cmd-center` i
 ~/dev/pure/repo/                 the workspace
 ├── fm/                          git clone of purepm/frontend-monorepo
 ├── bm/                          git clone of purepm/backend-monorepo
-├── .claude/skills/review-pr/    the /review-pr skill (SKILL.md + references/)
+├── .claude/skills/review-pr     a link to the skill in this project (the server makes it on first start)
 └── pure-tech-lead-cmd-center/   this project
     ├── server.mjs               the server (no npm packages needed)
+    ├── datadog.mjs              the Incident Commander card's data
     ├── prs                      start / stop script
-    ├── public/index.html        the page
+    ├── public/home.html         the home page (cards)
+    ├── public/index.html        the Open PRs page
+    ├── public/theme.css         colors and fonts both pages share
+    ├── public/pr-status.js      PR state rules both pages share
+    ├── skills/review-pr/        the /review-pr skill reviews use
     ├── hooks/report.sh          tells the server what a Claude session is doing
     ├── README.md                what it does and how it works
     ├── SETUP.md                 this guide
@@ -109,7 +114,7 @@ gh repo clone purepm/backend-monorepo bm
 
 Bring these over from the old Mac by hand (they are not in this repo):
 
-- `repo/.claude/skills/` (the review-pr and review-staged skills),
+- `repo/.claude/skills/review-staged/` if you use it. The review-pr skill comes with this repo: on first start the server links it into `repo/.claude/skills/`. If that folder already has a review-pr, the server leaves it alone.
 - `repo/.claude/settings.local.json` if you want the same Claude permissions in the workspace,
 - `pure-tech-lead-cmd-center/data/` only if you want your old review history; otherwise it starts fresh.
 
@@ -145,7 +150,7 @@ You normally do nothing: the page is there after you log in. Keep it open in a p
 - `./prs status`: is it running, and does it start at login
 - `./prs logs`: watch the server log
 
-The page's links are shareable views: `/mine`, `/review`, plus search settings such as `/review?status=failing&pr=fm-12247&panel=files`.
+The home page is `/`. The Open PRs page's links are shareable views: `/prs/mine`, `/prs/review`, plus search settings such as `/prs/review?status=failing&pr=fm-12247&panel=files`. Old `/mine` and `/review` links still work.
 
 
 ## 6. Notifications
@@ -157,7 +162,7 @@ Click **Turn on notifications** at the top right of the page and allow them in C
 - a Claude fix is ready to push,
 - a new review request arrives, or someone pushes new commits after your review.
 
-The tab must stay open; the page checks GitHub every 5 minutes. Claude's built-in browser always blocks notifications, so use Chrome.
+The Open PRs page sends these, so keep `/prs` open in a pinned tab; the home page doesn't send them yet. The page checks GitHub every 5 minutes. Claude's built-in browser always blocks notifications, so use Chrome.
 
 
 ## 7. Where things are saved
@@ -169,7 +174,8 @@ The tab must stay open; the page checks GitHub every 5 minutes. Claude's built-i
 - `~/.warp/launch_configurations/openprs-*.yaml`: short-lived files that open Warp windows; they delete themselves
 - `repo/<fm|bm>-wt-pr-<number>/` and local branch `openprs/pr-<number>`: worktrees made by **Fix with Claude**. **Discard** on the page removes both
 - tmux sessions named `openprs-*`: the hidden Claude sessions (`tmux ls` lists them). Idle ones close by themselves: 30 minutes after you answer, or 24 hours if Claude is still waiting on you
-- your browser: the last list (so the page loads instantly), your model choice and notification setting
+- your browser: the last PR list and on-call data (so pages load instantly), your model choice and notification setting
+- `repo/.claude/skills/review-pr`: a link to `skills/review-pr` in this project, made by the server on first start
 
 Nothing secret is saved in this folder. The GitHub token is read from `gh` each time.
 
@@ -198,7 +204,7 @@ On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 - **The page looks stuck on old data**: press **R** or the refresh button. The header says "Saved list from …" until fresh data arrives.
 
 
-## 10. Coming later: command center keys
+## 10. Command center keys
 
 The command center plan needs a few keys. They go into the Mac's Keychain, never into files or chat. Each command asks for the value twice, without showing it on screen.
 
@@ -226,7 +232,7 @@ security add-generic-password -s cmd-center-jira -a <your Jira email> -w
 
 Google Calendar (both your calendar and the Tech Team Vacation Tracker) needs no command. The page will have a one-time "Sign in with Google" button that saves its own token to the Keychain as `cmd-center-google-oauth`. On a new Mac, you sign in again once.
 
-On a new Mac, add the other keys again the same way. The plan doc's "What I need from you" section says where each key comes from.
+On a new Mac, add the keys again the same way. The plan doc's "What I need from you" section says where each key comes from. Later, a setup wizard in the page will walk you through these steps.
 
 
 ## 11. Remove it

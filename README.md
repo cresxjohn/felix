@@ -1,16 +1,26 @@
 # PURE Tech Lead Command Center
 
-A small page on your Mac at `http://localhost:4777` for the work a tech lead does every day. Today it is **Open PRs**: your PRs and the PRs waiting on your review in fm (`purepm/frontend-monorepo`) and bm (`purepm/backend-monorepo`). Claude Code can review or fix them for you in the background.
+A small page on your Mac at `http://localhost:4777` for the work a tech lead does every day. The home page is a grid of cards:
 
-It is the first piece of a bigger home screen, with cards for Incident Commander, Calendar, Tasks, Team out of office and Jira. The plan is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
+- **Incident Commander** (live): who is on call now and next, today's and tomorrow's people on the Philippines and Americas schedules, and your next shift. From Datadog On-Call.
+- **Open PRs** (live): counts that need you, each opening the PR page already filtered.
+- **Calendar**, **Tasks**, **Team out of office** and **My Jira Board**: placeholders for now.
+
+The **Open PRs** page (`/prs`) lists your PRs and the PRs waiting on your review in fm (`purepm/frontend-monorepo`) and bm (`purepm/backend-monorepo`). Claude Code can review or fix them for you in the background.
+
+The plan for the rest is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
 
 New Mac or reinstall? Follow [SETUP.md](SETUP.md).
 
 
 ## What it does
 
+**Home** (`/`)
+- **Incident Commander:** who is on now and until when, who is next, the two teams' people for today and tomorrow, and your next shift with how many days to go. It reads Datadog every hour, and right after midnight. **R** or the refresh button asks Datadog again at once.
+- **Open PRs:** how many PRs need your review, have new commits, or have a Claude review waiting on you, and how many of yours have failing checks, conflicts, requested changes or a Claude fix waiting. Each line opens the PR page with that filter on.
+
 **Two lists**
-- **My PRs** (`/mine`) and **Needs my review** (`/review`), straight from GitHub.
+- **My PRs** (`/prs/mine`) and **Needs my review** (`/prs/review`), straight from GitHub. The old `/mine` and `/review` links still work.
 - Each PR shows its Jira ticket, review state, checks, merge conflicts and size (XS to XL).
 - Search, status filters, repo filter, sorting and grouping. Every view has its own link, for example `/review?status=failing&pr=fm-12247`.
 - **Copy link** on every PR, and **Remove me** to drop yourself from a PR's reviewers on GitHub. Remove me asks for a second click first.
@@ -43,6 +53,7 @@ New Mac or reinstall? Follow [SETUP.md](SETUP.md).
 
 ```
 Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh auth token`)
+                ├─► datadog.mjs ─► Datadog On-Call API (token from the Keychain)
                 │
                 ├─► tmux ─► claude --remote-control … "/review-pr <url>"   (review)
                 │      └─► claude … in <repo>-wt-pr-<n>                    (fix)
@@ -51,7 +62,11 @@ Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh aut
 ```
 
 - `server.mjs`: the whole server. Plain Node 22.5+, no npm packages. It serves the page, talks to GitHub, and starts and tracks Claude sessions.
-- `public/index.html`: the whole page (HTML, CSS and JS in one file). It reloads without a server restart.
+- `datadog.mjs`: the Incident Commander data. It reads the token from the Keychain, steps through the shifts, and caches them for an hour.
+- `public/home.html`: the home page with its cards.
+- `public/index.html`: the Open PRs page (HTML, CSS and JS in one file).
+- `public/theme.css` (colors and fonts) and `public/pr-status.js` (what state a PR is in) are shared by both pages. Page edits only need a reload.
+- `skills/review-pr/`: the `/review-pr` skill that reviews use. On start, the server links it into the workspace's `.claude/skills/` if it isn't there yet.
 - `hooks/report.sh`: a Claude Code hook that forwards session events to the server. It only runs in sessions this server starts.
 - `prs`: start, stop, install at login (macOS LaunchAgent), status and logs.
 - `data/`: local state (sessions, logs). It is not in git.
@@ -60,7 +75,7 @@ Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh aut
 - The server only listens on `127.0.0.1`.
 - Write requests must be JSON from the page itself, so other websites can't trigger them.
 - Fix sessions can't run `git push` or post on PRs.
-- No secrets are stored in this folder.
+- No secrets are stored in this folder. The Datadog token lives in the macOS Keychain.
 
 
 ## Commands
@@ -81,6 +96,7 @@ All routes are local only.
 
 | Route | What it does |
 | --- | --- |
+| `GET /api/incident-commander` | On-call shifts for today, tomorrow and my next shift (`?fresh=1` skips the hour cache) |
 | `GET /api/prs` | Both PR lists from GitHub, plus Claude sessions |
 | `GET /api/reviews` | Claude sessions only (the page polls this) |
 | `GET /api/pr?repo=fm&number=1` | One PR's details for the panel |
@@ -105,8 +121,9 @@ A session `key` is the PR link for a review, or `fix:<PR link>` for a fix.
 
 From the plan:
 
-1. Home page with cards; the PR page moves to `/prs`.
-2. Incident Commander (Datadog on-call).
+1. Home page with cards; the PR page moves to `/prs`. **Done.**
+2. Incident Commander (Datadog on-call). **Done.**
 3. Calendar and Team out of office (Google Calendar).
 4. Tasks.
 5. Jira board card, a Jira tab in the panel, and a Team view of everyone's open PRs.
+6. A setup wizard with this guide built in, so a new Mac sets itself up from the page.

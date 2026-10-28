@@ -1,0 +1,49 @@
+/* Shared look for every command center page: PURE PM Hub colors (pms-spa TailwindColors.js) and Roboto. */
+:root {
+  --bg: #E8EEF2;          /* indigo-50 */
+  --surface: #FFFFFF;
+  --fg: #343B53;          /* gray-800 */
+  --muted: #636C82;       /* gray-700 */
+  --line: #DDE1E7;        /* gray-300 */
+  --accent: #2563EB;      /* blue-600 */
+  --accent-hover: #1D4ED8;
+  --accent-bg: #E1EDF6;   /* blue-50 */
+  --link: #0891B2;        /* cyan-600 */
+  --mark: #FFE29B;        /* yellow-200 */
+  --ok: #047857;   --ok-bg: #D1FAE5;     /* green-700 / 100 */
+  --warn: #8D6747; --warn-bg: #FFF2D8;   /* yellow-800 / 100 */
+  --alert: #C2410C; --alert-bg: #FFEDD5; /* orange-700 / 100 */
+  --bad: #B91C1C;  --bad-bg: #FEE2E2;    /* red-700 / 100 */
+  --neutral-bg: #EBEEEF;  /* gray-100 */
+  --code-bg: #F4F8FD;     /* gray-1000 */
+  --sans: Roboto, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #292E3F;          /* gray-900 */
+    --surface: #343B53;     /* gray-800 */
+    --fg: #F6F7F8;          /* gray-75 */
+    --muted: #939EB1;       /* gray-500 */
+    --line: #4A5270;
+    --accent: #4593FF;      /* blue-500 */
+    --accent-hover: #6BB8FE;
+    --accent-bg: #2B3A63;
+    --link: #22D3EE;        /* cyan-400 */
+    --mark: #664833;        /* yellow-900 */
+    --ok: #77E3A9;   --ok-bg: #1F4136;
+    --warn: #FFC122; --warn-bg: #4A3E22;
+    --alert: #FF8E31; --alert-bg: #4D3020;
+    --bad: #F87171;  --bad-bg: #4F2A33;
+    --neutral-bg: #3E4561;
+    --code-bg: #2C3247;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+a { color: inherit; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

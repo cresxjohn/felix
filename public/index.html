@@ -7,67 +7,24 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%232563EB' d='M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/theme.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="/pr-status.js"></script>
 <style>
 /* Layout: list column on the left; the PR details panel takes the right half of the screen when open.
-   Colors and type follow PURE PM Hub (pms-spa TailwindColors.js, Roboto). */
-:root {
-  --bg: #E8EEF2;          /* indigo-50 */
-  --surface: #FFFFFF;
-  --fg: #343B53;          /* gray-800 */
-  --muted: #636C82;       /* gray-700 */
-  --line: #DDE1E7;        /* gray-300 */
-  --accent: #2563EB;      /* blue-600 */
-  --accent-hover: #1D4ED8;
-  --accent-bg: #E1EDF6;   /* blue-50 */
-  --link: #0891B2;        /* cyan-600 */
-  --mark: #FFE29B;        /* yellow-200 */
-  --ok: #047857;   --ok-bg: #D1FAE5;     /* green-700 / 100 */
-  --warn: #8D6747; --warn-bg: #FFF2D8;   /* yellow-800 / 100 */
-  --alert: #C2410C; --alert-bg: #FFEDD5; /* orange-700 / 100 */
-  --bad: #B91C1C;  --bad-bg: #FEE2E2;    /* red-700 / 100 */
-  --neutral-bg: #EBEEEF;  /* gray-100 */
-  --code-bg: #F4F8FD;     /* gray-1000 */
-  --sans: Roboto, -apple-system, "Segoe UI", system-ui, sans-serif;
-  --mono: "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #292E3F;          /* gray-900 */
-    --surface: #343B53;     /* gray-800 */
-    --fg: #F6F7F8;          /* gray-75 */
-    --muted: #939EB1;       /* gray-500 */
-    --line: #4A5270;
-    --accent: #4593FF;      /* blue-500 */
-    --accent-hover: #6BB8FE;
-    --accent-bg: #2B3A63;
-    --link: #22D3EE;        /* cyan-400 */
-    --mark: #664833;        /* yellow-900 */
-    --ok: #77E3A9;   --ok-bg: #1F4136;
-    --warn: #FFC122; --warn-bg: #4A3E22;
-    --alert: #FF8E31; --alert-bg: #4D3020;
-    --bad: #F87171;  --bad-bg: #4F2A33;
-    --neutral-bg: #3E4561;
-    --code-bg: #2C3247;
-    color-scheme: dark;
-  }
-}
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+   Colors and type come from /theme.css. */
 .main { padding: 16px 16px 64px; }
 body.panel-open .main, body.panel-empty .main { margin-right: 50vw; }
 .wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 20px; container-type: inline-size; }
-a { color: inherit; }
-button, select, input { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 header h1 { margin: 0; font-size: 22px; font-weight: 600; }
 header .who { color: var(--muted); font-family: var(--mono); font-size: 13px; }
 header .spacer { flex: 1; }
+header .home { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; color: var(--muted); }
+header .home:hover { background: var(--surface); color: var(--fg); }
+header .home svg { width: 18px; height: 18px; }
 .updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .refresh {
   display: inline-grid; place-items: center;
@@ -497,6 +454,9 @@ kbd:first-child { margin-left: 0; }
 <div class="main">
 <div class="wrap">
   <header>
+    <a class="home" href="/" title="Command center" aria-label="Back to the command center">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+    </a>
     <h1>Open PRs</h1>
     <span class="who" id="who"></span>
     <span class="spacer"></span>
@@ -597,7 +557,7 @@ const ANSWERS = [
 ];
 
 // ---------- State and URL ----------
-// Path picks the list (/mine or /review). Search params hold the rest, so any view can be bookmarked:
+// Path picks the list (/prs/mine or /prs/review). Search params hold the rest, so any view can be bookmarked:
 // ?q=portal&repo=fm&sort=oldest&status=failing,conflict&view=list&pr=fm-12247&panel=files
 const DEFAULT_VIEW = { tab: "mine", q: "", repo: "all", sort: "attention", statuses: [], group: true, pr: null, panel: "conversation" };
 let view = { ...DEFAULT_VIEW };
@@ -609,7 +569,7 @@ const details = new Map(); // "fm-12247" -> { loading, data, error }
 function readUrl() {
   const p = new URLSearchParams(location.search);
   view = {
-    tab: location.pathname.startsWith("/review") ? "review" : "mine",
+    tab: location.pathname.startsWith("/prs/review") ? "review" : "mine",
     q: p.get("q") || "",
     repo: ["fm", "bm"].includes(p.get("repo")) ? p.get("repo") : "all",
     sort: SORTS[p.get("sort")] ? p.get("sort") : "attention",
@@ -630,7 +590,7 @@ function urlFor(v) {
   if (v.pr) p.set("pr", v.pr);
   if (v.pr && v.panel !== "conversation") p.set("panel", v.panel);
   const qs = p.toString().replace(/%2C/g, ",");
-  return `/${v.tab}${qs ? `?${qs}` : ""}`;
+  return `/prs/${v.tab}${qs ? `?${qs}` : ""}`;
 }
 
 // Tab and panel changes add a history entry (Back undoes them); filter typing just replaces it.
@@ -685,37 +645,17 @@ function prKey(p) {
   return `${p.repoKey}-${p.number}`;
 }
 
-function needsReview(p) {
-  return !p.isDraft && p.reviewDecision !== "APPROVED" && !p.changesRequestedBy.length;
-}
-
-// ---------- Claude review status ----------
-// Order matters: a running session wins, then my newest GitHub review, then the session's own state.
-function claudeState(p) {
-  const r = reviews[p.url];
-  const my = p.myReview;
-  if (r?.status === "running") return { id: "running", cls: "run", label: `On-going · ${r.steps} step${r.steps === 1 ? "" : "s"}` };
-  if (r?.status === "answering") return { id: "running", cls: "run", label: "Working on your answer…" };
-  if (r?.status === "waiting") return { id: "ready", cls: "warn", label: "Needs your approval" };
-  if (r?.status === "queued") return { id: "queued", cls: "", label: "Queued for Claude" };
-  if (my && (!r || my.submittedAt >= r.startedAt)) {
-    if (my.state === "APPROVED") return { id: "done", cls: "ok", label: "Done · you approved" };
-    if (my.state === "CHANGES_REQUESTED") return { id: "changes", cls: "alert", label: "You requested changes" };
-    if (my.state === "COMMENTED") return { id: "commented", cls: "", label: "You commented" };
-  }
-  if (r?.status === "ready") return { id: "ready", cls: "warn", label: "Complete · needs your action" };
-  if (r?.status === "answered") return { id: "answered", cls: "", label: r.answer === "D" ? "Kept in chat only" : `Answered ${r.answer}` };
-  if (r?.status === "failed") return { id: "failed", cls: "bad", label: "Review failed" };
-  if (r?.status === "stopped") return { id: "stopped", cls: "", label: "Review stopped" };
-  if (r?.status === "ended") return { id: "ended", cls: "", label: "Session ended" };
-  return null;
-}
+// The rules live in /pr-status.js so the home page counts PRs the same way.
+const { needsReview } = PrStatus;
+const claudeState = (p) => PrStatus.claudeState(p, reviews);
+const fixState = (p) => PrStatus.fixState(p, reviews);
 
 // Status filters. A PR shows when it matches ANY selected status. `only` limits a filter to one tab.
 const STATUSES = [
   { id: "claude-running", only: "review", label: "Claude reviewing", color: "var(--accent)", test: (p) => claudeState(p)?.id === "running" },
   { id: "claude-ready", only: "review", label: "Needs your action", color: "var(--warn)", test: (p) => claudeState(p)?.id === "ready" },
   { id: "new-commits", only: "review", label: "New commits", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
+  { id: "fix-ready", only: "mine", label: "Fix needs you", color: "var(--warn)", test: (p) => fixState(p)?.id === "ready" },
   { id: "needs", label: "Need review", color: "var(--warn)", test: (p) => needsReview(p) },
   { id: "approved", label: "Approved", color: "var(--ok)", test: (p) => p.reviewDecision === "APPROVED" },
   { id: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
@@ -793,23 +733,6 @@ function isMine(p) {
 
 function fixKey(p) {
   return `fix:${p.url}`;
-}
-
-// Where a Claude fix on one of my PRs stands.
-function fixState(p) {
-  const f = reviews[fixKey(p)];
-  if (!f) return null;
-  const steps = `${f.steps} step${f.steps === 1 ? "" : "s"}`;
-  return {
-    running: { id: "running", cls: "run", label: `Claude fixing · ${steps}` },
-    answering: { id: "running", cls: "run", label: `Claude fixing · ${steps}` },
-    waiting: { id: "ready", cls: "warn", label: "Fix needs your approval" },
-    ready: { id: "ready", cls: "warn", label: "Fix ready · check and push" },
-    pushed: { id: "pushed", cls: "ok", label: "Fix pushed" },
-    failed: { id: "failed", cls: "bad", label: "Fix failed" },
-    stopped: { id: "stopped", cls: "", label: "Fix stopped" },
-    ended: { id: "ended", cls: "", label: "Fix session ended" },
-  }[f.status] || null;
 }
 
 function ticketLinks(p, toks = []) {
@@ -1983,7 +1906,7 @@ setInterval(() => { if (!loading) load(); }, 5 * 60e3);
 renderBell();
 
 readUrl();
-if (location.pathname === "/" || location.pathname === "/index.html") history.replaceState(null, "", urlFor(view));
+if (location.pathname === "/prs") history.replaceState(null, "", urlFor(view));
 $("q").value = view.q;
 const cached = readCache();
 if (cached?.lists) { data = cached; reviews = cached.reviews || {}; fromCache = true; }

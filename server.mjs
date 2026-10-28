@@ -1,7 +1,11 @@
-// Small local server for the Open PRs page. No dependencies; runs on the Mac (not in Docker)
+// Small local server for the Tech Lead Command Center. No dependencies; runs on the Mac (not in Docker)
 // so it can start Claude Code reviews in hidden tmux sessions with Remote Control on.
 //
-// GET  /, /mine, /review      -> the page
+// On start it also links the skills in skills/ (e.g. /review-pr) into the workspace's .claude/skills if missing.
+//
+// GET  /                      -> the command center home (cards)
+// GET  /prs, /prs/mine, /prs/review -> the Open PRs page (/mine and /review redirect here)
+// GET  /api/incident-commander[?fresh=1] -> Datadog on-call shifts for today, tomorrow and my next shift
 // GET  /api/prs               -> my PRs and PRs waiting on my review, fresh from GitHub, plus review sessions
 // GET  /api/reviews           -> review sessions only (cheap; the page polls this while a review runs)
 // GET  /api/pr?repo=fm&number=1 -> one PR's description, files, commits and activity for the details panel
@@ -21,12 +25,13 @@
 import { createServer } from "node:http";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync, unlinkSync } from "node:fs";
 import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { incidentCommander } from "./datadog.mjs";
 
 const PORT = Number(process.env.PORT || 4777);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -385,6 +390,27 @@ function writeHooksSettings() {
   writeFileSync(HOOKS_SETTINGS, JSON.stringify({ hooks: Object.fromEntries(events.map((e) => [e, hook])) }, null, 2));
 }
 writeHooksSettings();
+
+// The skills review sessions need (today just /review-pr) live in this repo under skills/. On first start on a
+// new Mac, each one is linked into the workspace's .claude/skills, where sessions started there find it. A link,
+// not a copy, so edits made on this Mac land in git. A skill already in the workspace is left alone.
+function installSkills() {
+  const from = path.join(HERE, "skills");
+  const to = path.join(WORKSPACE, ".claude", "skills");
+  if (!existsSync(from)) return;
+  for (const name of readdirSync(from)) {
+    const target = path.join(to, name);
+    try { lstatSync(target); continue; } catch {}
+    try {
+      mkdirSync(to, { recursive: true });
+      symlinkSync(path.relative(to, path.join(from, name)), target);
+      console.log(`Installed the ${name} skill: ${target}`);
+    } catch (e) {
+      console.error(`Couldn't install the ${name} skill: ${e.message}`);
+    }
+  }
+}
+installSkills();
 
 function readReviews() {
   try { return JSON.parse(readFileSync(REVIEWS_FILE, "utf8")); } catch { return {}; }
@@ -893,11 +919,15 @@ function checkWrite(req) {
   const origin = req.headers.origin;
   const okOrigin = !origin || origin === `http://localhost:${PORT}` || origin === `http://127.0.0.1:${PORT}`;
   if (!okOrigin || !String(req.headers["content-type"] || "").startsWith("application/json")) {
-    throw httpError(403, "Requests must come from the Open PRs page.");
+    throw httpError(403, "Requests must come from the command center page.");
   }
 }
 
-const PAGES = new Set(["/", "/index.html", "/mine", "/review"]);
+const PAGES = { "/": "home.html", "/prs": "index.html", "/prs/mine": "index.html", "/prs/review": "index.html" };
+// Files both pages share. Anything not listed here is not served.
+const ASSETS = { "/theme.css": "text/css", "/pr-status.js": "text/javascript" };
+// Old Open PRs links keep working.
+const MOVED = { "/mine": "/prs/mine", "/review": "/prs/review", "/index.html": "/prs" };
 
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -905,11 +935,27 @@ function json(res, status, body) {
 }
 
 createServer(async (req, res) => {
-  const { pathname } = new URL(req.url, `http://localhost:${PORT}`);
+  const { pathname, search } = new URL(req.url, `http://localhost:${PORT}`);
   try {
-    if (req.method === "GET" && PAGES.has(pathname)) {
+    if (req.method === "GET" && PAGES[pathname]) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-      return res.end(await readFile(path.join(HERE, "public", "index.html")));
+      return res.end(await readFile(path.join(HERE, "public", PAGES[pathname])));
+    }
+    if (req.method === "GET" && ASSETS[pathname]) {
+      res.writeHead(200, { "Content-Type": `${ASSETS[pathname]}; charset=utf-8`, "Cache-Control": "no-store" });
+      return res.end(await readFile(path.join(HERE, "public", pathname.slice(1))));
+    }
+    if (req.method === "GET" && MOVED[pathname]) {
+      res.writeHead(301, { Location: MOVED[pathname] + search });
+      return res.end();
+    }
+    if (req.method === "GET" && pathname === "/api/incident-commander") {
+      const fresh = new URL(req.url, `http://localhost:${PORT}`).searchParams.get("fresh") === "1";
+      try {
+        return json(res, 200, await incidentCommander({ fresh }));
+      } catch (e) {
+        return json(res, e.code === "auth" || e.code === "no-token" ? 401 : 502, { error: e.message, code: e.code || "error" });
+      }
     }
     if (req.method === "GET" && pathname === "/api/prs") {
       const data = await listPrs();
@@ -954,4 +1000,4 @@ createServer(async (req, res) => {
   } catch (e) {
     json(res, e.status || 502, { error: e.message });
   }
-}).listen(PORT, "127.0.0.1", () => console.log(`Open PRs on http://localhost:${PORT}`));
+}).listen(PORT, "127.0.0.1", () => console.log(`Command center on http://localhost:${PORT}`));

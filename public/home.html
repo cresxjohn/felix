@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command Center</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1.5'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1.5'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1.5'/%3E%3Crect x='14' y='14' width='7' height='7' rx='1.5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/theme.css">
+<script src="/pr-status.js"></script>
+<style>
+/* Home: a grid of cards, two columns on a wide screen, one on a narrow one. Colors and type come from /theme.css. */
+.main { padding: 16px 16px 64px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 20px; }
+
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+header .today { color: var(--muted); font-size: 14px; }
+header .spacer { flex: 1; }
+.refresh {
+  display: inline-grid; place-items: center;
+  width: 36px; height: 36px; border: 0; border-radius: 6px;
+  background: var(--accent); color: #fff; cursor: pointer;
+}
+.refresh:hover { background: var(--accent-hover); }
+.refresh svg { width: 18px; height: 18px; }
+.refresh.spinning svg { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Cards in a row share its height; each card's "Updated" line sits at the bottom. */
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+}
+.card-body, .stack { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.card-head { display: flex; align-items: center; gap: 8px; }
+.card-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.card-head .icon { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: var(--accent-bg); color: var(--accent); }
+.card-head .icon svg { width: 16px; height: 16px; }
+.card-head .spacer { flex: 1; }
+.card-head a.more { color: var(--link); font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.card-head a.more:hover { text-decoration: underline; }
+.card-head a.more svg { width: 13px; height: 13px; }
+.card-foot { margin-top: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.card .error { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+.card .error code { font-family: var(--mono); font-size: 12px; }
+.label { color: var(--muted); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Incident Commander */
+.now { display: grid; gap: 2px; }
+.now .who { font-size: 20px; font-weight: 600; }
+.now .who.none { color: var(--muted); font-weight: 500; }
+.now .sub, .next-up { color: var(--muted); font-size: 13px; }
+.next-up strong { color: var(--fg); font-weight: 500; }
+.shifts { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.shifts th { text-align: left; font-weight: 500; color: var(--muted); padding: 0 8px 6px 0; font-size: 12px; }
+.shifts th:first-child { width: 84px; }
+.shifts td { padding: 8px 8px 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.shifts td .name { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shifts td .time { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.shifts td .empty { color: var(--muted); }
+.shifts .me .name { color: var(--accent); }
+.mine { display: flex; align-items: center; gap: 10px; border-radius: 6px; padding: 10px 12px; background: var(--accent-bg); font-size: 13px; }
+.mine.on { background: var(--warn-bg); }
+.mine .when { font-weight: 600; }
+.mine .in { margin-left: auto; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.mine.on .in { color: var(--warn); }
+
+/* Open PRs */
+.pr-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 420px) { .pr-groups { grid-template-columns: minmax(0, 1fr); } }
+.pr-group { display: grid; gap: 4px; align-content: start; }
+.pr-group > a.total { display: flex; align-items: baseline; gap: 8px; text-decoration: none; padding: 2px 0 6px; }
+.pr-group > a.total .n { font-size: 28px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.pr-group > a.total .t { color: var(--muted); font-size: 13px; }
+.pr-group > a.total:hover .t { color: var(--fg); text-decoration: underline; }
+.count {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0 -8px;
+  border-radius: 6px; text-decoration: none; font-size: 13px;
+}
+.count:hover { background: var(--neutral-bg); }
+.count .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.count .n { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.count.zero { color: var(--muted); }
+.count.zero .dot { opacity: 0.35; }
+.count.zero .n { font-weight: 400; }
+
+/* Placeholders */
+.card.soon { background: transparent; border-style: dashed; }
+.card.soon .icon { background: var(--neutral-bg); color: var(--muted); }
+.card.soon p { margin: 0; color: var(--muted); font-size: 13px; }
+.chip { font-size: 11px; font-weight: 500; color: var(--muted); background: var(--neutral-bg); border-radius: 999px; padding: 2px 8px; }
+
+.skel { background: var(--neutral-bg); border-radius: 4px; height: 12px; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .skel, .refresh.spinning svg { animation: none; } }
+</style>
+</head>
+<body>
+<div class="main">
+<div class="wrap">
+  <header>
+    <h1>Command Center</h1>
+    <span class="today" id="today"></span>
+    <span class="spacer"></span>
+    <button class="refresh" id="refresh" type="button" title="Refresh (R)" aria-label="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="grid">
+    <section class="card" id="ic" aria-labelledby="ic-title">
+      <div class="card-head">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <h2 id="ic-title">Incident Commander</h2>
+        <span class="spacer"></span>
+        <a class="more" href="https://us5.datadoghq.com/on-call/schedules" target="_blank" rel="noopener">Datadog <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
+      </div>
+      <div class="card-body" id="ic-body"></div>
+    </section>
+
+    <section class="card" id="prs" aria-labelledby="prs-title">
+      <div class="card-head">
+        <span class="icon"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z"/></svg></span>
+        <h2 id="prs-title">Open PRs</h2>
+        <span class="spacer"></span>
+        <a class="more" href="/prs">Open page →</a>
+      </div>
+      <div class="card-body" id="prs-body"></div>
+    </section>
+
+    <section class="card soon" aria-labelledby="cal-title">
+      <div class="card-head">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span>
+        <h2 id="cal-title">Calendar</h2>
+        <span class="spacer"></span>
+        <span class="chip">Coming soon</span>
+      </div>
+      <p>Today's meetings and the next few days, with Join buttons and a countdown to your next meeting.</p>
+      <p>Needs: one Google sign-in (read-only calendar).</p>
+    </section>
+
+    <section class="card soon" aria-labelledby="tasks-title">
+      <div class="card-head">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/></svg></span>
+        <h2 id="tasks-title">Tasks</h2>
+        <span class="spacer"></span>
+        <span class="chip">Coming soon</span>
+      </div>
+      <p>Today's and overdue tasks, quick add in plain words, and links to PRs, tickets and meetings.</p>
+      <p>Saved on this Mac. Nothing to set up.</p>
+    </section>
+
+    <section class="card soon" aria-labelledby="ooo-title">
+      <div class="card-head">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.4 3.4-5.5 6.5-5.5s5.7 2.1 6.5 5.5"/><path d="m16 4 5 5M21 4l-5 5"/></svg></span>
+        <h2 id="ooo-title">Team out of office</h2>
+        <span class="spacer"></span>
+        <span class="chip">Coming soon</span>
+      </div>
+      <p>Who on your team is out today, tomorrow or on dates you pick, from the Tech Team Vacation Tracker.</p>
+      <p>Needs: the same Google sign-in as Calendar.</p>
+    </section>
+
+    <section class="card soon" aria-labelledby="jira-title">
+      <div class="card-head">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></svg></span>
+        <h2 id="jira-title">My Jira Board</h2>
+        <span class="spacer"></span>
+        <a class="more" href="https://purepm.atlassian.net/jira/your-work" target="_blank" rel="noopener">Open Jira <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
+      </div>
+      <p>A placeholder until you decide what it shows: your sprint tickets by status, what's waiting on you, or blocked tickets.</p>
+      <p>Needs: a Jira API token.</p>
+    </section>
+  </div>
+</div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Times show in this Mac's time zone (Manila), like the Datadog page.
+const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const fmtDay = (t) => new Date(t).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const DAY = 86400e3;
+
+// "today", "tomorrow" or "in 5 days", by calendar day.
+function daysAway(t) {
+  const n = Math.round((startOfDay(t) - startOfDay(Date.now())) / DAY);
+  return n <= 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`;
+}
+
+function inTime(t) {
+  const m = Math.max(0, Math.round((Date.parse(t) - Date.now()) / 60e3));
+  if (m < 60) return `in ${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `in ${h}h${m % 60 ? ` ${m % 60}m` : ""}` : daysAway(t);
+}
+
+function ago(iso) {
+  const m = Math.floor((Date.now() - Date.parse(iso)) / 60e3);
+  return m < 1 ? "just now" : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+}
+
+function readCache(key) {
+  try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
+}
+function saveCache(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+const skeleton = (rows) => `<div style="display:grid;gap:10px">${Array.from({ length: rows }, (_, i) => `<div class="skel" style="width:${[60, 85, 70, 45][i % 4]}%"></div>`).join("")}</div>`;
+
+// ---------- Incident Commander ----------
+const IC_CACHE = "cmd-center:ic";
+let ic = readCache(IC_CACHE);
+let icError = null;
+let icLoading = false;
+
+function shiftCell(list) {
+  if (!list.length) return `<span class="empty">No one</span>`;
+  return list.map((s) => `<span class="${s.mine ? "me" : ""}"><span class="name" title="${esc(s.user.name)}">${esc(s.user.name)}${s.mine ? " (you)" : ""}</span>`
+    + `<span class="time">${fmtTime(s.start)} – ${fmtTime(s.end)}</span></span>`).join("");
+}
+
+function renderIc() {
+  const body = $("ic-body");
+  if (!ic) {
+    body.innerHTML = icError ? icErrorHtml() : skeleton(4);
+    return;
+  }
+  const now = Date.now();
+  const all = ic.schedules.flatMap((s) => s.shifts.map((x) => ({ ...x, schedule: s.name })));
+  const onNow = all.filter((x) => Date.parse(x.start) <= now && now < Date.parse(x.end));
+  // Compare as times: the schedules use different UTC offsets, so the strings don't sort.
+  const upcoming = all.filter((x) => Date.parse(x.start) > now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  const next = upcoming[0];
+
+  const nowHtml = onNow.length
+    ? onNow.map((x) => `<div class="now"><span class="label">On now</span><span class="who">${esc(x.user.name)}${x.mine ? " (you)" : ""}</span>`
+      + `<span class="sub">${esc(x.schedule)} · until ${fmtTime(x.end)}${startOfDay(x.end) !== startOfDay(now) ? ` ${fmtDay(x.end)}` : ""}</span></div>`).join("")
+    : `<div class="now"><span class="label">On now</span><span class="who none">Nobody on shift</span></div>`;
+  const nextHtml = next
+    ? `<div class="next-up">Next: <strong>${esc(next.user.name)}</strong> · ${esc(next.schedule)} · ${startOfDay(next.start) === startOfDay(now) ? "" : `${fmtDay(next.start)}, `}${fmtTime(next.start)} (${inTime(next.start)})</div>`
+    : "";
+
+  const today = startOfDay(now);
+  const days = [["Today", today], ["Tomorrow", startOfDay(today + 36 * 3600e3)]];
+  const byStartDay = (s, d) => s.shifts.filter((x) => startOfDay(x.start) === d);
+  const table = `<table class="shifts"><thead><tr><th></th>${ic.schedules.map((s) => `<th>${esc(s.name)}</th>`).join("")}</tr></thead><tbody>`
+    + days.map(([label, d]) => `<tr><td class="label">${label}</td>${ic.schedules.map((s) => `<td>${shiftCell(byStartDay(s, d))}</td>`).join("")}</tr>`).join("")
+    + `</tbody></table>`;
+
+  const m = ic.myNext;
+  let mine;
+  if (!m) mine = `<div class="mine">No shift for you in the next ${ic.myLookahead} days.</div>`;
+  else if (Date.parse(m.start) <= now) mine = `<div class="mine on"><span>You're on now</span><span class="in">until ${fmtTime(m.end)}</span></div>`;
+  else mine = `<div class="mine"><span>Your next shift: <span class="when">${fmtDay(m.start)}, ${fmtTime(m.start)} – ${fmtTime(m.end)}</span></span><span class="in">${daysAway(m.start)}</span></div>`;
+
+  const updated = `Updated ${ago(ic.fetchedAt)} · ${fmtTime(ic.fetchedAt)}${icLoading ? " · refreshing…" : ""}`;
+  body.innerHTML = `${icError ? icErrorHtml() : ""}<div class="stack">${nowHtml}${nextHtml}${table}${mine}<div class="card-foot">${esc(updated)}</div></div>`;
+}
+
+function icErrorHtml() {
+  const how = icError.code === "auth" || icError.code === "no-token"
+    ? ` Make a new token in Datadog (Organization Settings → Access Tokens, scope <code>on_call_read</code>) and save it with <code>security add-generic-password -U -s cmd-center-datadog-app -a datadog -w</code>.`
+    : "";
+  return `<div class="error">${esc(icError.message)}${how}${ic ? " Showing the last data." : ""}</div>`;
+}
+
+async function loadIc(fresh = false) {
+  icLoading = true;
+  renderIc();
+  try {
+    let res;
+    try { res = await fetch(`/api/incident-commander${fresh ? "?fresh=1" : ""}`, { cache: "no-store" }); }
+    catch { throw { message: "Can't reach the local server. Start it with ./prs start." }; }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw { message: body.error || `The server answered ${res.status}.`, code: body.code };
+    ic = body;
+    icError = null;
+    saveCache(IC_CACHE, ic);
+  } catch (e) {
+    icError = { message: e.message || String(e), code: e.code };
+  } finally {
+    icLoading = false;
+    renderIc();
+  }
+}
+
+// ---------- Open PRs ----------
+// Same list and browser cache as the Open PRs page, so either page opens instantly after the other.
+const PR_CACHE = "open-prs:last";
+let prs = readCache(PR_CACHE);
+let prError = null;
+let prLoading = false;
+
+const COUNTS = {
+  review: [
+    { status: "needs", label: "Need your review", color: "var(--warn)", test: (p) => PrStatus.needsReview(p) },
+    { status: "new-commits", label: "New commits since your review", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
+    { status: "claude-ready", label: "Claude review waiting on you", color: "var(--accent)", test: (p, r) => PrStatus.claudeState(p, r)?.id === "ready" },
+  ],
+  mine: [
+    { status: "failing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
+    { status: "conflict", label: "Merge conflicts", color: "var(--bad)", test: (p) => p.mergeable === "CONFLICTING" },
+    { status: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
+    { status: "fix-ready", label: "Claude fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
+  ],
+};
+
+function renderPrs() {
+  const body = $("prs-body");
+  if (!prs?.lists) {
+    body.innerHTML = prError ? `<div class="error">${esc(prError)}</div>` : skeleton(5);
+    return;
+  }
+  const reviews = prs.reviews || {};
+  const group = (tab, title) => {
+    const list = prs.lists[tab].flatMap((r) => r.prs);
+    const rows = COUNTS[tab].map((c) => {
+      const n = list.filter((p) => c.test(p, reviews)).length;
+      return `<a class="count${n ? "" : " zero"}" href="/prs/${tab}?status=${c.status}"><span class="dot" style="background:${c.color}"></span>${esc(c.label)}<span class="n">${n}</span></a>`;
+    }).join("");
+    return `<div class="pr-group"><a class="total" href="/prs/${tab}"><span class="n">${list.length}</span><span class="t">${title}</span></a>${rows}</div>`;
+  };
+  const updated = `Updated ${ago(prs.fetchedAt)} · ${fmtTime(prs.fetchedAt)}${prLoading ? " · refreshing…" : ""}`;
+  body.innerHTML = `${prError ? `<div class="error">${esc(prError)} Showing the last list.</div>` : ""}`
+    + `<div class="stack"><div class="pr-groups">${group("review", "Needs my review")}${group("mine", "My PRs")}</div><div class="card-foot">${esc(updated)}</div></div>`;
+}
+
+async function loadPrs() {
+  prLoading = true;
+  renderPrs();
+  try {
+    let res;
+    try { res = await fetch("/api/prs", { cache: "no-store" }); }
+    catch { throw new Error("Can't reach the local server. Start it with ./prs start."); }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+    prs = body;
+    prError = null;
+    saveCache(PR_CACHE, prs);
+  } catch (e) {
+    prError = e.message;
+  } finally {
+    prLoading = false;
+    renderPrs();
+  }
+}
+
+// ---------- Refresh ----------
+function renderToday() {
+  $("today").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+}
+
+async function refreshAll(fresh) {
+  $("refresh").classList.add("spinning");
+  await Promise.all([loadIc(fresh), loadPrs()]);
+  $("refresh").classList.remove("spinning");
+}
+
+$("refresh").addEventListener("click", () => refreshAll(true));
+document.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "r" && !e.metaKey && !e.ctrlKey && !e.altKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) refreshAll(true);
+});
+
+// Every minute: redraw "on now" and the countdowns, and reload when the day changes (the server
+// keeps on-call data for an hour and per day). PRs reload every 5 minutes, like the PR page.
+let shownDay = startOfDay(Date.now());
+setInterval(() => {
+  renderToday();
+  if (startOfDay(Date.now()) !== shownDay) { shownDay = startOfDay(Date.now()); loadIc(); }
+  else renderIc();
+  renderPrs();
+}, 60e3);
+setInterval(() => loadIc(), 60 * 60e3);
+setInterval(() => loadPrs(), 5 * 60e3);
+
+renderToday();
+renderIc();
+renderPrs();
+refreshAll(false);
+</script>
+</body>
+</html>
