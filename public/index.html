@@ -219,6 +219,12 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .rel-top a { color: var(--link); text-decoration: none; font-size: 13px; }
 .rel-top a:hover { text-decoration: underline; }
 .rel-sub { color: var(--muted); font-size: 12px; }
+.rel-fold { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; padding: 0; }
+.rel-fold:hover { background: var(--neutral-bg); color: var(--fg); }
+.rel-fold svg { width: 15px; height: 15px; transition: transform .15s; }
+.rel.folded .rel-fold svg { transform: rotate(-90deg); }
+.rel.folded { gap: 8px; }
+.rel-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-mine { display: grid; gap: 6px; }
 .rel-mine .label, .rel-deploy .label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .rel-pr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
@@ -569,6 +575,7 @@ const ICON = {
   userMinus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/></svg>`,
   spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>`,
   stop: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>`,
   merge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M8.5 6h3a4 4 0 0 1 4 4v5.5"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>`,
   external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>`,
@@ -1333,6 +1340,9 @@ function render() {
 // release got to (dev deploy from "1 - Merges to main", prod from "4 - Platform promotion/release").
 const REL_OPEN_KEY = "open-prs:releases-open";
 let releases = null, releasesError = null;
+// Cards start folded; the ones you open are remembered.
+const REL_OPEN_CARDS_KEY = "open-prs:releases-expanded";
+const releasesExpanded = new Set((() => { try { return JSON.parse(localStorage.getItem(REL_OPEN_CARDS_KEY) || "[]"); } catch { return []; } })());
 let releasesOpen = (() => { try { return localStorage.getItem(REL_OPEN_KEY) !== "0"; } catch { return true; } })();
 
 function runPill(run, what) {
@@ -1343,6 +1353,24 @@ function runPill(run, what) {
   return `<a class="pill bad" href="${esc(run.url)}" target="_blank" rel="noopener">${what} ${esc(run.conclusion || "failed")} · ${when}</a>`;
 }
 
+// Where the release PR stands; the rule lives in /pr-status.js so the home page says the same.
+function releaseStatus(o) {
+  const st = PrStatus.releaseStatus(o);
+  return `<span class="pill ${st.cls}"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</span>`;
+}
+
+async function releaseAction(button, path, url, ask) {
+  if (!confirmFirst(button, ask)) return;
+  button.disabled = true;
+  try {
+    await post(path, { url });
+    $("error").hidden = true;
+  } catch (e) {
+    showError(`${path.includes("approve") ? "Couldn't approve" : "Couldn't merge"}. ${e.message}`);
+  }
+  await loadReleases();
+}
+
 function releaseCard(r) {
   const repoName = REPO_LABEL[r.key] || r.key;
   if (r.error) return `<div class="rel"><div class="rel-top"><span class="repo">${esc(r.key)}</span></div><div class="rel-none">Couldn't load: ${esc(r.error)}</div></div>`;
@@ -1350,8 +1378,13 @@ function releaseCard(r) {
   const head = o
     ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number} release</a>
        ${o.checks === "SUCCESS" ? `<span class="pill ok">Checks pass</span>` : o.checks === "FAILURE" || o.checks === "ERROR" ? `<span class="pill bad">Checks failing</span>` : o.checks ? `<span class="pill run">Checks running</span>` : ""}
-       ${o.inMergeQueue ? `<span class="pill run">In merge queue</span>` : o.mergeState === "CLEAN" ? `<span class="pill ok">Ready to merge</span>` : `<span class="pill" title="GitHub says ${esc((o.mergeState || "").toLowerCase())}: usually waiting for an approval or required checks">Not ready to merge</span>`}`
+       ${releaseStatus(o)}`
     : `<span class="rel-sub">No open release PR</span>`;
+  const actions = o && !o.inMergeQueue ? `<div class="rel-actions">
+      ${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="btn" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">${ICON.check}<span>Approve</span></button>` : ""}
+      ${o.iApproved ? `<span class="rel-sub">You approved</span>` : ""}
+      ${o.mergeState === "CLEAN" ? `<button class="btn primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging it deploys these packages to dev.">${ICON.merge}<span>Merge release</span></button>` : ""}
+    </div>` : "";
   const pkgs = o?.packages || [];
   const real = pkgs.filter((p) => !p.dependencyOnly);
   const deps = pkgs.length - real.length;
@@ -1369,7 +1402,10 @@ function releaseCard(r) {
     <div class="row">${last ? `<a href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a> merged ${ago(last.mergedAt)} · ${runPill(last.dev, "Dev deploy")}` : "No merged release yet"}</div>
     ${r.rc ? `<div class="row">${runPill(r.rc, "RC promotion")}</div>` : ""}
     <div class="row">${runPill(r.prod, "Prod promotion")}</div></div>`;
-  return `<div class="rel"><div class="rel-top"><span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span>${head}</div>${sub}${mine}${all}${deploy}</div>`;
+  const folded = !releasesExpanded.has(r.key);
+  const fold = `<button class="rel-fold" type="button" data-rel-fold="${esc(r.key)}" aria-expanded="${!folded}" title="${folded ? "Show details" : "Hide details"}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
+  const mineNote = folded && r.mine.length ? `<span class="rel-sub">${r.mine.length} of yours</span>` : "";
+  return `<div class="rel${folded ? " folded" : ""}"><div class="rel-top">${fold}<span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span>${head}${mineNote}</div>${actions}${folded ? "" : `${sub}${mine}${all}${deploy}`}</div>`;
 }
 
 function renderReleases() {
@@ -1399,6 +1435,15 @@ async function loadReleases() {
 }
 
 $("releases").addEventListener("click", (e) => {
+  let b;
+  if ((b = e.target.closest("[data-rel-fold]"))) {
+    const k = b.dataset.relFold;
+    if (releasesExpanded.has(k)) releasesExpanded.delete(k); else releasesExpanded.add(k);
+    try { localStorage.setItem(REL_OPEN_CARDS_KEY, JSON.stringify([...releasesExpanded])); } catch {}
+    return renderReleases();
+  }
+  if ((b = e.target.closest("[data-rel-approve]"))) return releaseAction(b, "/api/release/approve", b.dataset.relApprove, "Click again to approve");
+  if ((b = e.target.closest("[data-rel-merge]"))) return releaseAction(b, "/api/merge", b.dataset.relMerge, "Click again to merge the release");
   if (!e.target.closest("[data-rel-toggle]")) return;
   releasesOpen = !releasesOpen;
   try { localStorage.setItem(REL_OPEN_KEY, releasesOpen ? "1" : "0"); } catch {}
@@ -1862,9 +1907,9 @@ async function startFix(button) {
 function confirmFirst(button, text) {
   if (button.classList.contains("confirm")) return true;
   button.classList.add("confirm");
-  button.dataset.label = button.textContent;
+  const original = button.innerHTML;
   button.textContent = text;
-  setTimeout(() => { if (button.isConnected && !button.disabled) { button.classList.remove("confirm"); button.textContent = button.dataset.label; } }, 4000);
+  setTimeout(() => { if (button.isConnected && !button.disabled) { button.classList.remove("confirm"); button.innerHTML = original; } }, 4000);
   return false;
 }
 

@@ -23,7 +23,8 @@
 // POST /api/review-event      -> hook events from review sessions (hooks/report.sh)
 // POST /api/remove-me         -> { url } remove me from the PR's requested reviewers on GitHub
 // GET  /api/releases[?fresh=1] -> each repo's open release PR, my PRs in it, and the dev/rc/prod deploy runs
-// POST /api/merge             -> { url } add my ready PR to the merge queue (squash merge if the repo has no queue)
+// POST /api/release/approve   -> { url } approve a release PR (changeset-release/main only)
+// POST /api/merge             -> { url } add my ready PR (or a ready release PR) to the merge queue (squash merge if the repo has no queue)
 // POST /api/merge/batch       -> { urls } the same for several PRs, one at a time; returns a result per PR
 import { createServer } from "node:http";
 import { execFile, execFileSync, spawn } from "node:child_process";
@@ -378,7 +379,7 @@ async function removeMeAsReviewer(url) {
 const MERGE_INFO = `query($owner: String!, $name: String!, $number: Int!) {
   viewer { login }
   repository(owner: $owner, name: $name) { pullRequest(number: $number) {
-    id state isDraft baseRefName mergeStateStatus isInMergeQueue mergeQueueEntry { position } author { login }
+    id state isDraft baseRefName headRefName mergeStateStatus isInMergeQueue mergeQueueEntry { position } author { login }
   } }
 }`;
 
@@ -390,19 +391,22 @@ async function graphql(query, variables) {
   return body.data;
 }
 
+const RELEASE_BRANCH = "changeset-release/main";
+
 async function mergePr(url) {
   const [, side, number] = PR_URL.exec(url) || [];
   if (!number) throw httpError(400, "Not a fm or bm PR link.");
   const info = await graphql(MERGE_INFO, { owner: "purepm", name: `${side}-monorepo`, number: Number(number) });
   const pr = info.repository?.pullRequest;
   if (!pr) throw httpError(404, "PR not found.");
-  if (pr.author?.login !== info.viewer.login) throw httpError(403, "Only your own PRs can be merged from here.");
+  if (pr.author?.login !== info.viewer.login && pr.headRefName !== RELEASE_BRANCH) throw httpError(403, "Only your own PRs and the release PRs can be merged from here.");
   if (pr.state !== "OPEN") throw httpError(409, `This PR is ${pr.state.toLowerCase()}.`);
   if (pr.isDraft) throw httpError(409, "This PR is a draft.");
   if (pr.isInMergeQueue) return { queued: true, position: pr.mergeQueueEntry?.position ?? null, already: true };
   if (pr.mergeStateStatus !== "CLEAN") throw httpError(409, `Not ready to merge (GitHub says ${pr.mergeStateStatus.toLowerCase()}).`);
   const queue = await graphql(`query($owner: String!, $name: String!, $branch: String!) { repository(owner: $owner, name: $name) { mergeQueue(branch: $branch) { id } } }`,
     { owner: "purepm", name: `${side}-monorepo`, branch: pr.baseRefName });
+  releaseCache = null;
   if (queue.repository?.mergeQueue) {
     const out = await graphql(`mutation($id: ID!) { enqueuePullRequest(input: { pullRequestId: $id }) { mergeQueueEntry { position } } }`, { id: pr.id });
     console.log(`Merge queue: added ${url}`);
@@ -411,6 +415,25 @@ async function mergePr(url) {
   await graphql(`mutation($id: ID!) { mergePullRequest(input: { pullRequestId: $id, mergeMethod: SQUASH }) { pullRequest { merged } } }`, { id: pr.id });
   console.log(`Merged (squash) ${url}`);
   return { merged: true };
+}
+
+// Approve a release PR (and only a release PR: the changeset-release/main branch, someone else's).
+async function approveRelease(url) {
+  const [, side, number] = PR_URL.exec(url) || [];
+  if (!number) throw httpError(400, "Not a fm or bm PR link.");
+  const info = await graphql(MERGE_INFO, { owner: "purepm", name: `${side}-monorepo`, number: Number(number) });
+  const pr = info.repository?.pullRequest;
+  if (!pr) throw httpError(404, "PR not found.");
+  if (pr.headRefName !== RELEASE_BRANCH) throw httpError(403, "Only the release PRs can be approved from here.");
+  if (pr.state !== "OPEN") throw httpError(409, `This PR is ${pr.state.toLowerCase()}.`);
+  if (pr.author?.login === info.viewer.login) throw httpError(409, "GitHub doesn't let you approve your own PR.");
+  const res = await github(`/repos/purepm/${side}-monorepo/pulls/${number}/reviews`, { method: "POST", body: JSON.stringify({ event: "APPROVE" }) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw httpError(502, `GitHub refused: ${body.message || res.status}`);
+  }
+  releaseCache = null;
+  console.log(`Approved release ${url}`);
 }
 
 // One at a time, so GitHub sees them in the order picked; each PR gets its own result.
@@ -430,7 +453,9 @@ async function mergeBatch(urls) {
 const RELEASE_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     open: pullRequests(headRefName: "changeset-release/main", states: OPEN, first: 1, orderBy: { field: CREATED_AT, direction: DESC }) {
-      nodes { number url title createdAt updatedAt body mergeStateStatus isInMergeQueue
+      nodes { number url title createdAt updatedAt body mergeStateStatus isInMergeQueue reviewDecision
+        latestReviews(first: 20) { nodes { state author { login } } }
+        reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } ... on Team { name } } } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
     }
     last: pullRequests(headRefName: "changeset-release/main", states: MERGED, first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
@@ -495,6 +520,11 @@ async function repoRelease({ key, repo }, login) {
       number: open.number, url: open.url, title: open.title, createdAt: open.createdAt, updatedAt: open.updatedAt,
       checks: open.commits.nodes[0]?.commit?.statusCheckRollup?.state || null,
       mergeState: open.mergeStateStatus, inMergeQueue: open.isInMergeQueue,
+      reviewDecision: open.reviewDecision || null,
+      approvedBy: open.latestReviews.nodes.filter((r) => r.state === "APPROVED").map((r) => r.author?.login).filter(Boolean),
+      changesBy: open.latestReviews.nodes.filter((r) => r.state === "CHANGES_REQUESTED").map((r) => r.author?.login).filter(Boolean),
+      awaiting: open.reviewRequests.nodes.map((r) => r.requestedReviewer?.login || r.requestedReviewer?.name).filter(Boolean),
+      iApproved: open.latestReviews.nodes.some((r) => r.state === "APPROVED" && r.author?.login === login),
       packages,
     },
     mine,
@@ -1148,6 +1178,7 @@ createServer(async (req, res) => {
       else if (pathname === "/api/fix/discard") await discardFix(url);
       else if (pathname === "/api/remove-me") await removeMeAsReviewer(url);
       else if (pathname === "/api/merge") extra = { result: await mergePr(url) };
+      else if (pathname === "/api/release/approve") await approveRelease(url);
       else if (pathname === "/api/merge/batch") extra = { results: await mergeBatch(Array.isArray(body.urls) ? body.urls.map(String) : []) };
       else throw httpError(404, "Not found");
       return json(res, 200, { ok: true, ...extra, reviews: reviewsSnapshot() });

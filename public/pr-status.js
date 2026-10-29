@@ -49,5 +49,20 @@ window.PrStatus = (() => {
     return p.mergeState === "CLEAN" && !p.isDraft && !p.inMergeQueue;
   }
 
-  return { needsReview, claudeState, fixState, readyToMerge };
+  // Where a release PR stands, in GitHub's own terms. `o` is one repo's `open` from /api/releases.
+  // cls matches the pill colors: ok, warn, alert, run, or "" for neutral.
+  function releaseStatus(o) {
+    if (o.inMergeQueue) return { cls: "run", label: "In merge queue" };
+    if (o.mergeState === "CLEAN") return { cls: "ok", label: "Ready to merge", title: o.approvedBy.length ? `Approved by ${o.approvedBy.join(", ")}` : "" };
+    if (o.changesBy.length) return { cls: "alert", label: `Changes requested by ${o.changesBy.join(", ")}` };
+    if (o.reviewDecision === "REVIEW_REQUIRED") {
+      const who = o.awaiting.length ? ` · ${o.awaiting.join(", ")}` : o.approvedBy.length ? ` · ${o.approvedBy.length} approved` : "";
+      const title = `Needs ${o.approvedBy.length ? "another" : "an"} approving review before it can merge${o.approvedBy.length ? `. Approved by ${o.approvedBy.join(", ")}` : ""}`;
+      return { cls: "warn", label: `Awaiting reviewers${who}`, title };
+    }
+    if (o.checks && o.checks !== "SUCCESS") return { cls: "run", label: "Waiting for checks" };
+    return { cls: "", label: "Not ready to merge", title: `GitHub says ${(o.mergeState || "unknown").toLowerCase()}` };
+  }
+
+  return { needsReview, claudeState, fixState, readyToMerge, releaseStatus };
 })();

@@ -83,6 +83,30 @@ header .spacer { flex: 1; }
   border-radius: 6px; text-decoration: none; font-size: 13px;
 }
 .count:hover { background: var(--neutral-bg); }
+/* Release rows inside the Open PRs card */
+.rels { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
+.rels .head { display: flex; align-items: center; gap: 8px; }
+.rels .head a { margin-left: auto; color: var(--link); font-size: 12px; text-decoration: none; }
+.rels .head a:hover { text-decoration: underline; }
+.relrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding: 4px 0; }
+.relrow .rk { font-weight: 600; min-width: 20px; }
+.relrow > a.num { color: var(--link); text-decoration: none; }
+.relrow > a.num:hover { text-decoration: underline; }
+.relrow .yours { color: var(--muted); font-size: 12px; }
+.relrow .acts { margin-left: auto; display: flex; gap: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 2px 8px; background: var(--neutral-bg); color: var(--muted); white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.alert { background: var(--alert-bg); color: var(--alert); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.run { background: var(--accent-bg); color: var(--accent); }
+.mini { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.mini:hover { border-color: var(--accent); color: var(--accent); }
+.mini.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mini.primary:hover { background: var(--accent-hover); color: #fff; }
+.mini.confirm { background: var(--bad); border-color: var(--bad); color: #fff; }
+.mini:disabled { opacity: .6; cursor: default; }
 .count .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .count .n { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
 .count.zero { color: var(--muted); }
@@ -305,6 +329,9 @@ const PR_CACHE = "open-prs:last";
 let prs = readCache(PR_CACHE);
 let prError = null;
 let prLoading = false;
+let rel = null; // /api/releases
+let relError = null;
+let relActionError = null; // a failed Approve or Merge, kept until the next action
 
 const COUNTS = {
   review: [
@@ -315,6 +342,7 @@ const COUNTS = {
   mine: [
     { status: "failing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
     { status: "conflict", label: "Merge conflicts", color: "var(--bad)", test: (p) => p.mergeable === "CONFLICTING" },
+    { status: "in-queue", label: "In merge queue", color: "var(--accent)", test: (p) => Boolean(p.inMergeQueue) },
     { status: "ready-merge", label: "Ready to merge", color: "var(--ok)", test: (p) => PrStatus.readyToMerge(p) },
     { status: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
     { status: "fix-ready", label: "Claude fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
@@ -338,10 +366,65 @@ function renderPrs() {
   };
   const updated = `Updated ${ago(prs.fetchedAt)} · ${fmtTime(prs.fetchedAt)}${prLoading ? " · refreshing…" : ""}`;
   body.innerHTML = `${prError ? `<div class="error">${esc(prError)} Showing the last list.</div>` : ""}`
-    + `<div class="stack"><div class="pr-groups">${group("review", "Needs my review")}${group("mine", "My PRs")}</div><div class="card-foot">${esc(updated)}</div></div>`;
+    + `<div class="stack"><div class="pr-groups">${group("review", "Needs my review")}${group("mine", "My PRs")}</div>${releasesHtml()}<div class="card-foot">${esc(updated)}</div></div>`;
 }
 
+// One row per repo for its open release PR: status, how many of my PRs it ships, and Approve or Merge.
+function releasesHtml() {
+  if (!rel) return relError ? `<div class="rels"><span class="label">Releases</span><div class="card-foot">Couldn't load releases. ${esc(relError)}</div></div>` : "";
+  const rows = rel.repos.map((r) => {
+    if (r.error) return `<div class="relrow"><span class="rk">${esc(r.key)}</span><span class="yours">Couldn't load: ${esc(r.error)}</span></div>`;
+    const o = r.open;
+    if (!o) return `<div class="relrow"><span class="rk">${esc(r.key)}</span><span class="yours">No open release</span></div>`;
+    const st = PrStatus.releaseStatus(o);
+    const acts = o.inMergeQueue ? "" : `${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="mini" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">Approve</button>` : ""}${o.mergeState === "CLEAN" ? `<button class="mini primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging deploys these packages to dev.">Merge</button>` : ""}`;
+    return `<div class="relrow"><span class="rk">${esc(r.key)}</span><a class="num" href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number}</a><span class="pill ${st.cls}"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</span><span class="yours">${r.mine.length} of yours</span><span class="acts">${acts}</span></div>`;
+  }).join("");
+  return `<div class="rels"><div class="head"><span class="label">Releases</span><a href="/prs">Details →</a></div>${relActionError ? `<div class="error">${esc(relActionError)}</div>` : ""}${rows}</div>`;
+}
+
+async function loadReleases() {
+  try {
+    const res = await fetch("/api/releases", { cache: "no-store" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+    rel = body;
+    relError = null;
+  } catch (e) {
+    relError = e.message;
+  }
+  renderPrs();
+}
+
+// Approve and Merge act on GitHub, so the first click only asks; a second click within 4 seconds acts.
+async function releaseAction(button, path, ask) {
+  if (!button.classList.contains("confirm")) {
+    const original = button.innerHTML;
+    button.classList.add("confirm");
+    button.textContent = ask;
+    setTimeout(() => { if (button.isConnected && !button.disabled) { button.classList.remove("confirm"); button.innerHTML = original; } }, 4000);
+    return;
+  }
+  button.disabled = true;
+  try {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: button.dataset.relApprove || button.dataset.relMerge }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+    relActionError = null;
+  } catch (e) {
+    relActionError = `${path.includes("approve") ? "Couldn't approve" : "Couldn't merge"}: ${e.message}`;
+  }
+  await loadReleases();
+}
+
+$("prs-body").addEventListener("click", (e) => {
+  let b;
+  if ((b = e.target.closest("[data-rel-approve]"))) return releaseAction(b, "/api/release/approve", "Click again to approve");
+  if ((b = e.target.closest("[data-rel-merge]"))) return releaseAction(b, "/api/merge", "Click again to merge");
+});
+
 async function loadPrs() {
+  loadReleases();
   prLoading = true;
   renderPrs();
   try {
