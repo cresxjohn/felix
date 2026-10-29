@@ -44,5 +44,10 @@ window.PrStatus = (() => {
     }[f.status] || null;
   }
 
-  return { needsReview, claudeState, fixState };
+  // GitHub says CLEAN (approved, checks pass, no conflicts) and it isn't in the merge queue yet.
+  function readyToMerge(p) {
+    return p.mergeState === "CLEAN" && !p.isDraft && !p.inMergeQueue;
+  }
+
+  return { needsReview, claudeState, fixState, readyToMerge };
 })();

@@ -27,6 +27,8 @@ New Mac or reinstall? Follow [SETUP.md](SETUP.md).
 - Each PR shows its Jira ticket, review state, checks, merge conflicts and size (XS to XL).
 - Search, status filters, repo filter, sorting and grouping. Every view has its own link, for example `/review?status=failing&pr=fm-12247`.
 - **Copy link** on every PR, and **Remove me** to drop yourself from a PR's reviewers on GitHub. Remove me asks for a second click first.
+- **Merge** on your PRs that GitHub says are ready (approved, checks pass, no conflicts). It adds the PR to the merge queue, which squashes it into main, and asks for a second click first. A PR in the queue shows its place.
+- **Select PRs** with the checkboxes on either tab. On My PRs you can merge the ready ones or copy all their links at once; on Needs my review you can start Claude reviews or copy links.
 
 **Details panel** (the right half of the screen)
 - **Conversation:** the description, reviews, comments and inline code comments, plus reviewers, labels and assignees.
@@ -115,6 +117,8 @@ All routes are local only.
 | `POST /api/fix/push` | Push the fix to the PR branch `{ url }` |
 | `POST /api/fix/discard` | Close the fix and remove its worktree `{ url }` |
 | `POST /api/remove-me` | Remove me from a PR's reviewers `{ url }` |
+| `POST /api/merge` | Add my ready PR to the merge queue `{ url }` |
+| `POST /api/merge/batch` | The same for several PRs, one at a time `{ urls }` |
 | `POST /api/review-event` | Hook events from Claude sessions |
 
 A session `key` is the PR link for a review, or `fix:<PR link>` for a fix.

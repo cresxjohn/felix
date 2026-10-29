@@ -22,6 +22,8 @@
 // POST /api/review/open       -> { key, where: "warp"|"app" } open a session on this Mac to continue by hand
 // POST /api/review-event      -> hook events from review sessions (hooks/report.sh)
 // POST /api/remove-me         -> { url } remove me from the PR's requested reviewers on GitHub
+// POST /api/merge             -> { url } add my ready PR to the merge queue (squash merge if the repo has no queue)
+// POST /api/merge/batch       -> { urls } the same for several PRs, one at a time; returns a result per PR
 import { createServer } from "node:http";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -92,7 +94,7 @@ fragment prs on SearchResultItemConnection {
   nodes { ... on PullRequest {
     number title body url isDraft createdAt updatedAt headRefName baseRefName headRefOid
     author { login }
-    reviewDecision mergeable additions deletions changedFiles
+    reviewDecision mergeable mergeStateStatus isInMergeQueue mergeQueueEntry { position } additions deletions changedFiles
     repository { nameWithOwner }
     labels(first: 10) { nodes { name } }
     latestReviews(first: 30) { nodes { state submittedAt author { login } commit { oid } } }
@@ -177,6 +179,10 @@ function shape(pr, login) {
     base: pr.baseRefName,
     reviewDecision: pr.reviewDecision || null,
     mergeable: pr.mergeable,
+    // CLEAN = approved, checks pass, no conflicts: GitHub's own "ready to merge".
+    mergeState: pr.mergeStateStatus || null,
+    inMergeQueue: Boolean(pr.isInMergeQueue),
+    queuePosition: pr.mergeQueueEntry?.position ?? null,
     additions: pr.additions,
     deletions: pr.deletions,
     changedFiles: pr.changedFiles,
@@ -364,6 +370,56 @@ async function removeMeAsReviewer(url) {
     const body = await res.json().catch(() => ({}));
     throw httpError(502, `GitHub refused: ${body.message || res.status}`);
   }
+}
+
+// Merge one of my PRs. main in fm and bm requires the merge queue (which squashes), so the PR is added to
+// the queue; a repo without a queue gets a squash merge instead. Only my own open, non-draft PRs.
+const MERGE_INFO = `query($owner: String!, $name: String!, $number: Int!) {
+  viewer { login }
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+    id state isDraft baseRefName mergeStateStatus isInMergeQueue mergeQueueEntry { position } author { login }
+  } }
+}`;
+
+async function graphql(query, variables) {
+  const res = await github("/graphql", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, variables }) });
+  const body = await res.json().catch(() => ({}));
+  if (body.errors?.length) throw httpError(502, body.errors.map((e) => e.message).join("; "));
+  if (!res.ok) throw httpError(502, `GitHub answered ${res.status}.`);
+  return body.data;
+}
+
+async function mergePr(url) {
+  const [, side, number] = PR_URL.exec(url) || [];
+  if (!number) throw httpError(400, "Not a fm or bm PR link.");
+  const info = await graphql(MERGE_INFO, { owner: "purepm", name: `${side}-monorepo`, number: Number(number) });
+  const pr = info.repository?.pullRequest;
+  if (!pr) throw httpError(404, "PR not found.");
+  if (pr.author?.login !== info.viewer.login) throw httpError(403, "Only your own PRs can be merged from here.");
+  if (pr.state !== "OPEN") throw httpError(409, `This PR is ${pr.state.toLowerCase()}.`);
+  if (pr.isDraft) throw httpError(409, "This PR is a draft.");
+  if (pr.isInMergeQueue) return { queued: true, position: pr.mergeQueueEntry?.position ?? null, already: true };
+  if (pr.mergeStateStatus !== "CLEAN") throw httpError(409, `Not ready to merge (GitHub says ${pr.mergeStateStatus.toLowerCase()}).`);
+  const queue = await graphql(`query($owner: String!, $name: String!, $branch: String!) { repository(owner: $owner, name: $name) { mergeQueue(branch: $branch) { id } } }`,
+    { owner: "purepm", name: `${side}-monorepo`, branch: pr.baseRefName });
+  if (queue.repository?.mergeQueue) {
+    const out = await graphql(`mutation($id: ID!) { enqueuePullRequest(input: { pullRequestId: $id }) { mergeQueueEntry { position } } }`, { id: pr.id });
+    console.log(`Merge queue: added ${url}`);
+    return { queued: true, position: out.enqueuePullRequest?.mergeQueueEntry?.position ?? null };
+  }
+  await graphql(`mutation($id: ID!) { mergePullRequest(input: { pullRequestId: $id, mergeMethod: SQUASH }) { pullRequest { merged } } }`, { id: pr.id });
+  console.log(`Merged (squash) ${url}`);
+  return { merged: true };
+}
+
+// One at a time, so GitHub sees them in the order picked; each PR gets its own result.
+async function mergeBatch(urls) {
+  const results = [];
+  for (const url of [...new Set(urls)].slice(0, 50)) {
+    try { results.push({ url, ok: true, ...(await mergePr(url)) }); }
+    catch (e) { results.push({ url, ok: false, error: e.message }); }
+  }
+  return results;
 }
 
 // ---------- Claude sessions: reviews and fixes ----------
@@ -997,6 +1053,8 @@ createServer(async (req, res) => {
       else if (pathname === "/api/fix/push") await pushFix(url);
       else if (pathname === "/api/fix/discard") await discardFix(url);
       else if (pathname === "/api/remove-me") await removeMeAsReviewer(url);
+      else if (pathname === "/api/merge") extra = { result: await mergePr(url) };
+      else if (pathname === "/api/merge/batch") extra = { results: await mergeBatch(Array.isArray(body.urls) ? body.urls.map(String) : []) };
       else throw httpError(404, "Not found");
       return json(res, 200, { ok: true, ...extra, reviews: reviewsSnapshot() });
     }

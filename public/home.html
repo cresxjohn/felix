@@ -315,6 +315,7 @@ const COUNTS = {
   mine: [
     { status: "failing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
     { status: "conflict", label: "Merge conflicts", color: "var(--bad)", test: (p) => p.mergeable === "CONFLICTING" },
+    { status: "ready-merge", label: "Ready to merge", color: "var(--ok)", test: (p) => PrStatus.readyToMerge(p) },
     { status: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
     { status: "fix-ready", label: "Claude fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
   ],

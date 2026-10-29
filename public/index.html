@@ -537,6 +537,7 @@ const ICON = {
   userMinus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/></svg>`,
   spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>`,
   stop: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
+  merge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M8.5 6h3a4 4 0 0 1 4 4v5.5"/></svg>`,
   bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>`,
   external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>`,
 };
@@ -649,12 +650,15 @@ function prKey(p) {
 const { needsReview } = PrStatus;
 const claudeState = (p) => PrStatus.claudeState(p, reviews);
 const fixState = (p) => PrStatus.fixState(p, reviews);
+const { readyToMerge } = PrStatus;
 
 // Status filters. A PR shows when it matches ANY selected status. `only` limits a filter to one tab.
 const STATUSES = [
   { id: "claude-running", only: "review", label: "Claude reviewing", color: "var(--accent)", test: (p) => claudeState(p)?.id === "running" },
   { id: "claude-ready", only: "review", label: "Needs your action", color: "var(--warn)", test: (p) => claudeState(p)?.id === "ready" },
   { id: "new-commits", only: "review", label: "New commits", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
+  { id: "ready-merge", only: "mine", label: "Ready to merge", color: "var(--ok)", test: (p) => readyToMerge(p) },
+  { id: "in-queue", only: "mine", label: "In merge queue", color: "var(--accent)", test: (p) => Boolean(p.inMergeQueue) },
   { id: "fix-ready", only: "mine", label: "Fix needs you", color: "var(--warn)", test: (p) => fixState(p)?.id === "ready" },
   { id: "needs", label: "Need review", color: "var(--warn)", test: (p) => needsReview(p) },
   { id: "approved", label: "Approved", color: "var(--ok)", test: (p) => p.reviewDecision === "APPROVED" },
@@ -744,7 +748,9 @@ function allPills(p, toks = []) {
   const conflict = p.mergeable === "CONFLICTING" ? `<span class="pill bad">Merge conflict</span>` : "";
   const labels = p.labels.map((l) => `<span class="tag">${highlight(l, toks)}</span>`).join("");
   const fresh = p.newCommits ? `<span class="pill alert" title="The author pushed after your last review">New commits since your review</span>` : "";
-  return `${fresh}${claudePill(p)}${ticketLinks(p, toks)}${reviewPill(p)}${checksPill(p.checks)}${conflict}${labels}`;
+  const queued = p.inMergeQueue ? `<span class="pill run" title="Waiting in GitHub's merge queue">In merge queue${p.queuePosition ? ` · #${p.queuePosition}` : ""}</span>` : "";
+  const ready = isMine(p) && readyToMerge(p) ? `<span class="pill ok">Ready to merge</span>` : "";
+  return `${fresh}${claudePill(p)}${ticketLinks(p, toks)}${queued}${ready}${reviewPill(p)}${checksPill(p.checks)}${conflict}${labels}`;
 }
 
 // The Claude button that fits the PR's current review state.
@@ -767,10 +773,11 @@ function renderPr(p, toks, showRepo) {
   const author = others ? `<span class="author">by <b>${highlight(p.author, toks)}</b> · opened ${ago(p.createdAt)}</span>` : "";
   const notRequested = others && !p.requested ? `<span>Review request cleared</span>` : "";
   return `<div class="pr${view.pr === prKey(p) ? " selected" : ""}" data-open="${esc(prKey(p))}">
-    <span class="num">${others ? `<label class="pick" title="Select for batch review"><input type="checkbox" data-pick="${esc(p.url)}"${selected.has(p.url) ? " checked" : ""} aria-label="Select #${p.number}"></label>` : ""}${showRepo ? `<span class="rk">${esc(p.repoKey)}</span>` : ""}<span>#${highlight(p.number, toks)}</span></span>
+    <span class="num"><label class="pick" title="${others ? "Select for batch review or copying links" : "Select to merge or copy links"}"><input type="checkbox" data-pick="${esc(p.url)}"${selected.has(p.url) ? " checked" : ""} aria-label="Select #${p.number}"></label>${showRepo ? `<span class="rk">${esc(p.repoKey)}</span>` : ""}<span>#${highlight(p.number, toks)}</span></span>
     <div class="head">
       <a class="title" href="${esc(p.url)}" data-open="${esc(prKey(p))}">${highlight(p.title, toks)}</a>
       <div class="actions">
+        ${!others && readyToMerge(p) ? `<button class="btn primary" type="button" data-merge="${esc(p.url)}" title="Add this PR to the merge queue, which squashes it into ${esc(p.base)}">${ICON.merge}<span>Merge</span></button>` : ""}
         ${others ? claudeButton(p) : `<button class="btn" type="button" data-fixopen="${esc(prKey(p))}" title="Ask Claude to fix checks, conflicts or review comments">${ICON.spark}<span>Fix with Claude</span></button>`}
         <button class="btn" type="button" data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}">${ICON.copy}<span>Copy link</span></button>
         ${others && p.requested ? `<button class="btn" type="button" data-remove="${esc(p.url)}" title="Remove you from this PR's reviewers on GitHub">${ICON.userMinus}<span>Remove me</span></button>` : ""}
@@ -840,8 +847,10 @@ function renderControls(all, toks) {
   $("reset").hidden = !(view.q || view.repo !== "all" || view.statuses.length);
 }
 
+let selTab = null; // selections belong to one tab
 function renderList() {
   if (!data) return;
+  if (selTab !== view.tab) { selected.clear(); selTab = view.tab; }
   $("who").textContent = `@${data.login}`;
   const all = listFor(view.tab);
   const toks = tokens();
@@ -1459,13 +1468,12 @@ async function openSession(button) {
   catch (e) { showError(`Couldn't open the session. ${e.message}`); }
 }
 
-async function copyLink(button) {
-  const url = button.dataset.copy;
+async function copyText(button, text, restore) {
   try {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(text);
   } catch {
     // Older browsers: copy through a hidden text box.
-    const box = Object.assign(document.createElement("textarea"), { value: url });
+    const box = Object.assign(document.createElement("textarea"), { value: text });
     document.body.append(box);
     box.select();
     document.execCommand("copy");
@@ -1474,7 +1482,49 @@ async function copyLink(button) {
   const label = button.querySelector("span");
   button.classList.add("done");
   label.textContent = "Copied";
-  setTimeout(() => { button.classList.remove("done"); label.textContent = "Copy link"; }, 1500);
+  setTimeout(() => { button.classList.remove("done"); label.textContent = restore; }, 1500);
+}
+
+function copyLink(button) {
+  return copyText(button, button.dataset.copy, "Copy link");
+}
+
+// ---------- Merge (my PRs) ----------
+// Merging goes through GitHub's merge queue, so it asks for a second click first.
+async function mergeOne(button) {
+  if (!confirmFirst(button, "Click again to merge")) return;
+  button.disabled = true;
+  try {
+    const out = await post("/api/merge", { url: button.dataset.merge });
+    const r = out.result || {};
+    button.textContent = r.merged ? "Merged" : `Queued${r.position ? ` #${r.position}` : ""}`;
+    $("error").hidden = true;
+    load();
+  } catch (e) {
+    button.disabled = false;
+    button.classList.remove("confirm");
+    button.innerHTML = `${ICON.merge}<span>Merge</span>`;
+    showError(`Couldn't merge. ${e.message}`);
+  }
+}
+
+async function mergeSelected(button) {
+  const ready = selectedPrs().filter(readyToMerge);
+  if (!ready.length) return;
+  if (!confirmFirst(button, `Click again to merge ${ready.length}`)) return;
+  button.disabled = true;
+  button.textContent = "Merging…";
+  try {
+    const out = await post("/api/merge/batch", { urls: ready.map((p) => p.url) });
+    const failed = (out.results || []).filter((r) => !r.ok);
+    selected.clear();
+    if (failed.length) showError(`${failed.length} of ${ready.length} didn't merge: ${failed.map((r) => `${keyFromUrl(r.url).replace("-", " #")} (${r.error})`).join("; ")}`);
+    else $("error").hidden = true;
+  } catch (e) {
+    showError(`Couldn't merge. ${e.message}`);
+  }
+  render();
+  load();
 }
 
 // First click asks to confirm; a second click within 4 seconds removes you on GitHub.
@@ -1519,18 +1569,34 @@ function toggleAllFiles(show) {
 }
 
 // ---------- Batch review ----------
-const selected = new Set(); // PR links ticked on the Needs my review tab
+const selected = new Set(); // PR links ticked on the current tab
 let lastShown = [];
+
+function selectedPrs() {
+  const all = listFor(view.tab);
+  return [...selected].map((u) => all.find((p) => p.url === u)).filter(Boolean);
+}
 
 function renderSelbar() {
   const bar = $("selbar");
-  if (view.tab !== "review" || !selected.size) { bar.hidden = true; return; }
+  if (!selected.size) { bar.hidden = true; return; }
   bar.hidden = false;
+  const copy = `<button class="btn" type="button" data-copy-sel>${ICON.copy}<span>Copy ${selected.size} link${selected.size === 1 ? "" : "s"}</span></button>`;
+  const common = `<button class="linkbtn" type="button" data-select-all>Select all shown</button>
+    <button class="linkbtn" type="button" data-clear-sel>Clear</button>`;
+  if (view.tab === "review") {
+    bar.innerHTML = `<span><b>${selected.size}</b> selected</span>
+      <button class="btn primary" type="button" data-batch>${ICON.spark}<span>Review ${selected.size} with Claude</span></button>
+      ${copy}${common}
+      <span class="cost">${esc(MODEL_NAMES[$("model").value] || "Default model")} · at most 3 run at once, the rest wait in a queue</span>`;
+    return;
+  }
+  const ready = selectedPrs().filter(readyToMerge);
+  const skip = selected.size - ready.length;
   bar.innerHTML = `<span><b>${selected.size}</b> selected</span>
-    <button class="btn primary" type="button" data-batch>${ICON.spark}<span>Review ${selected.size} with Claude</span></button>
-    <button class="linkbtn" type="button" data-select-all>Select all shown</button>
-    <button class="linkbtn" type="button" data-clear-sel>Clear</button>
-    <span class="cost">${esc(MODEL_NAMES[$("model").value] || "Default model")} · at most 3 run at once, the rest wait in a queue</span>`;
+    <button class="btn primary" type="button" data-merge-sel${ready.length ? "" : " disabled"} title="Add the ready ones to the merge queue, one at a time">${ICON.merge}<span>Merge ${ready.length}</span></button>
+    ${copy}${common}
+    <span class="cost">${skip ? `${skip} not ready to merge, skipped · ` : ""}the merge queue squashes each into main</span>`;
 }
 
 $("selbar").addEventListener("click", async (e) => {
@@ -1538,6 +1604,8 @@ $("selbar").addEventListener("click", async (e) => {
   if (!b) return;
   if (b.hasAttribute("data-select-all")) { lastShown.forEach((u) => selected.add(u)); return renderList(); }
   if (b.hasAttribute("data-clear-sel")) { selected.clear(); return renderList(); }
+  if (b.hasAttribute("data-copy-sel")) return copyText(b, [...selected].join("\n"), `Copy ${selected.size} link${selected.size === 1 ? "" : "s"}`);
+  if (b.hasAttribute("data-merge-sel")) return mergeSelected(b);
   if (!b.hasAttribute("data-batch")) return;
   b.disabled = true;
   try {
@@ -1745,6 +1813,7 @@ function onClick(e) {
   if ((b = pick("[data-push]"))) return pushFix(b);
   if ((b = pick("[data-discard]"))) return discardFix(b);
   if ((b = pick("[data-copy]"))) return copyLink(b);
+  if ((b = pick("[data-merge]"))) return mergeOne(b);
   if ((b = pick("[data-remove]"))) return removeMe(b);
   if ((b = pick("[data-review]"))) return startReview(b, b.dataset.review);
   if ((b = pick("[data-stop]"))) return stopReview(b, b.dataset.stop);
