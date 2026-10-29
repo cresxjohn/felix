@@ -22,6 +22,7 @@
 // POST /api/review/open       -> { key, where: "warp"|"app" } open a session on this Mac to continue by hand
 // POST /api/review-event      -> hook events from review sessions (hooks/report.sh)
 // POST /api/remove-me         -> { url } remove me from the PR's requested reviewers on GitHub
+// GET  /api/releases[?fresh=1] -> each repo's open release PR, my PRs in it, and the dev/rc/prod deploy runs
 // POST /api/merge             -> { url } add my ready PR to the merge queue (squash merge if the repo has no queue)
 // POST /api/merge/batch       -> { urls } the same for several PRs, one at a time; returns a result per PR
 import { createServer } from "node:http";
@@ -420,6 +421,96 @@ async function mergeBatch(urls) {
     catch (e) { results.push({ url, ok: false, error: e.message }); }
   }
   return results;
+}
+
+// ---------- Releases ----------
+// Each repo keeps one open "chore: release main (changeset)" PR on changeset-release/main. Merging it runs
+// "1 - Merges to main", which deploys the released packages to dev; "4 - Platform promotion/release" is run
+// by hand to promote to rc and prod. The card shows the open release, my PRs in it, and those deploy runs.
+const RELEASE_QUERY = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    open: pullRequests(headRefName: "changeset-release/main", states: OPEN, first: 1, orderBy: { field: CREATED_AT, direction: DESC }) {
+      nodes { number url title createdAt updatedAt body mergeStateStatus isInMergeQueue
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
+    }
+    last: pullRequests(headRefName: "changeset-release/main", states: MERGED, first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      nodes { number url mergedAt mergeCommit { oid } }
+    }
+  }
+}`;
+const RELEASE_CACHE_MS = 60e3;
+let releaseCache = null; // { at, body }
+
+// "<details><summary>@apps/pms-spa: 1.1453.1 -> 1.1454.0</summary> ... * fix thing (#12256) ([abc](...))"
+function parseRelease(body = "") {
+  const packages = [];
+  for (const m of body.matchAll(/<details><summary>([^<]+?):\s*([^\s<]+)\s*->\s*([^\s<]+)<\/summary>([\s\S]*?)<\/details>/g)) {
+    const changes = [];
+    let kind = "";
+    for (const line of m[4].split("\n")) {
+      const h = /^###\s+(.+)/.exec(line);
+      if (h) { kind = h[1].trim(); continue; }
+      const c = /^\*\s+(.+?)\s+\(#(\d+)\)/.exec(line);
+      if (c) changes.push({ kind, text: c[1], pr: Number(c[2]) });
+    }
+    packages.push({ name: m[1].trim(), from: m[2], to: m[3], changes, dependencyOnly: !changes.length });
+  }
+  return packages;
+}
+
+const runInfo = (r) => r && { name: r.name, title: r.display_title, status: r.status, conclusion: r.conclusion, url: r.html_url, at: r.created_at, updatedAt: r.updated_at };
+
+async function repoRelease({ key, repo }, login) {
+  const [owner, name] = repo.split("/");
+  const data = await graphql(RELEASE_QUERY, { owner, name });
+  const open = data.repository.open.nodes[0] || null;
+  const last = data.repository.last.nodes[0] || null;
+  const packages = parseRelease(open?.body);
+  const numbers = [...new Set(packages.flatMap((p) => p.changes.map((c) => c.pr)))];
+
+  // Which of those PRs are mine: my recently merged PRs in this repo.
+  let mine = [];
+  if (numbers.length) {
+    const found = await graphql(`query($q: String!) { search(query: $q, type: ISSUE, first: 100) { nodes { ... on PullRequest { number title url mergedAt } } } }`,
+      { q: `repo:${repo} is:pr is:merged author:${login} sort:updated-desc` });
+    const mineByNumber = new Map(found.search.nodes.filter((n) => n.number).map((n) => [n.number, n]));
+    mine = numbers.filter((n) => mineByNumber.has(n)).map((n) => ({
+      ...mineByNumber.get(n),
+      packages: packages.filter((p) => p.changes.some((c) => c.pr === n)).map((p) => `${p.name.replace(/^@[^/]+\//, "")} ${p.to}`),
+    }));
+  }
+
+  // Dev: the "1 - Merges to main" run for the last release's merge commit. RC and prod: the newest promotion run of each.
+  let dev = null;
+  if (last?.mergeCommit?.oid) {
+    const runs = await (await github(`/repos/${repo}/actions/runs?head_sha=${last.mergeCommit.oid}&event=push&per_page=20`)).json();
+    dev = runInfo((runs.workflow_runs || []).find((r) => r.name === "1 - Merges to main"));
+  }
+  const promos = await (await github(`/repos/${repo}/actions/workflows/release.yml/runs?per_page=30`)).json();
+  const promo = (env) => runInfo((promos.workflow_runs || []).find((r) => new RegExp(`\\bto ${env} environment\\b`).test(r.display_title || "")));
+
+  return {
+    key, repo,
+    open: open && {
+      number: open.number, url: open.url, title: open.title, createdAt: open.createdAt, updatedAt: open.updatedAt,
+      checks: open.commits.nodes[0]?.commit?.statusCheckRollup?.state || null,
+      mergeState: open.mergeStateStatus, inMergeQueue: open.isInMergeQueue,
+      packages,
+    },
+    mine,
+    last: last && { number: last.number, url: last.url, mergedAt: last.mergedAt, dev },
+    rc: promo("rc"),
+    prod: promo("prod"),
+  };
+}
+
+async function releases({ fresh = false } = {}) {
+  if (!fresh && releaseCache && Date.now() - releaseCache.at < RELEASE_CACHE_MS) return releaseCache.body;
+  const login = (await graphql(`query { viewer { login } }`)).viewer.login;
+  const repos = await Promise.all(REPOS.map((r) => repoRelease(r, login).catch((e) => ({ key: r.key, repo: r.repo, error: e.message }))));
+  const body = { fetchedAt: new Date().toISOString(), repos };
+  releaseCache = { at: Date.now(), body };
+  return body;
 }
 
 // ---------- Claude sessions: reviews and fixes ----------
@@ -1022,6 +1113,9 @@ createServer(async (req, res) => {
       return json(res, 200, { ...data, reviews: reviewsSnapshot() });
     }
     if (req.method === "GET" && pathname === "/api/reviews") return json(res, 200, { reviews: reviewsSnapshot() });
+    if (req.method === "GET" && pathname === "/api/releases") {
+      return json(res, 200, await releases({ fresh: new URL(req.url, `http://localhost:${PORT}`).searchParams.get("fresh") === "1" }));
+    }
     const q = new URL(req.url, `http://localhost:${PORT}`).searchParams;
     if (req.method === "GET" && pathname === "/api/review/screen") return json(res, 200, reviewScreen(q.get("key") || q.get("url") || ""));
     if (req.method === "GET" && pathname === "/api/fix/changes") return json(res, 200, await fixChanges(q.get("url") || ""));

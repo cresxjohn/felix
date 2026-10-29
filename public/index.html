@@ -204,6 +204,36 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .another > summary { cursor: pointer; font-weight: 500; }
 .btn:disabled { opacity: 0.6; cursor: progress; }
 
+/* Release cards: the open release PR per repo, my PRs in it, and where the last release got to. */
+.releases { display: grid; gap: 8px; }
+.rel-head { display: flex; align-items: center; gap: 8px; }
+.rel-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.rel-head .spacer { flex: 1; }
+.rel a.pill { text-decoration: none; }
+.rel a.pill:hover { filter: brightness(0.95); }
+.rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@container (max-width: 640px) { .rel-grid { grid-template-columns: minmax(0, 1fr); } }
+.rel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.rel-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rel-top .repo { font-weight: 600; }
+.rel-top a { color: var(--link); text-decoration: none; font-size: 13px; }
+.rel-top a:hover { text-decoration: underline; }
+.rel-sub { color: var(--muted); font-size: 12px; }
+.rel-mine { display: grid; gap: 6px; }
+.rel-mine .label, .rel-deploy .label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rel-pr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
+.rel-pr a { color: inherit; text-decoration: none; font-weight: 500; }
+.rel-pr a:hover { color: var(--link); text-decoration: underline; }
+.rel-pr .pkg { font-family: var(--mono); font-size: 11px; background: var(--neutral-bg); border-radius: 4px; padding: 1px 6px; color: var(--muted); }
+.rel-none { color: var(--muted); font-size: 13px; }
+.rel details summary { cursor: pointer; font-size: 12px; color: var(--accent); font-weight: 500; }
+.rel details ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; display: grid; gap: 2px; }
+.rel details .pkgname { font-family: var(--mono); font-size: 12px; margin-top: 6px; display: block; }
+.rel details .mine-change { font-weight: 600; }
+.rel-deploy { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px; }
+.rel-deploy .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rel-deploy a { color: var(--link); text-decoration: none; }
+.rel-deploy a:hover { text-decoration: underline; }
 .empty { padding: 20px 16px; color: var(--muted); text-align: center; }
 /* Loading: placeholder shapes that match real rows, with a soft shimmer */
 .sk {
@@ -484,6 +514,8 @@ kbd:first-child { margin-left: 0; }
   <p class="sub" id="subheading"></p>
 
   <div class="banner" id="error" hidden></div>
+
+  <section class="releases" id="releases" aria-label="Releases"></section>
 
   <div class="toolbar">
     <div class="controls">
@@ -1296,6 +1328,83 @@ function render() {
   renderPanel();
 }
 
+// ---------- Releases ----------
+// One card per repo: the open "chore: release main (changeset)" PR, my PRs in it, and where the last
+// release got to (dev deploy from "1 - Merges to main", prod from "4 - Platform promotion/release").
+const REL_OPEN_KEY = "open-prs:releases-open";
+let releases = null, releasesError = null;
+let releasesOpen = (() => { try { return localStorage.getItem(REL_OPEN_KEY) !== "0"; } catch { return true; } })();
+
+function runPill(run, what) {
+  if (!run) return `<span class="pill">No ${what} run found</span>`;
+  const when = ago(run.updatedAt || run.at);
+  if (run.status !== "completed") return `<a class="pill run" href="${esc(run.url)}" target="_blank" rel="noopener">${what} running · started ${ago(run.at)}</a>`;
+  if (run.conclusion === "success") return `<a class="pill ok" href="${esc(run.url)}" target="_blank" rel="noopener">${what} done · ${when}</a>`;
+  return `<a class="pill bad" href="${esc(run.url)}" target="_blank" rel="noopener">${what} ${esc(run.conclusion || "failed")} · ${when}</a>`;
+}
+
+function releaseCard(r) {
+  const repoName = REPO_LABEL[r.key] || r.key;
+  if (r.error) return `<div class="rel"><div class="rel-top"><span class="repo">${esc(r.key)}</span></div><div class="rel-none">Couldn't load: ${esc(r.error)}</div></div>`;
+  const o = r.open;
+  const head = o
+    ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number} release</a>
+       ${o.checks === "SUCCESS" ? `<span class="pill ok">Checks pass</span>` : o.checks === "FAILURE" || o.checks === "ERROR" ? `<span class="pill bad">Checks failing</span>` : o.checks ? `<span class="pill run">Checks running</span>` : ""}
+       ${o.inMergeQueue ? `<span class="pill run">In merge queue</span>` : o.mergeState === "CLEAN" ? `<span class="pill ok">Ready to merge</span>` : `<span class="pill" title="GitHub says ${esc((o.mergeState || "").toLowerCase())}: usually waiting for an approval or required checks">Not ready to merge</span>`}`
+    : `<span class="rel-sub">No open release PR</span>`;
+  const pkgs = o?.packages || [];
+  const real = pkgs.filter((p) => !p.dependencyOnly);
+  const deps = pkgs.length - real.length;
+  const sub = o ? `<div class="rel-sub">${pkgs.length} package${pkgs.length === 1 ? "" : "s"}${deps ? ` (${deps} dependency-only)` : ""} · opened ${ago(o.createdAt)} · updated ${ago(o.updatedAt)}</div>` : "";
+  const mineNums = new Set(r.mine.map((m) => m.number));
+  const mine = o ? `<div class="rel-mine"><span class="label">Your PRs in it · ${r.mine.length}</span>
+    ${r.mine.length ? r.mine.map((m) => `<div class="rel-pr"><a href="${esc(m.url)}" target="_blank" rel="noopener">#${m.number} ${esc(m.title)}</a>${m.packages.map((p) => `<span class="pkg">${esc(p)}</span>`).join("")}</div>`).join("")
+      : `<div class="rel-none">None of your PRs are in this release.</div>`}</div>` : "";
+  const all = real.length ? `<details><summary>All changes in ${real.length} package${real.length === 1 ? "" : "s"}</summary>
+    ${real.map((p) => `<span class="pkgname">${esc(p.name)} ${esc(p.from)} → ${esc(p.to)}</span><ul>${p.changes.map((c) =>
+      `<li class="${mineNums.has(c.pr) ? "mine-change" : ""}">${esc(c.text)} (<a href="https://github.com/${esc(r.repo)}/pull/${c.pr}" target="_blank" rel="noopener">#${c.pr}</a>)</li>`).join("")}</ul>`).join("")}
+    ${deps ? `<ul><li>${deps} dependency-only update${deps === 1 ? "" : "s"}</li></ul>` : ""}</details>` : "";
+  const last = r.last;
+  const deploy = `<div class="rel-deploy"><span class="label">Last release</span>
+    <div class="row">${last ? `<a href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a> merged ${ago(last.mergedAt)} · ${runPill(last.dev, "Dev deploy")}` : "No merged release yet"}</div>
+    ${r.rc ? `<div class="row">${runPill(r.rc, "RC promotion")}</div>` : ""}
+    <div class="row">${runPill(r.prod, "Prod promotion")}</div></div>`;
+  return `<div class="rel"><div class="rel-top"><span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span>${head}</div>${sub}${mine}${all}${deploy}</div>`;
+}
+
+function renderReleases() {
+  const box = $("releases");
+  const toggle = `<button class="linkbtn" type="button" data-rel-toggle aria-expanded="${releasesOpen}">${releasesOpen ? "Hide" : "Show"}</button>`;
+  let body = "";
+  if (releasesOpen) {
+    if (releases) body = `<div class="rel-grid">${releases.repos.map(releaseCard).join("")}</div>`;
+    else if (releasesError) body = `<div class="rel-none">Couldn't load releases. ${esc(releasesError)}</div>`;
+    else body = `<div class="rel-grid"><div class="rel"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div><div class="rel"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div></div>`;
+  }
+  const mineCount = releases ? releases.repos.reduce((n, r) => n + (r.mine?.length || 0), 0) : null;
+  box.innerHTML = `<div class="rel-head"><h2>Releases</h2>${mineCount != null ? `<span class="rel-sub">${mineCount} of your PRs waiting to ship</span>` : ""}<span class="spacer"></span>${toggle}</div>${body}`;
+}
+
+async function loadReleases() {
+  try {
+    const res = await fetch("/api/releases", { cache: "no-store" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
+    releases = body;
+    releasesError = null;
+  } catch (e) {
+    releasesError = e.message;
+  }
+  renderReleases();
+}
+
+$("releases").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-rel-toggle]")) return;
+  releasesOpen = !releasesOpen;
+  try { localStorage.setItem(REL_OPEN_KEY, releasesOpen ? "1" : "0"); } catch {}
+  renderReleases();
+});
+
 // ---------- Loading and polling ----------
 // The last good list is kept in this browser so the page can show it at once on the next visit.
 const CACHE_KEY = "open-prs:last";
@@ -1320,6 +1429,7 @@ function renderUpdated() {
 async function load() {
   if (loading) return;
   loading = true;
+  loadReleases();
   $("refresh").classList.add("spinning");
   renderUpdated();
   try {

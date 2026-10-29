@@ -28,6 +28,7 @@ New Mac or reinstall? Follow [SETUP.md](SETUP.md).
 - Search, status filters, repo filter, sorting and grouping. Every view has its own link, for example `/review?status=failing&pr=fm-12247`.
 - **Copy link** on every PR, and **Remove me** to drop yourself from a PR's reviewers on GitHub. Remove me asks for a second click first.
 - **Merge** on your PRs that GitHub says are ready (approved, checks pass, no conflicts). It adds the PR to the merge queue, which squashes it into main, and asks for a second click first. A PR in the queue shows its place.
+- **Releases** at the top of the PR page: for fm and bm, the open "chore: release main (changeset)" PR with its checks and whether it can merge, which of your merged PRs it ships (and in which packages), every change it includes, and where the last release got to: its dev deploy ("1 - Merges to main") and the latest prod promotion. Hide or show the cards with one click.
 - **Select PRs** with the checkboxes on either tab. On My PRs you can merge the ready ones or copy all their links at once; on Needs my review you can start Claude reviews or copy links.
 
 **Details panel** (the right half of the screen)
@@ -103,6 +104,7 @@ All routes are local only.
 | --- | --- |
 | `GET /api/incident-commander` | On-call shifts for today, tomorrow and my next shift (`?fresh=1` skips the hour cache) |
 | `GET /api/prs` | Both PR lists from GitHub, plus Claude sessions |
+| `GET /api/releases` | Each repo's open release PR, my PRs in it, and the dev and prod deploy runs (`?fresh=1` skips the 1-minute cache) |
 | `GET /api/reviews` | Claude sessions only (the page polls this) |
 | `GET /api/pr?repo=fm&number=1` | One PR's details for the panel |
 | `GET /api/review/screen?key=` | A session's terminal screen |
