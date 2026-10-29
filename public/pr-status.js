@@ -5,7 +5,7 @@ window.PrStatus = (() => {
     return !p.isDraft && p.reviewDecision !== "APPROVED" && !p.changesRequestedBy.length;
   }
 
-  // Claude review on someone else's PR. Order matters: a running session wins, then my newest GitHub
+  // AI review (Claude or Cursor) on someone else's PR. Order matters: a running session wins, then my newest GitHub
   // review, then the session's own state.
   function claudeState(p, reviews) {
     const r = reviews[p.url];
@@ -13,7 +13,7 @@ window.PrStatus = (() => {
     if (r?.status === "running") return { id: "running", cls: "run", label: `On-going · ${r.steps} step${r.steps === 1 ? "" : "s"}` };
     if (r?.status === "answering") return { id: "running", cls: "run", label: "Working on your answer…" };
     if (r?.status === "waiting") return { id: "ready", cls: "warn", label: "Needs your approval" };
-    if (r?.status === "queued") return { id: "queued", cls: "", label: "Queued for Claude" };
+    if (r?.status === "queued") return { id: "queued", cls: "", label: `Queued for ${r.tool === "cursor" ? "Cursor" : "Claude"}` };
     if (my && (!r || my.submittedAt >= r.startedAt)) {
       if (my.state === "APPROVED") return { id: "done", cls: "ok", label: "Done · you approved" };
       if (my.state === "CHANGES_REQUESTED") return { id: "changes", cls: "alert", label: "You requested changes" };
@@ -27,14 +27,15 @@ window.PrStatus = (() => {
     return null;
   }
 
-  // Claude fix on one of my PRs.
+  // AI fix on one of my PRs.
   function fixState(p, reviews) {
     const f = reviews[`fix:${p.url}`];
     if (!f) return null;
     const steps = `${f.steps} step${f.steps === 1 ? "" : "s"}`;
+    const ai = f.tool === "cursor" ? "Cursor" : "Claude";
     return {
-      running: { id: "running", cls: "run", label: `Claude fixing · ${steps}` },
-      answering: { id: "running", cls: "run", label: `Claude fixing · ${steps}` },
+      running: { id: "running", cls: "run", label: `${ai} fixing · ${steps}` },
+      answering: { id: "running", cls: "run", label: `${ai} fixing · ${steps}` },
       waiting: { id: "ready", cls: "warn", label: "Fix needs your approval" },
       ready: { id: "ready", cls: "warn", label: "Fix ready · check and push" },
       pushed: { id: "pushed", cls: "ok", label: "Fix pushed" },

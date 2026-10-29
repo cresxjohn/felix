@@ -28,7 +28,7 @@ New Mac or reinstall? Follow [SETUP.md](SETUP.md).
 - Search, status filters, repo filter, sorting and grouping. Every view has its own link, for example `/review?status=failing&pr=fm-12247`.
 - **Copy link** on every PR, and **Remove me** to drop yourself from a PR's reviewers on GitHub. Remove me asks for a second click first.
 - **Merge** on your PRs that GitHub says are ready (approved, checks pass, no conflicts). It adds the PR to the merge queue, which squashes it into main, and asks for a second click first. A PR in the queue shows its place.
-- **Releases** at the top of the PR page: for fm and bm, the open "chore: release main (changeset)" PR with its checks and whether it can merge, which of your merged PRs it ships (and in which packages), every change it includes, and where the last release got to: its dev deploy ("1 - Merges to main") and whether it reached prod. A release counts as in prod once a successful prod promotion's `promotion-manifest.yml` lists all its deployable packages at that version or newer; libraries are skipped. Each repo has an Open release card (with "You approved" as a badge once you have) and a Last release card. Each card shows the release's status (ready to merge, awaiting reviewers, changes requested, or in the merge queue) with **Approve** and **Merge** buttons, both asking for a second click. Cards start folded; open the ones you want.
+- **Releases** tab (`/prs/releases`) next to My PRs and Needs my review; its count is how many open release PRs there are (one per repo at most): for fm and bm, the open "chore: release main (changeset)" PR with its checks and whether it can merge, which of your merged PRs it ships (and in which packages), every change it includes, and where the last release got to: its dev deploy ("1 - Merges to main") and whether it reached prod. A release counts as in prod once a successful prod promotion's `promotion-manifest.yml` lists all its deployable packages at that version or newer; libraries are skipped. Each repo has an Open release card (with "You approved" as a badge once you have) and a Last release card. Each card shows the release's status (ready to merge, awaiting reviewers, changes requested, or in the merge queue) with **Approve** and **Merge** buttons, both asking for a second click. Cards start folded; open the ones you want.
 - **Select PRs** with the checkboxes on either tab. On My PRs you can merge the ready ones or copy all their links at once; on Needs my review you can start Claude reviews or copy links.
 
 **Details panel** (the right half of the screen)
@@ -50,7 +50,7 @@ New Mac or reinstall? Follow [SETUP.md](SETUP.md).
 - Claude commits there but can't push. You read the commits and diff in the **Changes** tab, then press **Push** (never forced) or **Discard**.
 
 **Around it**
-- A model picker: a global default at the top, and a per-PR override in the panel.
+- An AI picker (Claude or Cursor) and a model picker: a global default at the top, and a per-PR override in the panel. Cursor's models come from `cursor-agent models`.
 - Mac notifications when a review or fix needs you, or a new review request arrives.
 - Starts at login. Idle Claude sessions close on their own.
 
@@ -64,7 +64,10 @@ Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh aut
                 ├─► tmux ─► claude --remote-control … "/review-pr <url>"   (review)
                 │      └─► claude … in <repo>-wt-pr-<n>                    (fix)
                 │
+                ├─► tmux ─► cursor-runner.mjs ─► cursor-agent -p --resume <chat>  (review or fix on Cursor)
+                │
                 └─◄ hooks/report.sh ◄─ Claude Code hooks (progress, done, waiting)
+                 ◄─ cursor-runner.mjs (the same events, read from Cursor's stream-json)
 ```
 
 - `server.mjs`: the whole server. Plain Node 22.5+, no npm packages. It serves the page, talks to GitHub, and starts and tracks Claude sessions.
@@ -73,6 +76,7 @@ Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh aut
 - `public/index.html`: the Open PRs page (HTML, CSS and JS in one file).
 - `public/theme.css` (colors and fonts) and `public/pr-status.js` (what state a PR is in) are shared by both pages. Page edits only need a reload.
 - `skills/review-pr/`: the `/review-pr` skill that reviews use. On start, the server links it into the workspace's `.claude/skills/` if it isn't there yet.
+- `cursor-runner.mjs`: runs a Cursor session. Cursor has no hooks, so it reads `cursor-agent`'s stream-json output and sends the server the same events the Claude hook does. A reply typed into its window (the A–D buttons do that) starts the next turn in the same chat.
 - `hooks/report.sh`: a Claude Code hook that forwards session events to the server. It only runs in sessions this server starts.
 - `prs`: start, stop, install at login (macOS LaunchAgent), status and logs.
 - `data/`: local state (sessions, logs). It is not in git.
@@ -80,7 +84,7 @@ Browser ─► server.mjs (127.0.0.1:4777) ─► GitHub API (token from `gh aut
 **Safety**
 - The server only listens on `127.0.0.1`.
 - Write requests must be JSON from the page itself, so other websites can't trigger them.
-- Fix sessions can't run `git push` or post on PRs.
+- Fix sessions can't run `git push` or post on PRs. On Cursor this is a deny list in the worktree's `.cursor/cli.json`, kept out of git through `info/exclude`.
 - No secrets are stored in this folder. The Datadog token lives in the macOS Keychain.
 
 
@@ -105,16 +109,17 @@ All routes are local only.
 | `GET /api/incident-commander` | On-call shifts for today, tomorrow and my next shift (`?fresh=1` skips the hour cache) |
 | `GET /api/prs` | Both PR lists from GitHub, plus Claude sessions |
 | `GET /api/releases` | Each repo's open release PR, my PRs in it, and the last release's dev and prod status (`?fresh=1` skips the 1-minute cache) |
-| `GET /api/reviews` | Claude sessions only (the page polls this) |
+| `GET /api/reviews` | Claude and Cursor sessions only (the page polls this) |
+| `GET /api/models` | Cursor's model list (empty, with a reason, when Cursor isn't signed in) |
 | `GET /api/pr?repo=fm&number=1` | One PR's details for the panel |
 | `GET /api/review/screen?key=` | A session's terminal screen |
-| `POST /api/review` | Start or queue a Claude review `{ url, model? }` |
-| `POST /api/review/batch` | Review several PRs `{ urls, model? }` |
+| `POST /api/review` | Start or queue a review `{ url, tool?, model? }` (`tool` is `claude`, the default, or `cursor`) |
+| `POST /api/review/batch` | Review several PRs `{ urls, tool?, model? }` |
 | `POST /api/review/answer` | Answer A–D `{ url, answer }` |
 | `POST /api/review/stop` | Interrupt a session, or take a review out of the queue `{ key }` |
 | `POST /api/review/end` | Close a session `{ key }` |
 | `POST /api/review/open` | Open a session in Warp or the Claude app `{ key, where }` |
-| `POST /api/fix` | Start a fix on my PR `{ url, kind, request?, model? }` |
+| `POST /api/fix` | Start a fix on my PR `{ url, kind, request?, tool?, model? }` |
 | `GET /api/fix/changes?url=` | The fix's commits and diff |
 | `POST /api/fix/push` | Push the fix to the PR branch `{ url }` |
 | `POST /api/fix/discard` | Close the fix and remove its worktree `{ url }` |

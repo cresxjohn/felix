@@ -22,9 +22,10 @@ header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 header h1 { margin: 0; font-size: 22px; font-weight: 600; }
 header .who { color: var(--muted); font-family: var(--mono); font-size: 13px; }
 header .spacer { flex: 1; }
-header .home { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; color: var(--muted); }
-header .home:hover { background: var(--surface); color: var(--fg); }
-header .home svg { width: 18px; height: 18px; }
+/* Same tinted square as the card icons on the Felix home page. */
+header .home { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent-bg); color: var(--accent); }
+header .home:hover { background: var(--accent); color: #fff; }
+header .home svg { width: 17px; height: 17px; }
 .updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .refresh {
   display: inline-grid; place-items: center;
@@ -42,11 +43,25 @@ header .home svg { width: 18px; height: 18px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh.spinning svg, .spin { animation: none; } }
 
-/* Tabs on the left, the Claude model picker at the right end of the same row */
-.tabs-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-.tabs { display: flex; gap: 4px; overflow-x: auto; flex: 1; min-width: 0; }
-.tabs-row .model { margin-left: auto; padding-bottom: 4px; }
-.tabs-row .model select { height: 32px; }
+/* The list tabs */
+.tabs-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); container-type: inline-size; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; flex: 0 0 auto; max-width: 100%; }
+/* AI settings: a button at the right end of the tab row, opening the AI and model pickers */
+.ai-settings { position: relative; margin-left: auto; padding-bottom: 4px; }
+.ai-settings > .btn { height: 32px; padding: 0 8px; gap: 6px; }
+/* Just the icon when the list is narrow; the AI's name and a chevron once there is room */
+.ai-settings > .btn > :not(:first-child) { display: none; }
+.ai-settings > .btn svg:last-child { width: 14px; height: 14px; }
+@container (min-width: 520px) { .ai-settings > .btn > :not(:first-child) { display: inline-flex; } }
+.ai-pop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 50; width: 300px;
+  display: grid; gap: 10px; padding: 14px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(41, 46, 63, 0.18);
+}
+.ai-pop h3 { margin: 0; font-size: 14px; }
+.ai-pop .sort { display: grid; grid-template-columns: 52px 1fr; }
+.ai-pop .dd-btn { width: 100%; height: 32px; }
+.ai-pop .cost { margin: 0; }
 .tabs a {
   display: inline-flex; align-items: baseline; gap: 6px;
   padding: 10px 14px; margin-bottom: -1px; text-decoration: none;
@@ -187,7 +202,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .pick { display: inline-flex; align-items: center; margin-bottom: 2px; cursor: pointer; }
 .pick input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-bg); font-size: 13px; }
-/* Fix with Claude */
+/* AI fix */
 .answer:disabled { opacity: 0.5; cursor: not-allowed; }
 .custom-fix { display: grid; gap: 8px; }
 .custom-fix textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); resize: vertical; }
@@ -427,6 +442,8 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .subtabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
 .subtabs .n { font-size: 12px; opacity: 0.8; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+/* Green disappears on the blue selected tab, so it turns white with a soft ring there */
+.subtabs button[aria-selected="true"] .live-dot { background: #fff; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35); }
 .term { max-height: calc(100vh - 330px); min-height: 240px; }
 .steps { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 2px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; }
 .steps li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
@@ -474,7 +491,7 @@ kbd:first-child { margin-left: 0; }
 .dd-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
 .dd-btn svg { width: 14px; height: 14px; flex: none; color: var(--muted); transition: transform 0.15s; }
 .dd-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
-.tabs-row .model .dd-btn, .local-model .dd-btn { height: 32px; }
+.local-model .dd-btn { height: 32px; }
 .dd-menu {
   position: fixed; z-index: 60; padding: 4px; max-height: 320px; overflow: auto;
   background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
@@ -484,6 +501,12 @@ kbd:first-child { margin-left: 0; }
   display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 6px; border-radius: 6px;
   font-size: 13px; color: var(--fg); cursor: pointer; white-space: nowrap;
 }
+.dd-search {
+  position: sticky; top: -4px; z-index: 1; width: calc(100% + 8px); margin: -4px -4px 4px; padding: 9px 12px;
+  border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; outline: none;
+}
+.dd-none { padding: 8px 10px; color: var(--muted); }
+.dd-item[hidden], .dd-none[hidden] { display: none; }
 .dd-item:hover, .dd-item:focus { background: var(--accent-bg); outline: none; }
 .dd-item[aria-selected="true"] { color: var(--accent); font-weight: 500; }
 .dd-check { width: 16px; height: 16px; flex: none; display: inline-grid; place-items: center; }
@@ -513,23 +536,30 @@ kbd:first-child { margin-left: 0; }
 
   <div class="tabs-row">
   <nav class="tabs" id="tabs" aria-label="Lists"></nav>
-  <label class="sort model" title="Model used when you start a Claude review">Claude model
-        <select id="model">
-          <option value="">Default</option>
-          <option value="opus">Opus 5.5</option>
-          <option value="sonnet">Sonnet 5.5</option>
-          <option value="haiku">Haiku 5.5</option>
-          <option value="fable">Fable 5.1</option>
+  <div class="ai-settings" id="aisettings">
+    <button class="btn" type="button" id="aibtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="aipop" title="AI settings: which AI and model run the reviews and fixes you start"></button>
+    <div class="ai-pop" id="aipop" role="dialog" aria-label="AI settings" hidden>
+      <h3>AI settings</h3>
+      <label class="sort">AI
+        <select id="tool">
+          <option value="claude">Claude</option>
+          <option value="cursor">Cursor</option>
         </select>
-  </label>
+      </label>
+      <label class="sort">Model
+        <select id="model"></select>
+      </label>
+      <p class="cost">Used when you start a review or fix. You can pick another for one PR in its panel.</p>
+    </div>
+  </div>
   </div>
   <p class="sub" id="subheading"></p>
 
   <div class="banner" id="error" hidden></div>
 
-  <section class="releases" id="releases" aria-label="Releases"></section>
+  <section class="releases" id="releases" aria-label="Releases" hidden></section>
 
-  <div class="toolbar">
+  <div class="toolbar" id="toolbar">
     <div class="controls">
       <label class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -590,7 +620,7 @@ const ICON = {
 const TABS = [
   { id: "mine", label: "My PRs", sub: "Your open PRs in frontend-monorepo and backend-monorepo.",
     ghQuery: (login) => `is:pr is:open author:${login}`, empty: "You have no open PRs in fm or bm." },
-  { id: "review", label: "Needs my review", sub: "Other people's open PRs where you are added as a reviewer, plus ones you reviewed here with Claude.",
+  { id: "review", label: "Needs my review", sub: "Other people's open PRs where you are added as a reviewer, plus ones you reviewed here with Claude or Cursor.",
     ghQuery: (login) => `is:pr is:open user-review-requested:${login}`, empty: "Nobody is waiting on your review right now." },
 ];
 
@@ -615,7 +645,7 @@ const details = new Map(); // "fm-12247" -> { loading, data, error }
 function readUrl() {
   const p = new URLSearchParams(location.search);
   view = {
-    tab: location.pathname.startsWith("/prs/review") ? "review" : "mine",
+    tab: location.pathname.startsWith("/prs/review") ? "review" : location.pathname.startsWith("/prs/releases") ? "releases" : "mine",
     q: p.get("q") || "",
     repo: ["fm", "bm"].includes(p.get("repo")) ? p.get("repo") : "all",
     sort: SORTS[p.get("sort")] ? p.get("sort") : "attention",
@@ -699,7 +729,7 @@ const { readyToMerge } = PrStatus;
 
 // Status filters. A PR shows when it matches ANY selected status. `only` limits a filter to one tab.
 const STATUSES = [
-  { id: "claude-running", only: "review", label: "Claude reviewing", color: "var(--accent)", test: (p) => claudeState(p)?.id === "running" },
+  { id: "claude-running", only: "review", label: "AI reviewing", color: "var(--accent)", test: (p) => claudeState(p)?.id === "running" },
   { id: "claude-ready", only: "review", label: "Needs your action", color: "var(--warn)", test: (p) => claudeState(p)?.id === "ready" },
   { id: "new-commits", only: "review", label: "New commits", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
   { id: "ready-merge", only: "mine", label: "Ready to merge", color: "var(--ok)", test: (p) => readyToMerge(p) },
@@ -773,7 +803,7 @@ function reviewPill(p) {
 
 function claudePill(p) {
   const s = isMine(p) ? fixState(p) : claudeState(p);
-  return s ? `<span class="pill claude ${s.cls}" title="${isMine(p) ? "Claude fix" : "Claude review"}">${esc(s.label)}</span>` : "";
+  return s ? `<span class="pill claude ${s.cls}" title="${isMine(p) ? "AI fix" : "AI review"}">${esc(s.label)}</span>` : "";
 }
 
 function isMine(p) {
@@ -799,14 +829,15 @@ function allPills(p, toks = []) {
 }
 
 // The Claude button that fits the PR's current review state.
-function claudeButton(p, { big = false } = {}) {
+function claudeButton(p, { big = false, panel = false } = {}) {
   const r = reviews[p.url];
   const cls = big ? "btn primary" : "btn";
-  if (r?.status === "running" || r?.status === "answering") return `<button class="btn" type="button" data-stop="${esc(p.url)}" title="Interrupt what Claude is doing">${ICON.stop}<span>Stop</span></button>`;
+  const ai = aiName(panel ? panelToolValue() : $("tool").value);
+  if (r?.status === "running" || r?.status === "answering") return `<button class="btn" type="button" data-stop="${esc(p.url)}" title="Interrupt what ${aiName(r.tool)} is doing">${ICON.stop}<span>Stop</span></button>`;
   if (r?.status === "queued") return `<button class="btn" type="button" data-stop="${esc(p.url)}" title="Take this review out of the queue">${ICON.stop}<span>Cancel</span></button>`;
   if ((r?.status === "ready" || r?.status === "waiting") && claudeState(p)?.id === "ready") return `<button class="btn primary" type="button" data-decide="${esc(prKey(p))}">${ICON.spark}<span>Decide</span></button>`;
-  if (p.newCommits) return `<button class="btn primary" type="button" data-review="${esc(p.url)}" title="Review the new commits with Claude">${ICON.spark}<span>Re-review</span></button>`;
-  return `<button class="${cls}" type="button" data-review="${esc(p.url)}">${ICON.spark}<span>${r ? "Review again" : "Review with Claude"}</span></button>`;
+  if (p.newCommits) return `<button class="btn primary" type="button" data-review="${esc(p.url)}" title="Review the new commits with ${ai}">${ICON.spark}<span>Re-review</span></button>`;
+  return `<button class="${cls}" type="button" data-review="${esc(p.url)}">${ICON.spark}<span>${r ? "Review again" : `Review with ${ai}`}</span></button>`;
 }
 
 // ---------- List ----------
@@ -823,7 +854,7 @@ function renderPr(p, toks, showRepo) {
       <a class="title" href="${esc(p.url)}" data-open="${esc(prKey(p))}">${highlight(p.title, toks)}</a>
       <div class="actions">
         ${!others && readyToMerge(p) ? `<button class="btn primary" type="button" data-merge="${esc(p.url)}" title="Add this PR to the merge queue, which squashes it into ${esc(p.base)}">${ICON.merge}<span>Merge</span></button>` : ""}
-        ${others ? claudeButton(p) : `<button class="btn" type="button" data-fixopen="${esc(prKey(p))}" title="Ask Claude to fix checks, conflicts or review comments">${ICON.spark}<span>Fix with Claude</span></button>`}
+        ${others ? claudeButton(p) : `<button class="btn" type="button" data-fixopen="${esc(prKey(p))}" title="Ask ${aiName($("tool").value)} to fix checks, conflicts or review comments">${ICON.spark}<span>Fix with ${aiName($("tool").value)}</span></button>`}
         <button class="btn" type="button" data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}">${ICON.copy}<span>Copy link</span></button>
         ${others && p.requested ? `<button class="btn" type="button" data-remove="${esc(p.url)}" title="Remove you from this PR's reviewers on GitHub">${ICON.userMinus}<span>Remove me</span></button>` : ""}
       </div>
@@ -859,13 +890,20 @@ function tabStatuses() {
   return STATUSES.filter((s) => !s.only || s.only === view.tab);
 }
 
+// How many repos have an open release PR right now (at most one each in fm and bm).
+function openReleaseCount() {
+  return releases ? releases.repos.filter((r) => r.open).length : null;
+}
+
+// The two PR tabs plus Releases. Counts show once their data is in; a skeleton dash until then.
+function tabLinks() {
+  const link = (id, label, n) => `<a href="${esc(urlFor({ ...view, tab: id, statuses: [], pr: null }))}" data-tab="${id}"${view.tab === id ? ' aria-current="page"' : ""}>${label}<span class="n${n == null ? " sk" : ""}">${n ?? ""}</span></a>`;
+  return TABS.map((t) => link(t.id, t.label, data ? listFor(t.id).length : null)).join("") + link("releases", "Releases", openReleaseCount());
+}
+
 function renderControls(all, toks) {
   const tab = currentTab();
-  $("tabs").innerHTML = TABS.map((t) => {
-    const n = listFor(t.id).length;
-    const href = urlFor({ ...view, tab: t.id, statuses: [], pr: null });
-    return `<a href="${esc(href)}" data-tab="${t.id}"${t.id === tab.id ? ' aria-current="page"' : ""}>${t.label}<span class="n">${n}</span></a>`;
-  }).join("");
+  $("tabs").innerHTML = tabLinks();
   $("subheading").textContent = tab.sub;
 
   // Repo counts follow the search; status counts follow search + repo.
@@ -1108,8 +1146,10 @@ function panelClaude(p) {
   const s = claudeState(p);
   if (!r) {
     return `<div class="claude-box">
-      <div class="note">Claude runs your <code>/review-pr</code> skill on this PR in a hidden session on your Mac, with Remote Control on so you can also follow it in the Claude phone app or on claude.ai. Nothing is posted until you choose what to do with the review.</div>
-      <div class="row">${claudeButton(p, { big: true })}${modelPicker()}</div>
+      <div class="note">${panelToolValue() === "cursor"
+        ? "Cursor follows your <code>review-pr</code> skill on this PR in a hidden session on your Mac. Follow it here in Live view, or in Warp. Nothing is posted until you choose what to do with the review."
+        : "Claude runs your <code>/review-pr</code> skill on this PR in a hidden session on your Mac, with Remote Control on so you can also follow it in the Claude phone app or on claude.ai. Nothing is posted until you choose what to do with the review."}</div>
+      <div class="row">${claudeButton(p, { big: true, panel: true })}${modelPicker()}</div>
     </div>`;
   }
   // Where to continue the session by hand: phone/claude.ai while it's live, this Mac any time.
@@ -1117,23 +1157,23 @@ function panelClaude(p) {
     ${r.alive && r.rcUrl ? `<a class="btn" href="${esc(r.rcUrl)}" target="_blank" rel="noopener">${ICON.external}<span>Open on phone or claude.ai</span></a>` : ""}
     <button class="btn" type="button" data-open-session="warp" data-key="${esc(p.url)}">${r.alive ? "Watch in Warp" : "Resume in Warp"}</button>
     ${r.alive ? `<button class="btn" type="button" data-end="${esc(p.url)}" title="Close the hidden session">End session</button>`
-      : `<button class="btn" type="button" data-open-session="app" data-key="${esc(p.url)}">Resume in Claude app</button>`}`;
+      : r.tool === "cursor" ? "" : `<button class="btn" type="button" data-open-session="app" data-key="${esc(p.url)}">Resume in Claude app</button>`}`;
   const head = `<div class="row"><span class="pill claude ${s?.cls || ""}">${esc(s?.label || r.status)}</span>
-    <span class="cost">Started ${ago(r.startedAt)} · ${esc(MODEL_NAMES[r.model || ""] || r.model)}${r.alive ? " · Remote Control on" : ""}</span></div>`;
+    <span class="cost">Started ${ago(r.startedAt)} · ${aiName(r.tool)} · ${esc(modelName(r.tool, r.model))}${r.alive && r.rcUrl ? " · Remote Control on" : ""}</span></div>`;
   let body = "";
   if (r.status === "running" || r.status === "answering") {
     body = `<div class="progress"><span class="dot spin"></span><span>${esc(r.lastStep || "Working")}</span><span class="cost">${r.steps} step${r.steps === 1 ? "" : "s"}</span></div>
-      <div class="row">${claudeButton(p)}${open}</div>`;
+      <div class="row">${claudeButton(p, { panel: true })}${open}</div>`;
   } else if (r.status === "waiting") {
-    body = `<div class="note">${esc(r.note || "Claude is waiting for your approval.")} Answer it on your phone, on claude.ai, or in Warp.</div><div class="row">${open}</div>`;
+    body = `<div class="note">${esc(r.note || `${aiName(r.tool)} is waiting for your approval.`)} Answer it ${r.rcUrl ? "on your phone, on claude.ai, or " : ""}in Warp.</div><div class="row">${open}</div>`;
   } else if (r.status === "failed" || r.status === "stopped") {
-    body = `<div class="note">${esc(r.error || "The review stopped before finishing.")}</div><div class="row">${claudeButton(p, { big: true })}${modelPicker()}</div><div class="row">${open}</div>`;
+    body = `<div class="note">${esc(r.error || "The review stopped before finishing.")}</div><div class="row">${claudeButton(p, { big: true, panel: true })}${modelPicker()}</div><div class="row">${open}</div>`;
   } else {
     const decide = r.status === "ready" && r.alive && s?.id === "ready" ? `
-      <h3>What should Claude do?</h3>
+      <h3>What should ${aiName(r.tool)} do?</h3>
       <div class="answers">${ANSWERS.map((a) => `<button class="answer" type="button" data-answer="${a.id}" data-url="${esc(p.url)}" data-posts="${a.posts}">
         <b>${a.id}. ${esc(a.label)}</b><span>${esc(a.note)}</span></button>`).join("")}</div>` : "";
-    body = `${decide}${decide ? "" : `<div class="row">${claudeButton(p)}${modelPicker()}</div>`}<div class="row">${open}</div>`;
+    body = `${decide}${decide ? "" : `<div class="row">${claudeButton(p, { panel: true })}${modelPicker()}</div>`}<div class="row">${open}</div>`;
   }
   const report = r.result && r.status !== "failed" ? `<div class="md">${markdown(r.result)}</div>` : "";
   // Sub-tabs under the status box: the report, the live terminal, and the step log.
@@ -1144,9 +1184,9 @@ function panelClaude(p) {
     ["steps", `Steps <span class="n">${(r.log || []).length}</span>`],
   ];
   const subBody = sub === "live"
-    ? (r.alive ? liveView(p.url, r) : `<p class="none">This review's session has ended, so there is nothing live to show. Resume it in Warp or the Claude app to keep going.</p>`)
+    ? (r.alive ? liveView(p.url, r) : `<p class="none">This review's session has ended, so there is nothing live to show. Resume it in Warp${r.tool === "cursor" ? "" : " or the Claude app"} to keep going.</p>`)
     : sub === "steps" ? stepList(r)
-    : (report || `<p class="none">${r.status === "failed" ? "There is no review to show." : "Claude's review will show here when it finishes. Watch it in Live view meanwhile."}</p>`);
+    : (report || `<p class="none">${r.status === "failed" ? "There is no review to show." : `${aiName(r.tool)}'s review will show here when it finishes. Watch it in Live view meanwhile.`}</p>`);
   return `<div class="claude-box">${head}${body}</div>
     <div class="subtabs" role="tablist">${subs.map(([id, label]) =>
       `<button type="button" role="tab" data-csub="${id}" aria-selected="${sub === id}">${label}</button>`).join("")}</div>
@@ -1236,8 +1276,8 @@ function emptyPanel() {
   const glance = data ? `<ul class="glance">
       ${go({ tab: "mine", statuses: [] }, `<b>${listFor("mine").length}</b> of your PRs are open`)}
       ${go({ tab: "review", statuses: [] }, `<b>${listFor("review").length}</b> PRs are waiting on your review`)}
-      ${ready ? go({ tab: "review", statuses: ["claude-ready"] }, `<b>${ready}</b> Claude review${ready === 1 ? " needs" : "s need"} your answer`) : ""}
-      ${running ? go({ tab: "review", statuses: ["claude-running"] }, `<b>${running}</b> Claude review${running === 1 ? " is" : "s are"} running`) : ""}
+      ${ready ? go({ tab: "review", statuses: ["claude-ready"] }, `<b>${ready}</b> AI review${ready === 1 ? " needs" : "s need"} your answer`) : ""}
+      ${running ? go({ tab: "review", statuses: ["claude-running"] }, `<b>${running}</b> AI review${running === 1 ? " is" : "s are"} running`) : ""}
     </ul>` : "";
   return `<div class="panel-empty-state">
     <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z"/></svg>
@@ -1250,7 +1290,7 @@ function emptyPanel() {
 
 function renderPanel() {
   const panel = $("panel");
-  if (["fixreq", "localmodel"].includes(document.activeElement?.id) || ddMenu) return;
+  if (["fixreq", "localmodel", "localtool"].includes(document.activeElement?.id) || ddMenu) return;
   panel.hidden = false;
   document.body.classList.toggle("panel-open", Boolean(view.pr));
   document.body.classList.toggle("panel-empty", !view.pr);
@@ -1275,7 +1315,7 @@ function renderPanel() {
     ["commits", "Commits", d ? commits : ""],
     ["checks", "Checks", d ? d.checks.length : p.checks.total],
     ["files", "Files changed", d ? d.changedFiles : p.changedFiles],
-    ["claude", isMine(p) ? "Claude fix" : "Claude review", ""],
+    ["claude", isMine(p) ? "AI fix" : "AI review", ""],
   ];
   const content = {
     conversation: () => panelConversation(p, d, det),
@@ -1311,14 +1351,14 @@ function renderPanel() {
     <div class="panel-body">${content}</div>`;
   panel.dataset.shown = `${key}:${view.panel}`;
   if (sameTab) panel.querySelector(".panel-body").scrollTop = scroll;
+  enhanceSelect($("localtool"));
   enhanceSelect($("localmodel"));
 }
 
 // First visit, before GitHub answers: the page's real layout with placeholder shapes.
 function renderSkeleton() {
   const tab = currentTab();
-  $("tabs").innerHTML = TABS.map((t) =>
-    `<a href="${esc(urlFor({ ...view, tab: t.id, pr: null }))}" data-tab="${t.id}"${t.id === tab.id ? ' aria-current="page"' : ""}>${t.label}<span class="n sk"></span></a>`).join("");
+  $("tabs").innerHTML = tabLinks();
   $("subheading").textContent = tab.sub;
   $("repo").innerHTML = ["All", "fm", "bm"].map((l, i) => `<button type="button" aria-pressed="${i === 0}" disabled>${l}</button>`).join("");
   $("chips").innerHTML = Array.from({ length: 6 }, () => `<span class="chip sk sk-chip"></span>`).join("");
@@ -1334,7 +1374,21 @@ function renderSkeleton() {
   </section>`).join("");
 }
 
+const RELEASES_SUB = "The open release PR and the last release for frontend-monorepo and backend-monorepo.";
+
 function render() {
+  const onReleases = view.tab === "releases";
+  $("toolbar").hidden = onReleases;
+  $("aisettings").hidden = onReleases;
+  $("repos").hidden = onReleases;
+  $("releases").hidden = !onReleases;
+  if (onReleases) {
+    $("tabs").innerHTML = tabLinks();
+    $("subheading").textContent = RELEASES_SUB;
+    renderReleases();
+    renderPanel();
+    return;
+  }
   if (!data) { renderSkeleton(); renderPanel(); return; }
   $("repos").removeAttribute("aria-busy");
   renderList();
@@ -1344,12 +1398,10 @@ function render() {
 // ---------- Releases ----------
 // One card per repo: the open "chore: release main (changeset)" PR, my PRs in it, and where the last
 // release got to (its dev deploy from "1 - Merges to main").
-const REL_OPEN_KEY = "open-prs:releases-open";
 let releases = null, releasesError = null;
 // Cards start folded; the ones you open are remembered.
 const REL_OPEN_CARDS_KEY = "open-prs:releases-expanded";
 const releasesExpanded = new Set((() => { try { return JSON.parse(localStorage.getItem(REL_OPEN_CARDS_KEY) || "[]"); } catch { return []; } })());
-let releasesOpen = (() => { try { return localStorage.getItem(REL_OPEN_KEY) !== "0"; } catch { return true; } })();
 
 function runPill(run, what) {
   if (!run) return `<span class="pill">No ${what} run found</span>`;
@@ -1388,12 +1440,12 @@ function releaseCard(r) {
   const repoName = REPO_LABEL[r.key] || r.key;
   if (r.error) return `<div class="rel span2"><div class="rel-top"><span class="repo">${esc(r.key)}</span></div><div class="rel-none">Couldn't load: ${esc(r.error)}</div></div>`;
   const o = r.open, last = r.last;
-  const title = (what, link) => `<div class="rel-top">${link}<span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span><span class="rel-kind ${what === "Open release" ? "open" : "last"}">${what.replace(" release", "")}</span></div>`;
+  const title = (what, link, badge = true) => `<div class="rel-top">${link}<span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span>${badge ? `<span class="rel-kind ${what === "Open release" ? "open" : "last"}">${what.replace(" release", "")}</span>` : ""}</div>`;
 
   // Open release card: status badges, Approve or Merge, and (unfolded) what it ships.
   let openCard;
   if (!o) {
-    openCard = `<div class="rel">${title("Open release", "")}<div class="rel-none">No open release PR right now.</div></div>`;
+    openCard = `<div class="rel">${title("Open release", "", false)}<div class="rel-none">No open release PR right now.</div></div>`;
   } else {
     const checks = !o.checks ? "" : o.checks === "SUCCESS" ? `<span class="pill ok">Checks pass</span>`
       : o.checks === "FAILURE" || o.checks === "ERROR" ? `<span class="pill bad">Checks failing</span>` : `<span class="pill run">Checks running</span>`;
@@ -1430,16 +1482,13 @@ function releaseCard(r) {
 }
 
 function renderReleases() {
+  if (data || releases) $("tabs").querySelector('[data-tab="releases"] .n')?.replaceWith(Object.assign(document.createElement("span"), {
+    className: "n", textContent: releases ? String(openReleaseCount()) : "" }));
+  if (view.tab !== "releases") return;
   const box = $("releases");
-  const toggle = `<button class="linkbtn" type="button" data-rel-toggle aria-expanded="${releasesOpen}">${releasesOpen ? "Hide" : "Show"}</button>`;
-  let body = "";
-  if (releasesOpen) {
-    if (releases) body = `<div class="rel-grid">${releases.repos.map(releaseCard).join("")}</div>`;
-    else if (releasesError) body = `<div class="rel-none">Couldn't load releases. ${esc(releasesError)}</div>`;
-    else body = `<div class="rel-grid"><div class="rel"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div><div class="rel"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div></div>`;
-  }
-  const mineCount = releases ? releases.repos.reduce((n, r) => n + (r.mine?.length || 0), 0) : null;
-  box.innerHTML = `<div class="rel-head"><h2>Releases</h2>${mineCount != null ? `<span class="rel-sub">${mineCount} of your PRs waiting to ship</span>` : ""}<span class="spacer"></span>${toggle}</div>${body}`;
+  if (releases) box.innerHTML = `<div class="rel-grid">${releases.repos.map(releaseCard).join("")}</div>`;
+  else if (releasesError) box.innerHTML = `<div class="rel-none">Couldn't load releases. ${esc(releasesError)}</div>`;
+  else box.innerHTML = `<div class="rel-grid"><div class="rel"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div><div class="rel"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div></div>`;
 }
 
 async function loadReleases() {
@@ -1465,10 +1514,6 @@ $("releases").addEventListener("click", (e) => {
   }
   if ((b = e.target.closest("[data-rel-approve]"))) return releaseAction(b, "/api/release/approve", b.dataset.relApprove, "Click again to approve");
   if ((b = e.target.closest("[data-rel-merge]"))) return releaseAction(b, "/api/merge", b.dataset.relMerge, "Click again to merge the release");
-  if (!e.target.closest("[data-rel-toggle]")) return;
-  releasesOpen = !releasesOpen;
-  try { localStorage.setItem(REL_OPEN_KEY, releasesOpen ? "1" : "0"); } catch {}
-  renderReleases();
 });
 
 // ---------- Loading and polling ----------
@@ -1568,36 +1613,131 @@ function showError(text) {
 }
 
 // ---------- Actions ----------
-// The model picker in the header; remembered in this browser.
-const MODEL_KEY = "open-prs:model";
+// The AI and model pickers in the header; remembered in this browser, with a model per AI.
+const TOOL_KEY = "open-prs:tool";
+const modelKey = (tool) => (tool === "cursor" ? "open-prs:model:cursor" : "open-prs:model");
+const TOOL_NAMES = { claude: "Claude", cursor: "Cursor" };
 const MODEL_NAMES = { "": "Default model", opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5", fable: "Fable 5.1" };
-try { $("model").value = localStorage.getItem(MODEL_KEY) || ""; } catch {}
-$("model").addEventListener("change", (e) => { try { localStorage.setItem(MODEL_KEY, e.target.value); } catch {} renderPanel(); });
+// Cursor's models come from the server (`cursor-agent models`); empty until loaded or when Cursor isn't signed in.
+let cursorModels = [];
+let cursorModelsError = null;
+let cursorModelsLoad = null;
 
-// Per-PR model picker in the panel. It starts on the global "Claude model" choice (shown as
-// "default"); a pick here applies only to this PR and resets when another PR is opened.
+const aiName = (tool) => TOOL_NAMES[tool] || "Claude";
+
+function modelOptions(tool) {
+  if (tool === "cursor") return [["", "Auto (Cursor's default)"], ...cursorModels.map((m) => [m.id, m.name])];
+  return Object.entries(MODEL_NAMES).map(([v, n]) => [v, v === "" ? "Claude's default" : n]);
+}
+
+function modelName(tool, model) {
+  if (tool === "cursor") return model ? cursorModels.find((m) => m.id === model)?.name || model : "Cursor's default model";
+  return MODEL_NAMES[model || ""] || model;
+}
+
+function loadCursorModels() {
+  cursorModelsLoad ||= fetch("/api/models").then((r) => r.json()).then((d) => {
+    cursorModels = d.cursor || [];
+    cursorModelsError = d.cursorError || null;
+    if (!cursorModels.length) cursorModelsLoad = null; // try again next time, e.g. after signing in
+  }).catch(() => { cursorModelsLoad = null; });
+  return cursorModelsLoad;
+}
+
+function readModel(tool) {
+  try { return localStorage.getItem(modelKey(tool)) || ""; } catch { return ""; }
+}
+
+function fillModels() {
+  const tool = $("tool").value;
+  const want = readModel(tool);
+  const opts = modelOptions(tool);
+  // A saved Cursor model shows even before the list loads, so the choice isn't lost.
+  if (want && !opts.some(([v]) => v === want)) opts.push([want, want]);
+  $("model").innerHTML = opts.map(([v, n]) => `<option value="${esc(v)}"${v === want ? " selected" : ""}>${esc(v === "" ? "Default" : n)}</option>`).join("");
+  $("model")._ddSync?.();
+  aiButtonLabel();
+}
+
+// The AI settings button shows the current pick, e.g. "Cursor · Codex 5.3".
+function aiButtonLabel() {
+  const tool = $("tool").value;
+  const model = $("model").value;
+  const name = model ? modelName(tool, model) : "Default";
+  // Short on the button so it fits beside the tabs; the full pick is in its tooltip.
+  $("aibtn").innerHTML = `${ICON.spark}<span>${aiName(tool)}</span>${ddIcon("chevron")}`;
+  $("aibtn").title = `AI settings: ${aiName(tool)}, ${name === "Default" ? "default model" : name}`;
+}
+
+function toggleAiPop(open = $("aipop").hidden) {
+  $("aipop").hidden = !open;
+  $("aibtn").setAttribute("aria-expanded", String(open));
+  if (open) $("tool-dd")?.focus();
+}
+
+$("aibtn").addEventListener("click", (e) => { e.stopPropagation(); toggleAiPop(); });
+// Clicks inside the pop-up, or in a picker's menu (which sits on <body>), keep it open.
+document.addEventListener("click", (e) => {
+  if (!$("aipop").hidden && !e.target.closest("#aisettings, .dd-menu")) toggleAiPop(false);
+});
+$("aipop").addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !ddMenu) { e.stopPropagation(); toggleAiPop(false); $("aibtn").focus(); }
+});
+
+try { $("tool").value = localStorage.getItem(TOOL_KEY) === "cursor" ? "cursor" : "claude"; } catch {}
+fillModels();
+if ($("tool").value === "cursor") loadCursorModels().then(() => { fillModels(); renderPanel(); });
+$("tool").addEventListener("change", (e) => {
+  try { localStorage.setItem(TOOL_KEY, e.target.value); } catch {}
+  fillModels();
+  if (e.target.value === "cursor") loadCursorModels().then(() => { fillModels(); renderPanel(); });
+  render();
+});
+$("model").addEventListener("change", (e) => { try { localStorage.setItem(modelKey($("tool").value), e.target.value); } catch {} aiButtonLabel(); render(); });
+
+// Per-PR AI and model pickers in the panel. They start on the header's choice (shown as
+// "your default"); a pick here applies only to this PR and resets when another PR is opened.
+let panelTool = null;
 let panelModel = null;
 
+function panelToolValue() {
+  return panelTool ?? $("tool").value;
+}
+
 function panelModelValue() {
-  return panelModel ?? $("model").value;
+  return panelModel ?? (panelToolValue() === $("tool").value ? $("model").value : readModel(panelToolValue()));
 }
 
 function modelPicker() {
-  const global = $("model").value;
-  const options = Object.entries(MODEL_NAMES).map(([value, name]) =>
-    `<option value="${esc(value)}"${value === panelModelValue() ? " selected" : ""}>${esc(value === "" ? "Claude's default" : name)}${value === global ? " (your default)" : ""}</option>`).join("");
-  return `<label class="sort local-model" title="Model for this PR only. Your default comes from Claude model at the top.">Model <select id="localmodel">${options}</select></label>`;
+  const tool = panelToolValue();
+  const globalTool = $("tool").value;
+  const globalModel = tool === globalTool ? $("model").value : null;
+  const tools = Object.entries(TOOL_NAMES).map(([value, name]) =>
+    `<option value="${value}"${value === tool ? " selected" : ""}>${name}${value === globalTool ? " (your default)" : ""}</option>`).join("");
+  const options = modelOptions(tool).map(([value, name]) =>
+    `<option value="${esc(value)}"${value === panelModelValue() ? " selected" : ""}>${esc(name)}${value === globalModel ? " (your default)" : ""}</option>`).join("");
+  const warn = tool === "cursor" && cursorModelsError ? `<span class="cost">${esc(cursorModelsError)}</span>` : "";
+  return `<label class="sort local-model" title="AI for this PR only. Your default comes from AI at the top.">AI <select id="localtool">${tools}</select></label>
+    <label class="sort local-model" title="Model for this PR only. Your default comes from Model at the top.">Model <select id="localmodel">${options}</select></label>${warn}`;
 }
 
 document.addEventListener("change", (e) => {
   if (e.target.id === "localmodel") { panelModel = e.target.value; e.target.blur(); renderPanel(); }
+  if (e.target.id === "localtool") {
+    panelTool = e.target.value;
+    panelModel = null;
+    e.target.blur();
+    if (panelTool === "cursor") loadCursorModels().then(renderPanel);
+    renderPanel();
+  }
 });
 
 async function startReview(button, url) {
   button.disabled = true;
   button.querySelector("span").textContent = "Starting…";
   try {
-    await post("/api/review", { url, model: button.closest("#panel") ? panelModelValue() : $("model").value });
+    const inPanel = button.closest("#panel");
+    await post("/api/review", { url, tool: inPanel ? panelToolValue() : $("tool").value, model: inPanel ? panelModelValue() : $("model").value });
     $("error").hidden = true;
   } catch (e) {
     showError(`Couldn't start the review. ${e.message}`);
@@ -1762,9 +1902,9 @@ function renderSelbar() {
     <button class="linkbtn" type="button" data-clear-sel>Clear</button>`;
   if (view.tab === "review") {
     bar.innerHTML = `<span><b>${selected.size}</b> selected</span>
-      <button class="btn primary" type="button" data-batch>${ICON.spark}<span>Review ${selected.size} with Claude</span></button>
+      <button class="btn primary" type="button" data-batch>${ICON.spark}<span>Review ${selected.size} with ${aiName($("tool").value)}</span></button>
       ${copy}${common}
-      <span class="cost">${esc(MODEL_NAMES[$("model").value] || "Default model")} · at most 3 run at once, the rest wait in a queue</span>`;
+      <span class="cost">${esc(modelName($("tool").value, $("model").value))} · at most 3 run at once, the rest wait in a queue</span>`;
     return;
   }
   const ready = selectedPrs().filter(readyToMerge);
@@ -1785,7 +1925,7 @@ $("selbar").addEventListener("click", async (e) => {
   if (!b.hasAttribute("data-batch")) return;
   b.disabled = true;
   try {
-    const out = await post("/api/review/batch", { urls: [...selected], model: $("model").value });
+    const out = await post("/api/review/batch", { urls: [...selected], tool: $("tool").value, model: $("model").value });
     selected.clear();
     $("error").hidden = true;
     if (out.skipped) showError(`${out.skipped} PR${out.skipped === 1 ? " was" : "s were"} skipped because a review is already running or queued for ${out.skipped === 1 ? "it" : "them"}.`);
@@ -1814,7 +1954,7 @@ function fixOptions(p) {
       `<button class="answer" type="button" data-fix="${kind}" data-url="${esc(p.url)}"${on ? "" : " disabled"}><b>${esc(label)}</b><span>${esc(note)}</span></button>`).join("")}</div>
     <div class="custom-fix">
       <textarea id="fixreq" placeholder="Or describe something else, e.g. rename the helper and update its tests">${esc(fixDraft)}</textarea>
-      <div class="row"><button class="btn primary" type="button" data-fix="custom" data-url="${esc(p.url)}">${ICON.spark}<span>Ask Claude</span></button></div>
+      <div class="row"><button class="btn primary" type="button" data-fix="custom" data-url="${esc(p.url)}">${ICON.spark}<span>Ask ${aiName(panelToolValue())}</span></button></div>
     </div>`;
 }
 
@@ -1823,8 +1963,8 @@ function panelFix(p) {
   const f = reviews[key];
   if (!f) {
     return `<div class="claude-box">
-      <div class="note">Claude works on this PR in its own copy of the repo (a git worktree), so your checkout isn't touched. It commits there but can't push: you check the changes here and press Push.</div>
-      <h3>What should Claude fix?</h3>
+      <div class="note">${aiName(panelToolValue())} works on this PR in its own copy of the repo (a git worktree), so your checkout isn't touched. It commits there but can't push: you check the changes here and press Push.</div>
+      <h3>What should it fix?</h3>
       ${fixOptions(p)}
     </div>`;
   }
@@ -1834,10 +1974,10 @@ function panelFix(p) {
     ${f.alive && f.rcUrl ? `<a class="btn" href="${esc(f.rcUrl)}" target="_blank" rel="noopener">${ICON.external}<span>Open on phone or claude.ai</span></a>` : ""}
     <button class="btn" type="button" data-open-session="warp" data-key="${esc(key)}">${f.alive ? "Watch in Warp" : "Resume in Warp"}</button>
     ${f.alive ? `<button class="btn" type="button" data-end="${esc(key)}" title="Close the hidden session">End session</button>`
-      : `<button class="btn" type="button" data-open-session="app" data-key="${esc(key)}">Resume in Claude app</button>`}
-    ${busy ? `<button class="btn" type="button" data-stop="${esc(key)}" title="Interrupt what Claude is doing">${ICON.stop}<span>Stop</span></button>` : ""}`;
+      : f.tool === "cursor" ? "" : `<button class="btn" type="button" data-open-session="app" data-key="${esc(key)}">Resume in Claude app</button>`}
+    ${busy ? `<button class="btn" type="button" data-stop="${esc(key)}" title="Interrupt what ${aiName(f.tool)} is doing">${ICON.stop}<span>Stop</span></button>` : ""}`;
   const head = `<div class="row"><span class="pill claude ${s?.cls || ""}">${esc(s?.label || f.status)}</span>
-    <span class="cost">${esc(FIX_KINDS[f.kind] || "Fix")} · started ${ago(f.startedAt)} · ${esc(MODEL_NAMES[f.model || ""] || f.model)}${f.pushedAt ? ` · pushed ${ago(f.pushedAt)}` : ""}</span></div>`;
+    <span class="cost">${esc(FIX_KINDS[f.kind] || "Fix")} · started ${ago(f.startedAt)} · ${aiName(f.tool)} · ${esc(modelName(f.tool, f.model))}${f.pushedAt ? ` · pushed ${ago(f.pushedAt)}` : ""}</span></div>`;
   const progress = busy
     ? `<div class="progress"><span class="dot spin"></span><span>${esc(f.status === "waiting" ? f.note || "Waiting for your approval" : f.lastStep || "Working")}</span><span class="cost">${f.steps} step${f.steps === 1 ? "" : "s"}</span></div>`
     : f.error && f.status === "failed" ? `<div class="note">${esc(f.error)}</div>` : "";
@@ -1851,8 +1991,8 @@ function panelFix(p) {
   const body = sub === "changes" ? fixChangesView(p, f)
     : sub === "live" ? (f.alive ? liveView(key, f) : `<p class="none">The session has ended, so there is nothing live to show.</p>`)
     : sub === "steps" ? stepList(f)
-    : (f.result ? `<div class="md">${markdown(f.result)}</div>` : `<p class="none">Claude's summary will show here when it finishes.</p>`);
-  const another = busy ? "" : `<details class="another"><summary>Ask Claude for another fix</summary>${fixOptions(p)}</details>`;
+    : (f.result ? `<div class="md">${markdown(f.result)}</div>` : `<p class="none">${aiName(f.tool)}'s summary will show here when it finishes.</p>`);
+  const another = busy ? "" : `<details class="another"><summary>Ask for another fix</summary>${fixOptions(p)}</details>`;
   return `<div class="claude-box">${head}${progress}<div class="row">${open}</div></div>
     <div class="subtabs" role="tablist">${subs.map(([id, label]) =>
       `<button type="button" role="tab" data-csub="${id}" aria-selected="${sub === id}">${label}</button>`).join("")}</div>
@@ -1875,16 +2015,16 @@ function fixChangesView(p, f) {
     </details>`).join("");
   const commits = d.commits.length ? `<ul class="rows">${d.commits.map((cm) => `<li><span class="grow"><span>${esc(cm.message)}</span><span class="cost">${esc(cm.author)} · ${ago(cm.date)}</span></span><code>${esc(cm.sha)}</code></li>`).join("")}</ul>` : "";
   const warn = [
-    d.behind ? `The PR branch has ${d.behind} new commit${d.behind === 1 ? "" : "s"} that aren't in this worktree, so a push would be refused. Ask Claude to merge them first.` : "",
+    d.behind ? `The PR branch has ${d.behind} new commit${d.behind === 1 ? "" : "s"} that aren't in this worktree, so a push would be refused. Ask the AI to merge them first.` : "",
     d.uncommitted ? `${d.uncommitted} changed file${d.uncommitted === 1 ? " is" : "s are"} not committed yet and won't be pushed.` : "",
   ].filter(Boolean).map((t) => `<div class="warnbox">${esc(t)}</div>`).join("");
   const canPush = d.ahead > 0 && !busy && !d.behind;
   return `<div class="fix-files">
     <div class="files-bar"><span><b>${d.ahead}</b> new commit${d.ahead === 1 ? "" : "s"} for <code class="ref">${esc(d.head)}</code> · ${d.files.length} file${d.files.length === 1 ? "" : "s"}</span><span class="spacer"></span>
       <button class="btn" type="button" data-discard="${esc(p.url)}" title="Close the session and delete the worktree">Discard</button>
-      <button class="btn primary" type="button" data-push="${esc(p.url)}"${canPush ? "" : " disabled"} title="${canPush ? `Push to ${esc(d.head)} on GitHub` : busy ? "Wait for Claude to finish" : "Nothing to push"}">Push</button></div>
+      <button class="btn primary" type="button" data-push="${esc(p.url)}"${canPush ? "" : " disabled"} title="${canPush ? `Push to ${esc(d.head)} on GitHub` : busy ? "Wait for the AI to finish" : "Nothing to push"}">Push</button></div>
     ${warn}${commits}
-    ${files || `<p class="none">${busy ? "No commits yet. Claude is still working." : "Claude didn't commit any changes."}</p>`}
+    ${files || `<p class="none">${busy ? "No commits yet. The AI is still working." : "No changes were committed."}</p>`}
     <p class="cost">Worktree: <code>${esc(d.worktree)}</code> · local branch <code>${esc(d.branch)}</code></p>
   </div>`;
 }
@@ -1911,7 +2051,7 @@ async function startFix(button) {
   const label = button.querySelector("b, span");
   if (label) label.textContent = "Starting… (making the worktree can take a minute)";
   try {
-    await post("/api/fix", { url: button.dataset.url, kind, request, model: panelModelValue() });
+    await post("/api/fix", { url: button.dataset.url, kind, request, tool: panelToolValue(), model: panelModelValue() });
     fixDraft = "";
     claudeSub = null;
     fixDiffs.delete(`fix:${button.dataset.url}`);
@@ -1968,7 +2108,7 @@ document.addEventListener("input", (e) => { if (e.target.id === "fixreq") fixDra
 document.addEventListener("focusout", (e) => { if (e.target.id === "fixreq") setTimeout(renderPanel, 0); });
 
 function openPanel(key, panel) {
-  if (key !== view.pr) { claudeSub = null; panelModel = null; }
+  if (key !== view.pr) { claudeSub = null; panelModel = null; panelTool = null; }
   update({ pr: key, panel: panel || (view.pr === key ? view.panel : "conversation") }, { push: view.pr !== key });
 }
 
@@ -2116,15 +2256,15 @@ function notifyReviewChanges(before, after) {
     const pr = key && findPr(key);
     const name = `${(key || "").replace("-", " #").toUpperCase()}${pr ? ` · ${pr.title}` : ""}`;
     if (url.startsWith("fix:")) {
-      if (r.status === "ready") notify("Fix ready: check and push", `${name}\nClaude committed changes in its worktree.`, key, "claude");
-      else if (r.status === "waiting") notify("Claude needs your approval", `${name}\n${r.note || ""}`, key, "claude");
+      if (r.status === "ready") notify("Fix ready: check and push", `${name}\n${aiName(r.tool)} committed changes in its worktree.`, key, "claude");
+      else if (r.status === "waiting") notify(`${aiName(r.tool)} needs your approval`, `${name}\n${r.note || ""}`, key, "claude");
       else if (r.status === "failed") notify("Fix failed", `${name}\n${r.error || ""}`, key, "claude");
       continue;
     }
     if (r.status === "ready") notify("Review ready: your call", `${name}\nChoose A, B, C or D.`, key, "claude");
-    else if (r.status === "waiting") notify("Claude needs your approval", `${name}\n${r.note || ""}`, key, "claude");
+    else if (r.status === "waiting") notify(`${aiName(r.tool)} needs your approval`, `${name}\n${r.note || ""}`, key, "claude");
     else if (r.status === "failed") notify("Review failed", `${name}\n${r.error || ""}`, key, "claude");
-    else if (r.status === "answered") notify("Claude finished your answer", `${name}\nAnswer ${r.answer || ""} is done.`, key, "claude");
+    else if (r.status === "answered") notify(`${aiName(r.tool)} finished your answer`, `${name}\nAnswer ${r.answer || ""} is done.`, key, "claude");
   }
 }
 
@@ -2196,6 +2336,30 @@ function openDd(sel, btn) {
   const menu = document.createElement("div");
   menu.className = "dd-menu";
   menu.setAttribute("role", "listbox");
+  // Long lists (like Cursor's models) get a search box on top that filters as you type.
+  const search = sel.options.length > 12 ? document.createElement("input") : null;
+  const none = document.createElement("div");
+  if (search) {
+    search.type = "search";
+    search.className = "dd-search";
+    search.placeholder = "Search";
+    search.setAttribute("aria-label", "Search the list");
+    search.addEventListener("click", (e) => e.stopPropagation());
+    search.addEventListener("input", () => {
+      const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      for (const item of menu.querySelectorAll(".dd-item")) {
+        const text = `${item.textContent} ${item.dataset.value}`.toLowerCase();
+        item.hidden = !words.every((w) => text.includes(w));
+        if (!item.hidden) shown++;
+      }
+      none.hidden = shown > 0;
+    });
+    menu.append(search);
+    none.className = "dd-none";
+    none.textContent = "No matches";
+    none.hidden = true;
+  }
   for (const o of sel.options) {
     const item = document.createElement("div");
     item.className = "dd-item";
@@ -2207,13 +2371,22 @@ function openDd(sel, btn) {
     item.addEventListener("click", (e) => { e.stopPropagation(); chooseDd(o.value); });
     menu.append(item);
   }
+  if (search) menu.append(none);
   menu.addEventListener("keydown", (e) => {
     // The menu's keys stay with the menu: Escape here must not also close the PR panel.
     if (e.key !== "Tab") e.stopPropagation();
-    const items = [...menu.querySelectorAll(".dd-item")];
+    const items = [...menu.querySelectorAll(".dd-item:not([hidden])")];
     const at = items.indexOf(document.activeElement);
+    if (e.target === search) {
+      // In the search box: typing filters, Down moves into the list, Enter picks the first match.
+      if (e.key === "ArrowDown") { e.preventDefault(); items.at(0)?.focus({ preventScroll: true }); }
+      else if (e.key === "Enter") { e.preventDefault(); if (items.length) chooseDd(items[0].dataset.value); }
+      else if (e.key === "Escape") { e.preventDefault(); const b = ddBtn; closeDd(); b?.focus(); }
+      else if (e.key === "Tab") closeDd();
+      return;
+    }
     if (e.key === "ArrowDown") { e.preventDefault(); items.at(Math.min(at + 1, items.length - 1))?.focus({ preventScroll: true }); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); items.at(Math.max(at - 1, 0))?.focus({ preventScroll: true }); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); if (at <= 0 && search) search.focus(); else items.at(Math.max(at - 1, 0))?.focus({ preventScroll: true }); }
     else if (e.key === "Home") { e.preventDefault(); items.at(0)?.focus({ preventScroll: true }); }
     else if (e.key === "End") { e.preventDefault(); items.at(-1)?.focus({ preventScroll: true }); }
     else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (at >= 0) chooseDd(items.at(at).dataset.value); }
@@ -2224,13 +2397,18 @@ function openDd(sel, btn) {
   // Fixed position under the button (above it when there's no room), kept inside the window.
   const r = btn.getBoundingClientRect();
   menu.style.minWidth = `${Math.round(r.width)}px`;
+  if (search) menu.style.width = `${menu.offsetWidth}px`; // keeps its width while filtering
   const below = innerHeight - r.bottom >= menu.offsetHeight + 8;
-  menu.style.top = `${Math.round(below ? r.bottom + 4 : r.top - menu.offsetHeight - 4)}px`;
+  // Above the button, it's pinned by its bottom edge so filtering shrinks it toward the button.
+  if (below) menu.style.top = `${Math.round(r.bottom + 4)}px`;
+  else menu.style.bottom = `${Math.round(innerHeight - r.top + 4)}px`;
   menu.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)))}px`;
   ddMenu = menu; ddBtn = btn; ddSel = sel;
   btn.setAttribute("aria-expanded", "true");
   ddOpenedAt = Date.now();
-  (menu.querySelector('[aria-selected="true"]') || menu.firstElementChild)?.focus({ preventScroll: true });
+  const current = menu.querySelector('[aria-selected="true"]');
+  current?.scrollIntoView({ block: "nearest" });
+  (search || current || menu.firstElementChild)?.focus({ preventScroll: true });
 }
 
 function chooseDd(value) {
@@ -2253,7 +2431,9 @@ window.addEventListener("resize", closeDd);
 // Scrolling the page closes the menu, but not the small scroll some browsers make as it opens.
 document.addEventListener("scroll", (e) => { if (ddMenu && !ddMenu.contains(e.target) && Date.now() - ddOpenedAt > 250) closeDd(); }, true);
 enhanceSelect($("sort"));
+enhanceSelect($("tool"));
 enhanceSelect($("model"));
+enhanceSelect($("localtool"));
 enhanceSelect($("localmodel"));
 </script>
 </body>

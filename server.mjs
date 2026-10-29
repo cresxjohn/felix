@@ -4,7 +4,7 @@
 // On start it also links the skills in skills/ (e.g. /review-pr) into the workspace's .claude/skills if missing.
 //
 // GET  /                      -> Felix's home (cards)
-// GET  /prs, /prs/mine, /prs/review -> the Open PRs page (/mine and /review redirect here)
+// GET  /prs, /prs/mine, /prs/review, /prs/releases -> the Open PRs page (/mine and /review redirect here)
 // GET  /api/incident-commander[?fresh=1] -> Datadog on-call shifts for today, tomorrow and my next shift
 // GET  /api/prs               -> my PRs and PRs waiting on my review, fresh from GitHub, plus review sessions
 // GET  /api/reviews           -> review sessions only (cheap; the page polls this while a review runs)
@@ -55,6 +55,15 @@ const PR_URL = /^https:\/\/github\.com\/purepm\/(frontend|backend)-monorepo\/pul
 const ANSWERS = { A: "A", B: "B", C: "C", D: "D" };
 // Models a review can run on: claude's aliases for the latest of each. "" = your usual default.
 const MODELS = new Set(["", "fable", "opus", "sonnet", "haiku"]);
+// Reviews and fixes run on Claude Code or on Cursor's agent (cursor-runner.mjs drives Cursor).
+const CURSOR = process.env.CURSOR_AGENT_BIN || path.join(homedir(), ".local", "bin", "cursor-agent");
+const TOOLS = new Set(["claude", "cursor"]);
+function checkToolModel(tool, model) {
+  if (!TOOLS.has(tool)) throw httpError(400, "Unknown AI tool.");
+  if (tool === "claude" && !MODELS.has(model)) throw httpError(400, "Unknown model.");
+  // Cursor model names come from `cursor-agent models` and may carry overrides like "name[effort=high]".
+  if (tool === "cursor" && !/^[\w.:\-\[\]=,]{0,100}$/.test(model)) throw httpError(400, "Unknown model.");
+}
 
 // Review sessions may run with nobody watching, so the first turn must stop at the skill's posting question.
 const REVIEW_NOTE = "This review was started from the Open PRs page and may be running with nobody watching. "
@@ -721,7 +730,7 @@ function reviewsSnapshot() {
   return Object.fromEntries(Object.entries(all).map(([key, r]) => [key, {
     type: r.type || "review", sessionId: r.sessionId, status: r.status, alive: r.alive, startedAt: r.startedAt, updatedAt: r.updatedAt,
     steps: r.steps || 0, lastStep: r.lastStep || null, result: r.result || null, error: r.error || null,
-    answer: r.answer || null, rcUrl: r.rcUrl || null, note: r.note || null, log: r.log || [], model: r.model || "",
+    answer: r.answer || null, rcUrl: r.rcUrl || null, note: r.note || null, log: r.log || [], model: r.model || "", tool: r.tool || "claude",
     kind: r.kind || null, head: r.head || null, branch: r.branch || null, pushedAt: r.pushedAt || null,
   }]));
 }
@@ -802,7 +811,8 @@ function onHookEvent(key, ev) {
 
 // Starts claude in a hidden tmux window. Arguments go straight to claude (no shell), so nothing here
 // is read as shell syntax.
-function launchSession(all, key, { cwd, title, prompt, note, model, extraArgs = [] }) {
+function launchSession(all, key, { cwd, title, prompt, note, model, extraArgs = [], tool = "claude" }) {
+  if (tool === "cursor") return launchCursorSession(all, key, { cwd, prompt, note, model });
   const name = tmuxName(key);
   if (sessionAlive(name)) execFileSync(TMUX, ["kill-session", "-t", `=${name}`]); // replace an older session for this PR
   const sessionId = randomUUID();
@@ -823,9 +833,76 @@ function launchSession(all, key, { cwd, title, prompt, note, model, extraArgs = 
   const now = new Date().toISOString();
   const prev = all[key] || {};
   all[key] = {
-    ...prev, sessionId, tmux: name, cwd, model, status: "running", startedAt: now, updatedAt: now,
+    ...prev, sessionId, tmux: name, cwd, model, tool: "claude", status: "running", startedAt: now, updatedAt: now,
     steps: 0, lastStep: "Starting Claude", result: null, error: null, answer: null, rcUrl: null, note: null, stopRequested: false,
     log: [...(prev.log || []), { at: now, kind: "event", text: `Started (${model || "default model"})` }].slice(-300),
+  };
+}
+
+// Cursor's commands wait for a sign-in that never comes when it isn't signed in, so `status` is asked
+// first (quick). A good answer is trusted for ten minutes.
+let cursorSignedInAt = 0;
+function checkCursorSignedIn() {
+  if (Date.now() - cursorSignedInAt < 600e3) return;
+  let out = "";
+  try {
+    out = execFileSync(CURSOR, ["status"], { encoding: "utf8", timeout: 20e3 });
+  } catch (e) {
+    if (e.code === "ENOENT") throw httpError(502, "Cursor's CLI isn't installed. See SETUP.md.");
+    out = `${e.stdout || ""}${e.stderr || ""}`;
+  }
+  if (/not logged in/i.test(out) || !/logged in/i.test(out)) throw httpError(502, "Cursor isn't signed in. Run `cursor-agent login`, then try again.");
+  cursorSignedInAt = Date.now();
+}
+
+// Cursor: a new chat, then cursor-runner.mjs in a hidden tmux window. Cursor has no system-prompt flag, so
+// the note goes first in the prompt. No Remote Control link: Cursor sessions are followed on this page.
+// Cursor's models, from `cursor-agent models` (lines like "gpt-5 - GPT-5"), cached for an hour. Empty when
+// Cursor isn't installed or signed in; the page then offers only Cursor's default model.
+let cursorModels = { at: 0, list: [], error: null };
+function listCursorModels() {
+  if (Date.now() - cursorModels.at < 3600e3) return cursorModels;
+  const list = [];
+  let error = null;
+  try {
+    checkCursorSignedIn();
+    const out = execFileSync(CURSOR, ["models"], { encoding: "utf8", timeout: 30e3 });
+    // Names can carry zero-width spaces and double spaces. The "(default)" one is what no --model picks,
+    // which the page already offers as "Auto", so it is left out.
+    for (const line of out.replace(/\x1b\[[0-9;]*m|[\u200b-\u200d\ufeff]/g, "").split("\n")) {
+      const m = line.trim().match(/^([\w.:\-\[\]=,]+)\s+-\s+(.+?)(\s+\((current|default)\))?$/);
+      if (m && m[3]?.trim() !== "(default)") list.push({ id: m[1], name: m[2].replace(/\s+/g, " ") });
+    }
+  } catch (e) {
+    error = e.status ? e.message : /not logged in|login/i.test(`${e.stdout}${e.stderr}`) ? "Cursor isn't signed in. Run `cursor-agent login`." : "Couldn't list Cursor's models.";
+  }
+  cursorModels = { at: list.length ? Date.now() : 0, list, error };
+  return cursorModels;
+}
+
+function launchCursorSession(all, key, { cwd, prompt, note, model }) {
+  const name = tmuxName(key);
+  if (sessionAlive(name)) execFileSync(TMUX, ["kill-session", "-t", `=${name}`]);
+  checkCursorSignedIn();
+  let chat;
+  try {
+    chat = execFileSync(CURSOR, ["create-chat"], { encoding: "utf8", timeout: 60e3 }).trim().split(/\s+/).pop();
+  } catch (e) {
+    throw httpError(502, /not logged in|login/i.test(`${e.stdout}${e.stderr}`) ? "Cursor isn't signed in. Run `cursor-agent login`, then try again." : `Couldn't start Cursor: ${String(e.stderr || e.message).slice(0, 200)}`);
+  }
+  if (!/^[\w-]{8,}$/.test(chat)) throw httpError(502, "Cursor didn't return a chat id.");
+  execFileSync(TMUX, [
+    "new-session", "-d", "-s", name, "-x", "200", "-y", "50", "-c", cwd,
+    "-e", `OPEN_PRS_REVIEW=${key}`, "-e", `OPEN_PRS_PORT=${PORT}`, "-e", `CURSOR_AGENT_BIN=${CURSOR}`,
+    process.execPath, path.join(HERE, "cursor-runner.mjs"),
+    "--chat", chat, ...(model ? ["--model", model] : []), "--", `${note}\n\n${prompt}`,
+  ]);
+  const now = new Date().toISOString();
+  const prev = all[key] || {};
+  all[key] = {
+    ...prev, sessionId: chat, tmux: name, cwd, model, tool: "cursor", status: "running", startedAt: now, updatedAt: now,
+    steps: 0, lastStep: "Starting Cursor", result: null, error: null, answer: null, rcUrl: null, note: null, stopRequested: false,
+    log: [...(prev.log || []), { at: now, kind: "event", text: `Started on Cursor (${model || "default model"})` }].slice(-300),
   };
 }
 
@@ -835,29 +912,31 @@ function runningCount(all) {
 
 // ---------- Reviews ----------
 
-function launchReview(all, url, model) {
+function launchReview(all, url, model, tool = "claude") {
   const { repoKey, number } = parseKey(url);
-  launchSession(all, url, {
-    cwd: WORKSPACE, title: `Review ${repoKey}#${number}`, prompt: `/review-pr ${url}`, note: REVIEW_NOTE, model,
-  });
+  // Cursor doesn't load the workspace's Claude skills by name, so it is pointed at the skill file itself.
+  const prompt = tool === "cursor"
+    ? `Review ${url} by following the review-pr skill exactly: read .claude/skills/review-pr/SKILL.md and the files it points to, and treat "${url}" as its argument.`
+    : `/review-pr ${url}`;
+  launchSession(all, url, { cwd: WORKSPACE, title: `Review ${repoKey}#${number}`, prompt, note: REVIEW_NOTE, model, tool });
   all[url].type = "review";
 }
 
 // Starts a review now, or queues it when MAX_RUNNING sessions are already working.
-function startReview(url, model = "") {
+function startReview(url, model = "", tool = "claude") {
   parseKey(url);
-  if (!MODELS.has(model)) throw httpError(400, "Unknown model.");
+  checkToolModel(tool, model);
   const all = readReviews();
   const current = all[url] && refresh(all[url]);
   if (current && [...BUSY, "queued"].includes(current.status)) throw httpError(409, "A review of this PR is already running or queued.");
   if (runningCount(all) >= MAX_RUNNING) {
     const now = new Date().toISOString();
-    all[url] = { ...(current || {}), type: "review", model, status: "queued", queuedAt: now, startedAt: now, updatedAt: now, alive: false, lastStep: "Waiting for a free slot" };
+    all[url] = { ...(current || {}), type: "review", model, tool, status: "queued", queuedAt: now, startedAt: now, updatedAt: now, alive: false, lastStep: "Waiting for a free slot" };
     addLog(all[url], `Queued (${MAX_RUNNING} reviews already running)`, "event");
     writeReviews(all);
     return "queued";
   }
-  launchReview(all, url, model);
+  launchReview(all, url, model, tool);
   writeReviews(all);
   return "started";
 }
@@ -868,17 +947,18 @@ function startQueued() {
   let changed = false;
   for (const [url, r] of queued) {
     if (runningCount(all) >= MAX_RUNNING) break;
-    try { launchReview(all, url, r.model || ""); } catch (e) { Object.assign(r, { status: "failed", error: e.message }); }
+    try { launchReview(all, url, r.model || "", r.tool || "claude"); } catch (e) { Object.assign(r, { status: "failed", error: e.message }); }
     changed = true;
   }
   if (changed) writeReviews(all);
 }
 setInterval(startQueued, 15e3).unref();
 
-function startBatch(urls, model) {
+function startBatch(urls, model, tool = "claude") {
+  checkToolModel(tool, model);
   const out = { started: 0, queued: 0, skipped: 0 };
   for (const url of urls.slice(0, 30)) {
-    try { out[startReview(String(url), model)]++; } catch { out.skipped++; }
+    try { out[startReview(String(url), model, tool)]++; } catch { out.skipped++; }
   }
   return out;
 }
@@ -908,7 +988,8 @@ function stopReview(key) {
   const all = readReviews();
   if (all[key]?.status === "queued") return endReview(key);
   const r = liveSession(key);
-  execFileSync(TMUX, ["send-keys", "-t", `=${r.tmux}:`, "Escape"]);
+  // Claude stops what it's doing on Escape; the Cursor runner ends on Ctrl-C (its chat can be resumed).
+  execFileSync(TMUX, ["send-keys", "-t", `=${r.tmux}:`, r.tool === "cursor" ? "C-c" : "Escape"]);
   Object.assign(all[key], { status: "stopped", stopRequested: true, lastStep: "Stopped", updatedAt: new Date().toISOString() });
   writeReviews(all);
 }
@@ -948,10 +1029,10 @@ const fixNote = (p) => `You are working in a separate git worktree at ${p.wt}, o
 // Belt and braces: these commands are blocked in fix sessions even with permissions bypassed.
 const FIX_BLOCKED = ["Bash(git push:*)", "Bash(gh pr comment:*)", "Bash(gh pr review:*)", "Bash(gh pr merge:*)", "Bash(gh pr close:*)"].join(",");
 
-async function startFix(url, kind, request, model = "") {
+async function startFix(url, kind, request, model = "", tool = "claude") {
   const { repoKey, side, number } = parseKey(url);
   if (!FIX_PROMPTS[kind]) throw httpError(400, "Unknown kind of fix.");
-  if (!MODELS.has(model)) throw httpError(400, "Unknown model.");
+  checkToolModel(tool, model);
   if (kind === "custom" && !String(request || "").trim()) throw httpError(400, "Say what Claude should change.");
   const key = `fix:${url}`;
   const all0 = readReviews();
@@ -980,14 +1061,31 @@ async function startFix(url, kind, request, model = "") {
     failing: d.checks.filter((c) => c.outcome === "failed").map((c) => c.name),
     request: String(request || "").trim().slice(0, 2000),
   };
+  if (tool === "cursor") await blockPushForCursor(wt);
   const all = readReviews();
   launchSession(all, key, {
-    cwd: wt, title: `Fix ${repoKey}#${number}`, prompt: FIX_PROMPTS[kind](p), note: fixNote(p), model,
+    cwd: wt, title: `Fix ${repoKey}#${number}`, prompt: FIX_PROMPTS[kind](p), note: fixNote(p), model, tool,
     extraArgs: ["--disallowedTools", FIX_BLOCKED],
   });
   Object.assign(all[key], { type: "fix", kind, wt, branch, head: d.head, base: d.base, repoDir, pushedAt: null });
   writeReviews(all);
-  acceptFolderTrust(all[key].tmux);
+  if (tool === "claude") acceptFolderTrust(all[key].tmux);
+}
+
+// Cursor's agent reads permission rules from .cursor/cli.json in the workspace; denied commands win even
+// with --force. The same pushes and PR posts Claude is blocked from are denied here. The file is kept out
+// of git status through the repo's info/exclude.
+const CURSOR_FIX_DENY = ["Shell(git push)", "Shell(gh pr comment)", "Shell(gh pr review)", "Shell(gh pr merge)", "Shell(gh pr close)"];
+async function blockPushForCursor(wt) {
+  mkdirSync(path.join(wt, ".cursor"), { recursive: true });
+  writeFileSync(path.join(wt, ".cursor", "cli.json"), JSON.stringify({ permissions: { allow: [], deny: CURSOR_FIX_DENY } }, null, 2));
+  const exclude = (await git(wt, ["rev-parse", "--git-path", "info/exclude"])).stdout.trim();
+  const file = path.isAbsolute(exclude) ? exclude : path.join(wt, exclude);
+  const now = existsSync(file) ? readFileSync(file, "utf8") : "";
+  if (!now.split("\n").includes(".cursor/cli.json")) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, `${now}${now && !now.endsWith("\n") ? "\n" : ""}.cursor/cli.json\n`);
+  }
 }
 
 // A new worktree is a folder Claude Code hasn't seen, so it asks "Do you trust this folder?" before
@@ -1113,6 +1211,7 @@ function openSession(key, where) {
   const alive = sessionAlive(r.tmux);
   const cwd = r.cwd && existsSync(r.cwd) ? r.cwd : WORKSPACE;
   if (where === "app") {
+    if (r.tool === "cursor") throw httpError(409, "This session runs on Cursor; open it in Warp instead.");
     if (alive) throw httpError(409, "The session is still running in the background. Open it with the Remote Control link, or end it first.");
     // `claude --desktop` refuses to run without a terminal, so give it one with macOS's `script`.
     spawn("/usr/bin/script", ["-q", "/dev/null", CLAUDE, "--desktop", "--resume", r.sessionId], { cwd, detached: true, stdio: "ignore" }).unref();
@@ -1120,7 +1219,7 @@ function openSession(key, where) {
   }
   const name = tmuxName(key);
   // Quoted: zsh would read a bare `=name` as "path of the command name".
-  const command = alive ? `${TMUX} attach -t '=${name}'` : `${CLAUDE} --resume ${r.sessionId}`;
+  const command = alive ? `${TMUX} attach -t '=${name}'` : `${r.tool === "cursor" ? CURSOR : CLAUDE} --resume ${r.sessionId}`;
   mkdirSync(WARP_LAUNCH_DIR, { recursive: true });
   const file = path.join(WARP_LAUNCH_DIR, `${name}.yaml`);
   // Only a UUID, a fixed tmux name and validated paths go into the command line.
@@ -1164,7 +1263,7 @@ function checkWrite(req) {
   }
 }
 
-const PAGES = { "/": "home.html", "/prs": "index.html", "/prs/mine": "index.html", "/prs/review": "index.html" };
+const PAGES = { "/": "home.html", "/prs": "index.html", "/prs/mine": "index.html", "/prs/review": "index.html", "/prs/releases": "index.html" };
 // Files both pages share. Anything not listed here is not served.
 const ASSETS = { "/theme.css": "text/css", "/pr-status.js": "text/javascript" };
 // Old Open PRs links keep working.
@@ -1202,6 +1301,10 @@ createServer(async (req, res) => {
       const data = await listPrs();
       return json(res, 200, { ...data, reviews: reviewsSnapshot() });
     }
+    if (req.method === "GET" && pathname === "/api/models") {
+      const c = listCursorModels();
+      return json(res, 200, { cursor: c.list, cursorError: c.error });
+    }
     if (req.method === "GET" && pathname === "/api/reviews") return json(res, 200, { reviews: reviewsSnapshot() });
     if (req.method === "GET" && pathname === "/api/releases") {
       return json(res, 200, await releases({ fresh: new URL(req.url, `http://localhost:${PORT}`).searchParams.get("fresh") === "1" }));
@@ -1221,8 +1324,9 @@ createServer(async (req, res) => {
       // `key` names a session: a PR link for a review, "fix:<link>" for a fix.
       const key = String(body.key || url);
       let extra = {};
-      if (pathname === "/api/review") extra = { result: startReview(url, String(body.model || "")) };
-      else if (pathname === "/api/review/batch") extra = startBatch(Array.isArray(body.urls) ? body.urls : [], String(body.model || ""));
+      const tool = String(body.tool || "claude");
+      if (pathname === "/api/review") extra = { result: startReview(url, String(body.model || ""), tool) };
+      else if (pathname === "/api/review/batch") extra = startBatch(Array.isArray(body.urls) ? body.urls : [], String(body.model || ""), tool);
       else if (pathname === "/api/review/answer") answerReview(url, String(body.answer || ""));
       else if (pathname === "/api/review-event") {
         // From hooks/report.sh: the session key rides in a header, the hook's own JSON is the body.
@@ -1233,7 +1337,7 @@ createServer(async (req, res) => {
       else if (pathname === "/api/review/stop") stopReview(key);
       else if (pathname === "/api/review/end") endReview(key);
       else if (pathname === "/api/review/open") openSession(key, body.where === "app" ? "app" : "warp");
-      else if (pathname === "/api/fix") await startFix(url, String(body.kind || ""), String(body.request || ""), String(body.model || ""));
+      else if (pathname === "/api/fix") await startFix(url, String(body.kind || ""), String(body.request || ""), String(body.model || ""), tool);
       else if (pathname === "/api/fix/push") await pushFix(url);
       else if (pathname === "/api/fix/discard") await discardFix(url);
       else if (pathname === "/api/remove-me") await removeMeAsReviewer(url);

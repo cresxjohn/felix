@@ -341,7 +341,7 @@ const COUNTS = {
   review: [
     { status: "needs", label: "Need your review", color: "var(--warn)", test: (p) => PrStatus.needsReview(p) },
     { status: "new-commits", label: "New commits since your review", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
-    { status: "claude-ready", label: "Claude review waiting on you", color: "var(--accent)", test: (p, r) => PrStatus.claudeState(p, r)?.id === "ready" },
+    { status: "claude-ready", label: "AI review waiting on you", color: "var(--accent)", test: (p, r) => PrStatus.claudeState(p, r)?.id === "ready" },
   ],
   mine: [
     { status: "failing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
@@ -349,7 +349,7 @@ const COUNTS = {
     { status: "in-queue", label: "In merge queue", color: "var(--accent)", test: (p) => Boolean(p.inMergeQueue) },
     { status: "ready-merge", label: "Ready to merge", color: "var(--ok)", test: (p) => PrStatus.readyToMerge(p) },
     { status: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
-    { status: "fix-ready", label: "Claude fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
+    { status: "fix-ready", label: "AI fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
   ],
 };
 
@@ -393,7 +393,7 @@ function releasesHtml() {
       : `<span class="tag">Last</span><span class="yours">No merged release yet</span>`;
     return `<div class="relrepo"><span class="rk">${esc(r.key)}</span><div class="lines"><div class="relrow">${openLine}</div><div class="relrow">${lastLine}</div></div></div>`;
   }).join("");
-  return `<div class="rels"><div class="head"><span class="label">Releases</span><a href="/prs">Details →</a></div>${relActionError ? `<div class="error">${esc(relActionError)}</div>` : ""}${rows}</div>`;
+  return `<div class="rels"><div class="head"><span class="label">Releases</span><a href="/prs/releases">Details →</a></div>${relActionError ? `<div class="error">${esc(relActionError)}</div>` : ""}${rows}</div>`;
 }
 
 async function loadReleases() {

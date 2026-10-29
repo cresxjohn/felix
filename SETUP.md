@@ -24,6 +24,10 @@ Install these first. Each line says how.
 - **Claude Code** (the `claude` command), installed to `~/.local/bin/claude`: see https://code.claude.com/docs
 - **Claude desktop app** (for "Resume in Claude app"), and the **Claude phone app** (to follow reviews on your phone).
 - **Warp** (for "Watch in Warp" and "Resume in Warp"): https://www.warp.dev. This one is optional: everything else works without it.
+- **Cursor's CLI** (the `cursor-agent` command), only if you want reviews and fixes to run on Cursor too. It installs to `~/.local/bin/cursor-agent`:
+  ```bash
+  curl https://cursor.com/install -fsS | bash
+  ```
 
 Docker is **not** needed anymore.
 
@@ -51,6 +55,16 @@ claude auth status
 ```
 
 `claude auth status` must say `"loggedIn": true`.
+
+If you installed Cursor's CLI, sign it in too, then check it:
+
+```bash
+cursor-agent login
+```
+
+```bash
+cursor-agent status
+```
 
 
 ## 3. Folder layout
@@ -188,6 +202,7 @@ The server reads these environment variables. You only need them if a tool lives
 - `CLAUDE_BIN`: the `claude` command (default `~/.local/bin/claude`)
 - `GH_BIN`: the `gh` command (default `/opt/homebrew/bin/gh`)
 - `TMUX_BIN`: the `tmux` command (default `/opt/homebrew/bin/tmux`)
+- `CURSOR_AGENT_BIN`: Cursor's `cursor-agent` command (default `~/.local/bin/cursor-agent`)
 
 On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 
@@ -200,6 +215,7 @@ On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 - **A Claude session sits on "Starting Claude" forever**: it is waiting on a question in its terminal. Click **Watch in Warp**, or run `tmux attach -t '=openprs-fm-12247'` (use your PR's name), and answer it. The server already answers the "Do you trust this folder?" question for fix worktrees by itself.
 - **"Watch in Warp" says "not found"**: an old version left `=name` unquoted, and zsh reads that as a command. Update `server.mjs`.
 - **Fix with Claude fails right after "Preparing worktree"**: bm runs `npm install` in a git hook after checkout. The server skips hooks for that one step; if you see this again, check `./prs logs`.
+- **"Cursor isn't signed in"**: run `cursor-agent login`, then start the review again. Cursor's model list fills in after that (reload the page).
 - **Port 4777 is taken**: find what uses it with `lsof -iTCP:4777 -sTCP:LISTEN`.
 - **The page looks stuck on old data**: press **R** or the refresh button. The header says "Saved list from …" until fresh data arrives.
 
