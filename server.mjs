@@ -22,7 +22,7 @@
 // POST /api/review/open       -> { key, where: "warp"|"app" } open a session on this Mac to continue by hand
 // POST /api/review-event      -> hook events from review sessions (hooks/report.sh)
 // POST /api/remove-me         -> { url } remove me from the PR's requested reviewers on GitHub
-// GET  /api/releases[?fresh=1] -> each repo's open release PR, my PRs in it, and the last release's dev deploy
+// GET  /api/releases[?fresh=1] -> each repo's open release PR, my PRs in it, and the last release's dev and prod status
 // POST /api/release/approve   -> { url } approve a release PR (changeset-release/main only)
 // POST /api/merge             -> { url } add my ready PR (or a ready release PR) to the merge queue (squash merge if the repo has no queue)
 // POST /api/merge/batch       -> { urls } the same for several PRs, one at a time; returns a result per PR
@@ -449,8 +449,7 @@ async function mergeBatch(urls) {
 // ---------- Releases ----------
 // Each repo keeps one open "chore: release main (changeset)" PR on changeset-release/main. Merging it runs
 // "1 - Merges to main", which deploys the released packages to dev. The card shows the open release, my PRs
-// in it, and the last release's dev deploy. Prod promotions ("4 - Platform promotion/release") aren't tied to
-// one release, so they aren't shown here.
+// in it, and the last release's dev deploy and whether its packages have been promoted to prod.
 const RELEASE_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     open: pullRequests(headRefName: "changeset-release/main", states: OPEN, first: 1, orderBy: { field: CREATED_AT, direction: DESC }) {
@@ -460,7 +459,7 @@ const RELEASE_QUERY = `query($owner: String!, $name: String!) {
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
     }
     last: pullRequests(headRefName: "changeset-release/main", states: MERGED, first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
-      nodes { number url mergedAt mergeCommit { oid } }
+      nodes { number url mergedAt body mergeCommit { oid } }
     }
   }
 }`;
@@ -482,6 +481,70 @@ function parseRelease(body = "") {
     packages.push({ name: m[1].trim(), from: m[2], to: m[3], changes, dependencyOnly: !changes.length });
   }
   return packages;
+}
+
+// Prod: "4 - Platform promotion/release" deploys the promotion-manifest.yml at the commit it runs on (the
+// manifest update commit). So a release is in prod once a successful prod run's manifest lists each of its
+// deployable packages at that version or newer. Libraries aren't in the manifest and are skipped.
+const manifestCache = new Map(); // "<repo>@<sha>" -> { section: { name: version } }
+
+function parseManifest(text) {
+  const out = {};
+  let inComponents = false, section = null;
+  for (const line of text.split("\n")) {
+    if (/^\S/.test(line)) { inComponents = /^components:\s*$/.test(line); section = null; continue; }
+    if (!inComponents) continue;
+    let m;
+    if ((m = /^ {2}([\w-]+):\s*$/.exec(line))) { section = m[1]; out[section] = {}; }
+    else if (section && (m = /^ {4}([\w.-]+):\s*['"]?([\w.-]+)['"]?\s*$/.exec(line))) out[section][m[1]] = m[2];
+  }
+  return out;
+}
+
+async function manifestAt(repo, sha) {
+  const key = `${repo}@${sha}`;
+  if (!manifestCache.has(key)) {
+    const res = await github(`/repos/${repo}/contents/promotion-manifest.yml?ref=${sha}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+    manifestCache.set(key, res.ok ? parseManifest(await res.text()) : null);
+  }
+  return manifestCache.get(key);
+}
+
+function versionAtLeast(have, want) {
+  const a = String(have).split(/[.-]/).map(Number), b = String(want).split(/[.-]/).map(Number);
+  for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0); }
+  return true;
+}
+
+// "@services/core-service" -> section "services", name "core-service"; "endpoints/search" -> "endpoints", "search".
+const manifestSpot = (pkg) => { const [section, name] = pkg.replace(/^@/, "").split("/"); return { section, name }; };
+
+async function prodStatus(repo, packages) {
+  const runs = ((await (await github(`/repos/${repo}/actions/workflows/release.yml/runs?per_page=20`)).json()).workflow_runs || [])
+    .filter((r) => /\bto prod environment\b/.test(r.display_title || ""));
+  const done = runs.filter((r) => r.status === "completed" && r.conclusion === "success");
+  if (!done.length) return null;
+  const covers = async (run) => {
+    const m = await manifestAt(repo, run.head_sha);
+    if (!m) return null;
+    const spots = packages.map((p) => ({ ...manifestSpot(p.name), to: p.to })).filter((x) => m[x.section]);
+    return { total: spots.length, covered: spots.filter((x) => m[x.section][x.name] && versionAtLeast(m[x.section][x.name], x.to)).length };
+  };
+  const latest = await covers(done[0]);
+  if (!latest) return null;
+  if (!latest.total) return { state: "none" }; // nothing deployable in this release
+  const running = runs.find((r) => r.status !== "completed" && new Date(r.created_at) > new Date(done[0].created_at));
+  if (latest.covered < latest.total) {
+    return { state: latest.covered ? "partial" : "not-yet", covered: latest.covered, total: latest.total, running: runInfo(running) };
+  }
+  // In prod: find the first promotion that carried all of it.
+  let first = done[0];
+  for (const run of done.slice(1, 8)) {
+    const c = await covers(run);
+    if (!c || c.covered < c.total) break;
+    first = run;
+  }
+  return { state: "in-prod", covered: latest.covered, total: latest.total, run: runInfo(first) };
 }
 
 const runInfo = (r) => r && { name: r.name, title: r.display_title, status: r.status, conclusion: r.conclusion, url: r.html_url, at: r.created_at, updatedAt: r.updated_at };
@@ -527,7 +590,7 @@ async function repoRelease({ key, repo }, login) {
       packages,
     },
     mine,
-    last: last && { number: last.number, url: last.url, mergedAt: last.mergedAt, dev },
+    last: last && { number: last.number, url: last.url, mergedAt: last.mergedAt, dev, prod: await prodStatus(repo, parseRelease(last.body)).catch(() => null) },
   };
 }
 

@@ -89,7 +89,11 @@ header .spacer { flex: 1; }
 .rels .head a { margin-left: auto; color: var(--link); font-size: 12px; text-decoration: none; }
 .rels .head a:hover { text-decoration: underline; }
 .relrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding: 4px 0; }
-.relrow .rk { font-weight: 600; min-width: 20px; }
+.relrepo { display: flex; gap: 10px; align-items: flex-start; padding: 2px 0; }
+.relrepo > .rk { font-weight: 600; min-width: 20px; padding-top: 6px; }
+.relrepo .lines { flex: 1; min-width: 0; display: grid; }
+.relrow .tag { width: 32px; flex: none; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.relrow a.pill { text-decoration: none; }
 .relrow > a.num { color: var(--link); text-decoration: none; }
 .relrow > a.num:hover { text-decoration: underline; }
 .relrow .yours { color: var(--muted); font-size: 12px; }
@@ -372,13 +376,22 @@ function renderPrs() {
 // One row per repo for its open release PR: status, how many of my PRs it ships, and Approve or Merge.
 function releasesHtml() {
   if (!rel) return relError ? `<div class="rels"><span class="label">Releases</span><div class="card-foot">Couldn't load releases. ${esc(relError)}</div></div>` : "";
+  const pill = (st) => !st ? "" : st.url
+    ? `<a class="pill ${st.cls}" href="${esc(st.url)}" target="_blank" rel="noopener"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</a>`
+    : `<span class="pill ${st.cls}"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</span>`;
+  const devPill = (run) => !run ? "" : run.status !== "completed" ? pill({ cls: "run", label: "Dev deploying", url: run.url })
+    : pill({ cls: run.conclusion === "success" ? "ok" : "bad", label: run.conclusion === "success" ? "On dev" : `Dev ${run.conclusion}`, url: run.url });
   const rows = rel.repos.map((r) => {
     if (r.error) return `<div class="relrow"><span class="rk">${esc(r.key)}</span><span class="yours">Couldn't load: ${esc(r.error)}</span></div>`;
-    const o = r.open;
-    if (!o) return `<div class="relrow"><span class="rk">${esc(r.key)}</span><span class="yours">No open release</span></div>`;
-    const st = PrStatus.releaseStatus(o);
-    const acts = o.inMergeQueue ? "" : `${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="mini" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">Approve</button>` : ""}${o.mergeState === "CLEAN" ? `<button class="mini primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging deploys these packages to dev.">Merge</button>` : ""}`;
-    return `<div class="relrow"><span class="rk">${esc(r.key)}</span><a class="num" href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number}</a><span class="pill ${st.cls}"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</span><span class="yours">${r.mine.length} of yours</span><span class="acts">${acts}</span></div>`;
+    const o = r.open, last = r.last;
+    const acts = !o || o.inMergeQueue ? "" : `${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="mini" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">Approve</button>` : ""}${o.mergeState === "CLEAN" ? `<button class="mini primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging deploys these packages to dev.">Merge</button>` : ""}`;
+    const openLine = o
+      ? `<span class="tag">Open</span><a class="num" href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number}</a>${pill(PrStatus.releaseStatus(o))}${o.iApproved ? pill({ cls: "ok", label: "You approved" }) : ""}<span class="yours">${r.mine.length} of yours</span><span class="acts">${acts}</span>`
+      : `<span class="tag">Open</span><span class="yours">No open release</span>`;
+    const lastLine = last
+      ? `<span class="tag">Last</span><a class="num" href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a><span class="yours">merged ${ago(last.mergedAt)}</span>${devPill(last.dev)}${pill(PrStatus.prodStatus(last.prod, ago))}`
+      : `<span class="tag">Last</span><span class="yours">No merged release yet</span>`;
+    return `<div class="relrepo"><span class="rk">${esc(r.key)}</span><div class="lines"><div class="relrow">${openLine}</div><div class="relrow">${lastLine}</div></div></div>`;
   }).join("");
   return `<div class="rels"><div class="head"><span class="label">Releases</span><a href="/prs">Details →</a></div>${relActionError ? `<div class="error">${esc(relActionError)}</div>` : ""}${rows}</div>`;
 }

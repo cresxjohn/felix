@@ -209,10 +209,11 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .rel-head { display: flex; align-items: center; gap: 8px; }
 .rel-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
 .rel-head .spacer { flex: 1; }
-.rel a.pill { text-decoration: none; }
+.rel a.pill, .rel-line > a.pill { text-decoration: none; }
 .rel a.pill:hover { filter: brightness(0.95); }
-.rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-@container (max-width: 640px) { .rel-grid { grid-template-columns: minmax(0, 1fr); } }
+.rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto; grid-auto-flow: column; gap: 12px; }
+.rel-grid > .span2 { grid-row: span 2; }
+@container (max-width: 640px) { .rel-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-flow: row; } .rel-grid > .span2 { grid-row: auto; } }
 .rel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
 .rel-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-top .repo { font-weight: 600; }
@@ -224,9 +225,18 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .rel-fold svg { width: 15px; height: 15px; transition: transform .15s; }
 .rel.folded .rel-fold svg { transform: rotate(-90deg); }
 .rel.folded { gap: 8px; }
+.rel-kind { margin-left: auto; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.rel-kind.open { background: var(--ok); color: var(--surface); }
+.rel-kind.last { background: var(--neutral-bg); color: var(--fg); border: 1px solid var(--line); }
+.rel-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rel-badges a.pill { text-decoration: none; }
+.rel-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; min-height: 26px; }
+.rel-line > a:not(.pill) { color: var(--link); text-decoration: none; }
+.rel-line > a:not(.pill):hover { text-decoration: underline; }
+.rel-details { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .rel-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-mine { display: grid; gap: 6px; }
-.rel-mine .label, .rel-deploy .label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rel-mine .label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .rel-pr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
 .rel-pr a { color: inherit; text-decoration: none; font-weight: 500; }
 .rel-pr a:hover { color: var(--link); text-decoration: underline; }
@@ -236,10 +246,6 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .rel details ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; display: grid; gap: 2px; }
 .rel details .pkgname { font-family: var(--mono); font-size: 12px; margin-top: 6px; display: block; }
 .rel details .mine-change { font-weight: 600; }
-.rel-deploy { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px; }
-.rel-deploy .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.rel-deploy a { color: var(--link); text-decoration: none; }
-.rel-deploy a:hover { text-decoration: underline; }
 .empty { padding: 20px 16px; color: var(--muted); text-align: center; }
 /* Loading: placeholder shapes that match real rows, with a soft shimmer */
 .sk {
@@ -1371,40 +1377,56 @@ async function releaseAction(button, path, url, ask) {
   await loadReleases();
 }
 
+function prodPill(prod) {
+  const st = PrStatus.prodStatus(prod, ago);
+  if (!st) return "";
+  const attrs = `class="pill ${st.cls}"${st.title ? ` title="${esc(st.title)}"` : ""}`;
+  return st.url ? `<a ${attrs} href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.label)}</a>` : `<span ${attrs}>${esc(st.label)}</span>`;
+}
+
 function releaseCard(r) {
   const repoName = REPO_LABEL[r.key] || r.key;
-  if (r.error) return `<div class="rel"><div class="rel-top"><span class="repo">${esc(r.key)}</span></div><div class="rel-none">Couldn't load: ${esc(r.error)}</div></div>`;
-  const o = r.open;
-  const head = o
-    ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number} release</a>
-       ${o.checks === "SUCCESS" ? `<span class="pill ok">Checks pass</span>` : o.checks === "FAILURE" || o.checks === "ERROR" ? `<span class="pill bad">Checks failing</span>` : o.checks ? `<span class="pill run">Checks running</span>` : ""}
-       ${releaseStatus(o)}`
-    : `<span class="rel-sub">No open release PR</span>`;
-  const actions = o && !o.inMergeQueue ? `<div class="rel-actions">
-      ${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="btn" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">${ICON.check}<span>Approve</span></button>` : ""}
-      ${o.iApproved ? `<span class="rel-sub">You approved</span>` : ""}
-      ${o.mergeState === "CLEAN" ? `<button class="btn primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging it deploys these packages to dev.">${ICON.merge}<span>Merge release</span></button>` : ""}
-    </div>` : "";
-  const pkgs = o?.packages || [];
-  const real = pkgs.filter((p) => !p.dependencyOnly);
-  const deps = pkgs.length - real.length;
-  const sub = o ? `<div class="rel-sub">${pkgs.length} package${pkgs.length === 1 ? "" : "s"}${deps ? ` (${deps} dependency-only)` : ""} · opened ${ago(o.createdAt)} · updated ${ago(o.updatedAt)}</div>` : "";
-  const mineNums = new Set(r.mine.map((m) => m.number));
-  const mine = o ? `<div class="rel-mine"><span class="label">Your PRs in it · ${r.mine.length}</span>
-    ${r.mine.length ? r.mine.map((m) => `<div class="rel-pr"><a href="${esc(m.url)}" target="_blank" rel="noopener">#${m.number} ${esc(m.title)}</a>${m.packages.map((p) => `<span class="pkg">${esc(p)}</span>`).join("")}</div>`).join("")
-      : `<div class="rel-none">None of your PRs are in this release.</div>`}</div>` : "";
-  const all = real.length ? `<details><summary>All changes in ${real.length} package${real.length === 1 ? "" : "s"}</summary>
-    ${real.map((p) => `<span class="pkgname">${esc(p.name)} ${esc(p.from)} → ${esc(p.to)}</span><ul>${p.changes.map((c) =>
-      `<li class="${mineNums.has(c.pr) ? "mine-change" : ""}">${esc(c.text)} (<a href="https://github.com/${esc(r.repo)}/pull/${c.pr}" target="_blank" rel="noopener">#${c.pr}</a>)</li>`).join("")}</ul>`).join("")}
-    ${deps ? `<ul><li>${deps} dependency-only update${deps === 1 ? "" : "s"}</li></ul>` : ""}</details>` : "";
-  const last = r.last;
-  const deploy = `<div class="rel-deploy"><span class="label">Last release</span>
-    <div class="row">${last ? `<a href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a> merged ${ago(last.mergedAt)} · ${runPill(last.dev, "Dev deploy")}` : "No merged release yet"}</div>
-</div>`;
-  const folded = !releasesExpanded.has(r.key);
-  const fold = `<button class="rel-fold" type="button" data-rel-fold="${esc(r.key)}" aria-expanded="${!folded}" title="${folded ? "Show details" : "Hide details"}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
-  const mineNote = folded && r.mine.length ? `<span class="rel-sub">${r.mine.length} of yours</span>` : "";
-  return `<div class="rel${folded ? " folded" : ""}"><div class="rel-top">${fold}<span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span>${head}${mineNote}</div>${actions}${folded ? "" : `${sub}${mine}${all}${deploy}`}</div>`;
+  if (r.error) return `<div class="rel span2"><div class="rel-top"><span class="repo">${esc(r.key)}</span></div><div class="rel-none">Couldn't load: ${esc(r.error)}</div></div>`;
+  const o = r.open, last = r.last;
+  const title = (what, link) => `<div class="rel-top">${link}<span class="repo">${esc(r.key)}</span><span class="rel-sub">${esc(repoName)}</span><span class="rel-kind ${what === "Open release" ? "open" : "last"}">${what.replace(" release", "")}</span></div>`;
+
+  // Open release card: status badges, Approve or Merge, and (unfolded) what it ships.
+  let openCard;
+  if (!o) {
+    openCard = `<div class="rel">${title("Open release", "")}<div class="rel-none">No open release PR right now.</div></div>`;
+  } else {
+    const checks = !o.checks ? "" : o.checks === "SUCCESS" ? `<span class="pill ok">Checks pass</span>`
+      : o.checks === "FAILURE" || o.checks === "ERROR" ? `<span class="pill bad">Checks failing</span>` : `<span class="pill run">Checks running</span>`;
+    const approved = o.iApproved ? `<span class="pill ok">You approved</span>` : "";
+    const actions = o.inMergeQueue ? "" : `${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="btn" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">${ICON.check}<span>Approve</span></button>` : ""}
+      ${o.mergeState === "CLEAN" ? `<button class="btn primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging it deploys these packages to dev.">${ICON.merge}<span>Merge release</span></button>` : ""}`;
+    const pkgs = o.packages || [];
+    const real = pkgs.filter((p) => !p.dependencyOnly);
+    const deps = pkgs.length - real.length;
+    const mineNums = new Set(r.mine.map((m) => m.number));
+    const mine = `<div class="rel-mine"><span class="label">Your PRs in it · ${r.mine.length}</span>
+      ${r.mine.length ? r.mine.map((m) => `<div class="rel-pr"><a href="${esc(m.url)}" target="_blank" rel="noopener">#${m.number} ${esc(m.title)}</a>${m.packages.map((p) => `<span class="pkg">${esc(p)}</span>`).join("")}</div>`).join("")
+        : `<div class="rel-none">None of your PRs are in this release.</div>`}</div>`;
+    const all = real.length ? `<details><summary>All changes in ${real.length} package${real.length === 1 ? "" : "s"}</summary>
+      ${real.map((p) => `<span class="pkgname">${esc(p.name)} ${esc(p.from)} → ${esc(p.to)}</span><ul>${p.changes.map((c) =>
+        `<li class="${mineNums.has(c.pr) ? "mine-change" : ""}">${esc(c.text)} (<a href="https://github.com/${esc(r.repo)}/pull/${c.pr}" target="_blank" rel="noopener">#${c.pr}</a>)</li>`).join("")}</ul>`).join("")}
+      ${deps ? `<ul><li>${deps} dependency-only update${deps === 1 ? "" : "s"}</li></ul>` : ""}</details>` : "";
+    const folded = !releasesExpanded.has(r.key);
+    const fold = `<button class="rel-fold" type="button" data-rel-fold="${esc(r.key)}" aria-expanded="${!folded}" title="${folded ? "Show what it ships" : "Hide details"}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
+    openCard = `<div class="rel${folded ? " folded" : ""}">${title("Open release", fold)}
+      <div class="rel-line"><a href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number}</a><span class="rel-sub">${pkgs.length} package${pkgs.length === 1 ? "" : "s"}${deps ? ` (${deps} dependency-only)` : ""} · opened ${ago(o.createdAt)}</span></div>
+      <div class="rel-badges">${checks}${releaseStatus(o)}${approved}<span class="pill${r.mine.length ? " run" : ""}">${r.mine.length} of yours</span></div>
+      ${actions.trim() ? `<div class="rel-actions">${actions}</div>` : ""}
+      ${folded ? "" : `<div class="rel-details">${mine}${all}</div>`}</div>`;
+  }
+
+  // Last release card: when it merged, its dev deploy, and whether it reached prod.
+  const lastCard = last
+    ? `<div class="rel">${title("Last release", "")}
+        <div class="rel-line"><a href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a><span class="rel-sub">merged ${ago(last.mergedAt)}</span></div>
+        <div class="rel-badges">${runPill(last.dev, "Dev deploy")}${prodPill(last.prod)}</div></div>`
+    : `<div class="rel">${title("Last release", "")}<div class="rel-none">No merged release yet.</div></div>`;
+  return openCard + lastCard; // laid out by .rel-grid: open cards share a row, last cards share a row
 }
 
 function renderReleases() {

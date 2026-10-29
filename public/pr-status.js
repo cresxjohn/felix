@@ -64,5 +64,15 @@ window.PrStatus = (() => {
     return { cls: "", label: "Not ready to merge", title: `GitHub says ${(o.mergeState || "unknown").toLowerCase()}` };
   }
 
-  return { needsReview, claudeState, fixState, readyToMerge, releaseStatus };
+  // Whether the last release reached prod. `prod` is `last.prod` from /api/releases; null means unknown.
+  // Returns { cls, label, title, url } or null when there's nothing to say (no deployable packages).
+  function prodStatus(prod, ago) {
+    if (!prod || prod.state === "none") return null;
+    if (prod.state === "in-prod") return { cls: "ok", label: `In prod · ${ago(prod.run.at)}`, title: `All ${prod.total} deployable packages were promoted to prod`, url: prod.run.url };
+    if (prod.running) return { cls: "run", label: "Prod promotion running", url: prod.running.url };
+    if (prod.state === "partial") return { cls: "warn", label: `Partly in prod · ${prod.covered} of ${prod.total}`, title: "Some of its packages were promoted to prod" };
+    return { cls: "", label: "Not in prod yet", title: "Waits for the next prod promotion" };
+  }
+
+  return { needsReview, claudeState, fixState, readyToMerge, releaseStatus, prodStatus };
 })();
