@@ -22,7 +22,7 @@
 // POST /api/review/open       -> { key, where: "warp"|"app" } open a session on this Mac to continue by hand
 // POST /api/review-event      -> hook events from review sessions (hooks/report.sh)
 // POST /api/remove-me         -> { url } remove me from the PR's requested reviewers on GitHub
-// GET  /api/releases[?fresh=1] -> each repo's open release PR, my PRs in it, and the dev/rc/prod deploy runs
+// GET  /api/releases[?fresh=1] -> each repo's open release PR, my PRs in it, and the last release's dev deploy
 // POST /api/release/approve   -> { url } approve a release PR (changeset-release/main only)
 // POST /api/merge             -> { url } add my ready PR (or a ready release PR) to the merge queue (squash merge if the repo has no queue)
 // POST /api/merge/batch       -> { urls } the same for several PRs, one at a time; returns a result per PR
@@ -448,8 +448,9 @@ async function mergeBatch(urls) {
 
 // ---------- Releases ----------
 // Each repo keeps one open "chore: release main (changeset)" PR on changeset-release/main. Merging it runs
-// "1 - Merges to main", which deploys the released packages to dev; "4 - Platform promotion/release" is run
-// by hand to promote to rc and prod. The card shows the open release, my PRs in it, and those deploy runs.
+// "1 - Merges to main", which deploys the released packages to dev. The card shows the open release, my PRs
+// in it, and the last release's dev deploy. Prod promotions ("4 - Platform promotion/release") aren't tied to
+// one release, so they aren't shown here.
 const RELEASE_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     open: pullRequests(headRefName: "changeset-release/main", states: OPEN, first: 1, orderBy: { field: CREATED_AT, direction: DESC }) {
@@ -505,14 +506,12 @@ async function repoRelease({ key, repo }, login) {
     }));
   }
 
-  // Dev: the "1 - Merges to main" run for the last release's merge commit. RC and prod: the newest promotion run of each.
+  // Dev: the "1 - Merges to main" run for the last release's merge commit.
   let dev = null;
   if (last?.mergeCommit?.oid) {
     const runs = await (await github(`/repos/${repo}/actions/runs?head_sha=${last.mergeCommit.oid}&event=push&per_page=20`)).json();
     dev = runInfo((runs.workflow_runs || []).find((r) => r.name === "1 - Merges to main"));
   }
-  const promos = await (await github(`/repos/${repo}/actions/workflows/release.yml/runs?per_page=30`)).json();
-  const promo = (env) => runInfo((promos.workflow_runs || []).find((r) => new RegExp(`\\bto ${env} environment\\b`).test(r.display_title || "")));
 
   return {
     key, repo,
@@ -529,8 +528,6 @@ async function repoRelease({ key, repo }, login) {
     },
     mine,
     last: last && { number: last.number, url: last.url, mergedAt: last.mergedAt, dev },
-    rc: promo("rc"),
-    prod: promo("prod"),
   };
 }
 

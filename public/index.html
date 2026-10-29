@@ -1337,7 +1337,7 @@ function render() {
 
 // ---------- Releases ----------
 // One card per repo: the open "chore: release main (changeset)" PR, my PRs in it, and where the last
-// release got to (dev deploy from "1 - Merges to main", prod from "4 - Platform promotion/release").
+// release got to (its dev deploy from "1 - Merges to main").
 const REL_OPEN_KEY = "open-prs:releases-open";
 let releases = null, releasesError = null;
 // Cards start folded; the ones you open are remembered.
@@ -1400,8 +1400,7 @@ function releaseCard(r) {
   const last = r.last;
   const deploy = `<div class="rel-deploy"><span class="label">Last release</span>
     <div class="row">${last ? `<a href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a> merged ${ago(last.mergedAt)} · ${runPill(last.dev, "Dev deploy")}` : "No merged release yet"}</div>
-    ${r.rc ? `<div class="row">${runPill(r.rc, "RC promotion")}</div>` : ""}
-    <div class="row">${runPill(r.prod, "Prod promotion")}</div></div>`;
+</div>`;
   const folded = !releasesExpanded.has(r.key);
   const fold = `<button class="rel-fold" type="button" data-rel-fold="${esc(r.key)}" aria-expanded="${!folded}" title="${folded ? "Show details" : "Hide details"}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`;
   const mineNote = folded && r.mine.length ? `<span class="rel-sub">${r.mine.length} of yours</span>` : "";
