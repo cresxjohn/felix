@@ -6,6 +6,7 @@ import { relText, timeText } from "./felix-facts.mjs";
 import { dayOf } from "./felix-notes.mjs";
 import { shiftReply } from "./shift.mjs";
 import { addDays, ymd } from "./tasks.mjs";
+import { findDates, findItems, nextYearFor, parseDay, splitItems } from "./felix-personal.mjs";
 
 const PR_LINKS = { fm: "https://github.com/purepm/frontend-monorepo/pull/", bm: "https://github.com/purepm/backend-monorepo/pull/" };
 const LIST_MAX = 3;
@@ -28,15 +29,16 @@ const REPEAT_SAID = {
  * @typedef {import("./felix-facts.mjs").Fact} Fact
  * @typedef {{ id: string, action: "merge" | "review" | "undo-apply" | "forget" | "rsvp" | "learn-phrase" | "fix", url?: string, ref?: string, tool?: string,
  *   ids?: string[], eventId?: string, response?: string, note?: string, phrase?: string, command?: string, label: string }} Confirm
- * @typedef {{ text: string, facts?: Fact[], navigate?: string, settings?: Record<string, unknown>,
+ * @typedef {{ text: string, facts?: Fact[], navigate?: string, link?: { url: string, name: string }, settings?: Record<string, unknown>,
  *   music?: string | { action: string, on?: boolean, mode?: string, query?: string, kind?: string }, confirm?: Omit<Confirm, "id">,
- *   changes?: import("./felix-workbench.mjs").Change[], remembered?: string[], tasks?: boolean,
+ *   changes?: import("./felix-workbench.mjs").Change[], remembered?: string[], tasks?: boolean, personal?: boolean,
  *   undo?: { label: string, task?: { remove?: string, reopen?: string, removeNext?: string | null } } }} Reply `changes` are the
  *   workbench's, waiting for Apply; `remembered` names the memory cards the AI saved; `undo` says how to take back what a
  *   command just did here.
  * @typedef {{ read: (name: string, arg?: object) => Promise<Fact>, say: (key: string, wordings: string[]) => string,
  *   lastFacts: () => Fact[], timeZone?: string, lastApply?: () => Promise<import("./felix-guard.mjs").ApplyStatus | null>,
- *   now?: () => number, quiet?: boolean, notes?: import("./felix-notes.mjs").Notes, learner?: ReturnType<typeof import("./felix-notes.mjs").createLearner> }} AnswerContext
+ *   now?: () => number, quiet?: boolean, notes?: import("./felix-notes.mjs").Notes, learner?: ReturnType<typeof import("./felix-notes.mjs").createLearner>,
+ *   personal?: ReturnType<typeof import("./felix-personal.mjs").createPersonalFelix> }} AnswerContext `personal` reaches your Personal cards.
  *   `lastApply` is the last change Felix applied to himself; `notes` and `learner` are what he's learned from you;
  *   `quiet` is set in quiet hours (or with friend mode off), when he doesn't bring personal things up on his own.
  */
@@ -481,6 +483,406 @@ async function memoryForgetLast(ctx) {
   return { text: "There's nothing I've just noted to forget. Say what it's about, like \"forget my interview\"." };
 }
 
+
+// ---------- Personal cards ----------
+// Lists, habits, the journal, important dates, time off and My day, by voice and chat. Short replies, made to be
+// spoken. Anything that changes a card says personal: true, so the open cards load again.
+
+const NO_PERSONAL = { text: "Your Personal cards aren't set up here." };
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** The first letter in capitals: "eggs" is "Eggs". @param {string} t */
+const capFirst = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+/** An item as it goes on a list: your words, with a capital first letter when you said it all in small letters. */
+const itemWords = (t) => (t === t.toLowerCase() ? capFirst(t) : t);
+/** "today", "tomorrow" or "in 5 days". @param {number} n */
+const whenSaid = (n) => (n <= 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`);
+/** "Tuesday, Nov 3" from YYYY-MM-DD. @param {string} day */
+const daySaid = (day) => new Date(`${day}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+/** "November 3" from a month and day. */
+const monthDaySaid = (month, day) => `${MONTH_NAMES[month - 1]} ${day}`;
+/** "October 31 to November 2", or one day. */
+const rangeSaid = (from, to) => (from === to ? daySaid(from) : `${monthDaySaid(Number(from.slice(5, 7)), Number(from.slice(8)))} to ${monthDaySaid(Number(to.slice(5, 7)), Number(to.slice(8)))}`);
+
+/**
+ * 1st, 2nd, 3rd, 11th, 21st.
+ * @param {number} n
+ * @returns {string}
+ */
+export function ordinal(n) {
+  const v = n % 100;
+  return `${n}${v >= 11 && v <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th"}`;
+}
+
+/**
+ * Adds what you said to a list you named: "add eggs and milk to groceries".
+ * @param {AnswerContext & { personal?: any, said?: string }} ctx
+ * @param {{ list: string, items: string }} slots
+ * @returns {Reply & { personal?: boolean }}
+ */
+function listsAdd(ctx, { list, items }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const l = p.listNamed(list);
+  if (!l) return { text: `You don't have a ${list} list.` };
+  const things = splitItems(inOwnWords(ctx.said, items)).map(itemWords);
+  if (!things.length) return { text: `What should I add to ${l.name}?` };
+  const names = p.addItems(l.id, things.join("\n")).map((i) => i.text.toLowerCase());
+  const are = names.length === 1 ? "is" : "are";
+  return {
+    text: ctx.say("lists.add", [`Added ${listText(names)} to ${l.name}.`, `${capFirst(listText(names))} ${are} on ${l.name} now.`, `Got it: ${listText(names)} on ${l.name}.`]),
+    personal: true,
+  };
+}
+
+/**
+ * The open items you named, each found once, or what to ask when one could be on two lists.
+ * @param {any} p
+ * @param {string} items
+ * @param {string} list
+ * @returns {{ found?: Array<{ id: string, text: string, list: string }>, ask?: string, missing?: string }}
+ */
+function itemsMeant(p, items, list, { ticked = false } = {}) {
+  const open = p.known().items.filter((i) => ticked || !i.done);
+  const found = [];
+  for (const thing of splitItems(items)) {
+    const hits = findItems(thing, open, list || null);
+    if (!hits.length) return { missing: thing };
+    if (hits.length > 1) return { ask: `Which ${thing}? ${orList(hits.map((h) => `${h.text} on ${h.list}`))}.` };
+    found.push(hits[0]);
+  }
+  return { found };
+}
+
+/**
+ * Ticks items off: "got the eggs", "tick off sunscreen on packing".
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ items: string, list: string }} slots
+ * @returns {Reply & { personal?: boolean }}
+ */
+function listsTick(ctx, { items, list }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const m = itemsMeant(p, items, list);
+  if (m.ask) return { text: m.ask };
+  if (m.missing) return { text: `I couldn't find ${m.missing} on ${list || "your lists"}.` };
+  for (const i of m.found) p.tickItem(i.id);
+  const names = listText(m.found.map((i) => i.text.toLowerCase()));
+  const where = [...new Set(m.found.map((i) => i.list))];
+  return { text: ctx.say("lists.tick", [`Ticked off ${names}.`, `Crossed ${names} off ${listText(where)}.`, `Nice, ${names} done.`]), personal: true };
+}
+
+/**
+ * Takes items off a list: "remove milk from groceries".
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ items: string, list: string }} slots
+ * @returns {Reply & { personal?: boolean }}
+ */
+function listsRemove(ctx, { items, list }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const m = itemsMeant(p, items, list, { ticked: true });
+  if (m.ask) return { text: m.ask };
+  if (m.missing) return { text: `I couldn't find ${m.missing} on ${list}.` };
+  for (const i of m.found) p.removeItem(i.id);
+  return { text: `Took ${listText(m.found.map((i) => i.text.toLowerCase()))} off ${list}.`, personal: true };
+}
+
+/**
+ * What's left on a list.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ list: string }} slots
+ * @returns {Reply}
+ */
+function listsShow(ctx, { list }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const l = p.listNamed(list);
+  if (!l) return { text: `You don't have a ${list} list.` };
+  const all = p.items(l.id);
+  const open = all.filter((i) => !i.done).map((i) => i.text.toLowerCase());
+  if (!all.length) return { text: `Nothing on ${l.name} yet.` };
+  if (!open.length) return { text: `Everything on ${l.name} is ticked off.` };
+  const named = open.length > 6 ? `${open.slice(0, 6).join(", ")} and ${open.length - 6} more` : listText(open);
+  return { text: `${l.name} has ${plural(open.length, "thing")} left: ${named}.` };
+}
+
+/**
+ * Ticks a habit for today: "I drank water", "done with reading". Asks which when you could mean more than one.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ ids: string }} slots
+ * @returns {Reply & { personal?: boolean }}
+ */
+function habitsCheck(ctx, { ids }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const board = p.habits().habits;
+  const meant = String(ids).split(",").map((id) => board.find((h) => h.id === id)).filter(Boolean);
+  if (!meant.length) return { text: "I couldn't find that habit." };
+  if (meant.length > 1) return { text: `Which one? ${orList(meant.map((h) => h.name))}.` };
+  const [was] = meant;
+  const streakNote = (h) => (h.streak > 1 ? `, a ${h.streak}-day streak` : "");
+  if (was.today.done) return { text: `${was.name} is already done today${streakNote(was)}.` };
+  const h = p.checkHabit(was.id);
+  if (!h.today.done) return { text: `${h.name}: ${h.today.count} of ${h.today.goal} today.`, personal: true };
+  return { text: ctx.say("habits.check", [`Nice! ${h.name} is done for today${streakNote(h)}.`, `${h.name}, done${streakNote(h)}.`, `Ticked ${h.name} for today${streakNote(h)}.`]), personal: true };
+}
+
+/**
+ * How today's habits are going.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @returns {Reply}
+ */
+function habitsStatus(ctx) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const list = p.habits().habits;
+  if (!list.length) return { text: "You don't have any habits yet. Add one on the Habits card." };
+  const done = list.filter((h) => h.today.done).map((h) => h.name.toLowerCase());
+  const left = list.filter((h) => !h.today.done).map((h) => h.name.toLowerCase());
+  if (!left.length) return { text: `All ${list.length} done today. Nice work!` };
+  if (!done.length) return { text: `None done yet today. Still to go: ${listText(left)}.` };
+  return { text: `${done.length} of ${list.length} done today: ${listText(done)}. Still to go: ${listText(left)}.` };
+}
+
+/**
+ * A habit's streak: "what's my reading streak".
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ what: string, ids: string }} slots
+ * @returns {Reply}
+ */
+function habitsStreak(ctx, { what, ids }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const board = p.habits().habits;
+  const meant = String(ids || "").split(",").map((id) => board.find((h) => h.id === id)).filter(Boolean);
+  if (!meant.length) return { text: `I don't see a habit like ${what}.` };
+  if (meant.length > 1) return { text: `Which one? ${orList(meant.map((h) => h.name))}.` };
+  const [h] = meant;
+  if (h.streak) return { text: `Your ${h.name.toLowerCase()} streak is ${plural(h.streak, "day")}.${h.today.done ? "" : " Tick it today to keep it going."}` };
+  return { text: h.best ? `No ${h.name.toLowerCase()} streak right now. Your best was ${plural(h.best, "day")}.` : `No ${h.name.toLowerCase()} streak yet. Tick it today to start one.` };
+}
+
+/**
+ * Adds a line to today's journal, after what's there. The line isn't said back.
+ * @param {AnswerContext & { personal?: any, said?: string }} ctx
+ * @param {{ text: string }} slots
+ * @returns {Reply & { personal?: boolean }}
+ */
+function journalAdd(ctx, { text }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const line = capFirst(inOwnWords(ctx.said, text).trim());
+  if (!line) return { text: "What should I write in your journal?" };
+  p.journalAppend(line);
+  return { text: ctx.say("journal.add", ["Added to today's journal.", "Noted in your journal.", "It's in today's journal."]), personal: true };
+}
+
+/**
+ * A date's next time in words: "today", "tomorrow", or "on Tuesday, Nov 3, in 4 days", with the age or anniversary.
+ * @param {{ kind: string, title: string, next: { on: string, inDays: number, years: number | null } }} d
+ * @returns {string}
+ */
+function dateLine(d) {
+  const n = d.next.inDays;
+  const when = n === 0 ? "today" : n === 1 ? "tomorrow" : `on ${daySaid(d.next.on)}, in ${n} days`;
+  const years = d.next.years ? (d.kind === "birthday" ? ` Turns ${d.next.years}.` : d.kind === "anniversary" ? ` It's the ${ordinal(d.next.years)}.` : "") : "";
+  return `${d.title} is ${when}.${years}`;
+}
+
+/**
+ * What's coming up in the next 60 days.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @returns {Reply}
+ */
+function datesUpcoming(ctx) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const v = p.datesView({ ahead: 60, limit: 3 });
+  if (!v.all.length) return { text: "You don't have any important dates yet. Say something like \"remind me Lola's birthday is November 3\"." };
+  if (!v.upcoming.length) return { text: v.later ? `Nothing in the next 60 days. Next is ${v.later.title}, ${daySaid(v.later.next.on)}.` : "Nothing coming up." };
+  return { text: `Coming up: ${listText(v.upcoming.map((d) => `${d.title} ${whenSaid(d.next.inDays)}`))}.` };
+}
+
+/**
+ * When one date is: "when is Mama's birthday".
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ what: string }} slots
+ * @returns {Reply}
+ */
+function datesWhen(ctx, { what }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const found = findDates(what, p.datesView({ ahead: 366, limit: 1 }).all);
+  if (!found.length) return { text: `I don't have ${what} saved. Say "remind me ${what} is" and the day, and I'll keep it.` };
+  if (found.length > 1) return { text: `Which one? ${orList(found.map((d) => d.title))}.` };
+  const [d] = found;
+  if (!d.next) return { text: `${d.title} was on ${monthDaySaid(d.month, d.day)}, ${d.year}.` };
+  return { text: dateLine(d) };
+}
+
+/**
+ * Saves a date you told Felix: "remind me Lola's birthday is November 3".
+ * @param {AnswerContext & { personal?: any, said?: string }} ctx
+ * @param {{ title: string, kind: string, date: string }} slots
+ * @returns {Reply & { personal?: boolean }}
+ */
+function datesAdd(ctx, { title, kind, date }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const d = parseDay(date);
+  if (!d) return { text: "I didn't catch the day. Try \"November 3\"." };
+  const name = capFirst(inOwnWords(ctx.said, title).replace(/^the /i, "").trim());
+  const today = p.today();
+  const year = kind === "event" ? d.year || nextYearFor(d, today) : d.year;
+  if (findDates(name, p.datesView({ ahead: 366, limit: 1 }).all).some((x) => x.title.toLowerCase() === name.toLowerCase())) {
+    return { text: `You already have ${name} saved. Change it on the Important dates card.` };
+  }
+  try {
+    const added = p.addDate({ kind, title: name, month: d.month, day: d.day, year });
+    const when = added.next ? ` That's ${whenSaid(added.next.inDays)}.` : "";
+    return { text: `Got it: ${added.title}, ${monthDaySaid(d.month, d.day)}.${when}`, personal: true };
+  } catch (e) {
+    return { text: e.code === "input" ? e.message : "I couldn't save that date." };
+  }
+}
+
+/**
+ * Your time off, or what's stopping Felix from reading it.
+ * @param {any} p
+ * @returns {Promise<{ v?: any, reply?: Reply }>}
+ */
+async function timeoffOf(p) {
+  try {
+    const v = await p.timeoff();
+    if (v.needsMe) return { reply: { text: "Pick yourself on the My time off card first, so I know which leave is yours." } };
+    return { v };
+  } catch {
+    return { reply: { text: "I can't reach the vacation tracker right now." } };
+  }
+}
+
+/**
+ * Your next break.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @returns {Promise<Reply>}
+ */
+async function timeoffNext(ctx) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const { v, reply } = await timeoffOf(p);
+  if (reply) return reply;
+  const b = v.next;
+  if (!b) return { text: `No break in the next ${v.ahead >= 365 ? "year" : v.ahead >= 180 ? "6 months" : `${v.ahead} days`}.` };
+  if (b.now) return { text: `You're on a break now. You're back on ${daySaid(addDays(b.to, 1))}.` };
+  const why = b.holidays.length ? ` It's for ${listText(b.holidays.map((h) => h.name || "a holiday"))}.` : b.kinds.length ? ` That's your ${listText(b.kinds)}.` : "";
+  return { text: `Your next break is ${rangeSaid(b.from, b.to)}, ${whenSaid(b.inDays)}: ${plural(b.days, "day")} off.${why}` };
+}
+
+/**
+ * How many days off you've taken this year.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @returns {Promise<Reply>}
+ */
+async function timeoffUsed(ctx) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  const { v, reply } = await timeoffOf(p);
+  if (reply) return reply;
+  if (!v.year.total) return { text: "You haven't taken any leave this year yet." };
+  return { text: `You've taken ${plural(v.year.total, "day")} off this year: ${listText(v.year.kinds.map((k) => `${k.days} ${k.kind}`))}.` };
+}
+
+/**
+ * The weather, today or tomorrow, or whether it'll rain.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ when: string, rain: boolean }} slots
+ * @returns {Promise<Reply>}
+ */
+async function mydayWeather(ctx, { when, rain }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  let w;
+  try { w = (await p.myday()).weather; } catch { w = null; }
+  if (!w) return { text: "I can't get the weather right now." };
+  const old = w.stale ? " That's from a little while ago." : "";
+  if (when === "tomorrow") {
+    const day = addDays(w.now.time.slice(0, 10), 1);
+    const hours = w.hours.filter((h) => h.time.startsWith(day));
+    if (!hours.length) return { text: "I don't have tomorrow's weather yet." };
+    const temps = hours.map((h) => h.temp);
+    const wet = Math.max(...hours.map((h) => h.rain || 0));
+    const skies = hours.map((h) => h.sky);
+    const sky = skies.sort((a, b) => skies.filter((x) => x === b).length - skies.filter((x) => x === a).length)[0].toLowerCase();
+    if (rain) return { text: `${wet >= 50 ? "Likely" : wet >= 20 ? "Maybe" : "Probably not"}: up to a ${wet}% chance of rain tomorrow.${old}` };
+    return { text: `Tomorrow in ${w.place}: ${Math.round(Math.min(...temps))}° to ${Math.round(Math.max(...temps))}°, mostly ${sky}${wet >= 20 ? `, up to a ${wet}% chance of rain` : ""}.${old}` };
+  }
+  const chance = w.today.rain;
+  if (rain) {
+    if (chance === null) return { text: `It's ${w.now.sky.toLowerCase()} right now. I don't have a rain chance for today.${old}` };
+    return { text: `${chance >= 50 ? "Likely" : chance >= 20 ? "Maybe" : "Probably not"}: a ${chance}% chance of rain today.${old}` };
+  }
+  const wet = chance !== null && chance >= 20 ? `, with a ${chance}% chance of rain` : "";
+  return { text: `It's ${Math.round(w.now.temp)}° and ${w.now.sky.toLowerCase()} in ${w.place}. Today's high is ${Math.round(w.today.high)}°, low ${Math.round(w.today.low)}°${wet}.${old}` };
+}
+
+/**
+ * Whether today or tomorrow is a holiday, or when the next one is.
+ * @param {AnswerContext & { personal?: any }} ctx
+ * @param {{ day: string }} slots
+ * @returns {Promise<Reply>}
+ */
+async function mydayHoliday(ctx, { day }) {
+  const p = ctx.personal;
+  if (!p) return NO_PERSONAL;
+  let v;
+  try { v = await p.myday(); } catch { v = null; }
+  const h = v?.holidays;
+  if (!h || h.error) return { text: "I can't check the holidays right now." };
+  const name = (x) => x.name || "a holiday";
+  // Without a name (the calendar bridge can't read the holiday calendar yet), just the day.
+  const next = !h.next ? "I don't see one in the next three months."
+    : h.next.name ? `The next one is ${h.next.name}, ${daySaid(h.next.day)}.` : `The next holiday is ${daySaid(h.next.day)}.`;
+  if (day === "today") return { text: h.today.length ? `Yes, today is ${listText(h.today.map(name))}.` : `No, today isn't a holiday. ${next}` };
+  if (day === "tomorrow") {
+    const tomorrow = addDays(v.today, 1);
+    return { text: h.next?.day === tomorrow ? `Yes, tomorrow is ${name(h.next)}.` : `No, tomorrow isn't a holiday. ${next}` };
+  }
+  return { text: h.next ? `The next holiday is ${name(h.next)}, ${daySaid(h.next.day)}, ${whenSaid(Math.round((Date.parse(`${h.next.day}T12:00:00Z`) - Date.parse(`${v.today}T12:00:00Z`)) / 86400e3))}.` : "I don't see a holiday in the next three months." };
+}
+
+/**
+ * What's safe to spend, from Wais.
+ * @param {AnswerContext & { wais?: { call: Function } }} ctx
+ * @returns {Promise<Reply>}
+ */
+async function waisSafe(ctx) {
+  if (!ctx.wais) return { text: "Wais isn't connected here." };
+  let s;
+  try { s = await ctx.wais.call("safe_to_spend", {}); } catch (e) { return { text: `I couldn't reach Wais: ${e.message}` }; }
+  const span = s.period?.id === "payday" && s.payday ? `until payday on ${daySaid(s.payday)}` : `over the ${String(s.period?.label || "period").toLowerCase()}`;
+  const short = s.runsShortOn ? ` Heads up: money runs short on ${daySaid(s.runsShortOn)}.` : "";
+  return { text: `You can safely spend ${s.safeToSpend.formatted} ${span}.${short}` };
+}
+
+/**
+ * The bills due, review and late in Wais, the ones its card names first.
+ * @param {AnswerContext & { wais?: { call: Function } }} ctx
+ * @returns {Promise<Reply>}
+ */
+async function waisTasks(ctx) {
+  if (!ctx.wais) return { text: "Wais isn't connected here." };
+  let t;
+  try { t = await ctx.wais.call("tasks", {}); } catch (e) { return { text: `I couldn't reach Wais: ${e.message}` }; }
+  if (!t.count) return { text: "No bills to pay right now." };
+  const when = (i) => (i.state === "late" ? `${plural(Math.abs(i.days), "day")} late` : i.days === 0 ? "today" : `in ${plural(i.days, "day")}`);
+  // A bill is money out, so Wais writes it with a minus; it's said without one ("₱287.85", not "minus ₱287.85").
+  const owed = (i) => String(i.formatted || "").replace(/^[-−\u2060\s]+/u, "");
+  const named = (t.items || []).filter((i) => i.onCard).slice(0, 3).map((i) => `${i.title}, ${owed(i)}, ${when(i)}`);
+  const more = t.count > named.length ? ` And ${t.count - named.length} more.` : "";
+  return { text: `${plural(t.count, "bill")} to see to: ${named.join("; ")}.${more}` };
+}
+
 /** Each local command's answer, by intent. */
 /**
  * The words you used, in your own capitals: commands match in lower case, but a task should keep "Review PMHUB-123".
@@ -822,6 +1224,9 @@ export const ANSWERS = {
     return { text: ctx.say("mode", [`Switched to ${name} mode.`, `Here's ${name} mode.`, `${name} mode it is.`]), settings: { mode } };
   },
   navigate: (ctx, { route, name }) => ({ text: ctx.say("navigate", [`Opening ${name}.`, `Here's ${name}.`, `Taking you to ${name}.`]), navigate: route }),
+  link: (ctx, { url, name }) => ({ text: ctx.say("link", [`Opening ${name}.`, `Here's ${name}.`]), link: { url, name } }),
+  // Moving cards around isn't built yet, so Felix says so plainly and opens the layout settings there are.
+  layout: (ctx) => ({ text: ctx.say("layout", ["Moving cards around isn't built yet. Here are the layout settings there are: full width and Fit to screen."]), navigate: "/settings#home" }),
   merge,
   "merge.which": mergeWhich,
   review,
@@ -838,5 +1243,22 @@ export const ANSWERS = {
   "tasks.add": tasksAdd,
   "tasks.list": tasksList,
   "tasks.done": tasksDone,
+  "lists.add": listsAdd,
+  "lists.tick": listsTick,
+  "lists.remove": listsRemove,
+  "lists.show": listsShow,
+  "habits.check": habitsCheck,
+  "habits.status": habitsStatus,
+  "habits.streak": habitsStreak,
+  "journal.add": journalAdd,
+  "dates.upcoming": datesUpcoming,
+  "dates.when": datesWhen,
+  "dates.add": datesAdd,
+  "timeoff.next": timeoffNext,
+  "timeoff.used": timeoffUsed,
+  "myday.weather": mydayWeather,
+  "myday.holiday": mydayHoliday,
+  "wais.safe": waisSafe,
+  "wais.tasks": waisTasks,
   notyet: (ctx, { what }) => ({ text: `"${what.replace(/^./, (ch) => ch.toUpperCase())}" isn't built yet. It comes with the Slack and calendar part of Felix.` }),
 };

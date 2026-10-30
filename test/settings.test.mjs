@@ -23,6 +23,11 @@ const CARD_DEFAULTS = {
   tasksView: "last", ptasksView: "last", tasksUpcoming: true, tasksOverdue: "work", tasksSomeday: true, tasksDone: true, tasksDoneToday: true,
   tasksNewAt: "top", tasksPriority: 0, tasksAtPm: 7, tasksLabels: true, tasksLinks: 2, tasksSubs: true, tasksRepeat: true, tasksDrag: true,
   tasksReminders: true, tasksSound: "Glass", tasksRefresh: 0,
+  listsStart: "last", listsNewAt: "bottom", listsTicked: "bottom",
+  habitsDots: "last7", habitsWeekStart: 1, habitsStreak: true,
+  journalPrompt: true, journalMood: true, datesAhead: 90, datesRows: 4,
+  mydayPlace: "manila", mydayHours: true, mydayHoliday: true, timeoffMe: "", timeoffAhead: 180, timeoffYear: true,
+  waisEnv: "dev", waisPath: "/Users/cresjohnlazo/dev/wais-app/apps/web/mcp/dist/wais-mcp.mjs", waisChoices: "",
 };
 
 const DEFAULTS = {

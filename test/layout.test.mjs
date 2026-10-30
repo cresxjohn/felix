@@ -104,13 +104,14 @@ test("cards.js defines a card for every spot in both layouts, and every card to 
   }
 });
 
-test("Felix's check-ins and Tasks are the live personal cards, so personal mode loads only those", () => {
-  assert.equal(LAYOUTS.personal.filter((s) => !CARDS[s.id].soon).map((s) => s.id).sort().join(", "), "buddy, ptasks");
+test("every personal card is live, Wais included (it keeps the bills card's spot and id)", () => {
+  assert.equal(LAYOUTS.personal.filter((s) => !CARDS[s.id].soon).map((s) => s.id).sort().join(", "), "bills, buddy, dates, habits, journal, lists, myday, ptasks, timeoff");
+  assert.equal(CARDS.bills.title, "Wais");
 });
 
 test("every live card has its own group in Settings (both Tasks cards share one, and Felix's is Felix as a friend)", () => {
   const groups = new Set(GROUPS.map((g) => g.id));
-  const shared = { ptasks: "tasks", buddy: "friend" };
+  const shared = { ptasks: "tasks", buddy: "friend", bills: "wais" };
   for (const [, layout] of MODES) {
     for (const s of layout.filter((x) => !CARDS[x.id].soon)) {
       const id = shared[s.id] || s.id;

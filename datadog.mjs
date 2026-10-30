@@ -3,13 +3,13 @@
 // No API key is needed. See SETUP.md section 10.
 import { codedError, readKeychain } from "./keychain.mjs";
 
-const SITE = process.env.DD_SITE || "us5.datadoghq.com";
+export const SITE = process.env.DD_SITE || "us5.datadoghq.com";
 const KEYCHAIN_SERVICE = "cmd-center-datadog-app";
 // My Datadog user. The token can't read /current_user, so "me" is set here.
 const ME = process.env.DD_USER_ID || "17da12a7-bf09-11f0-9375-4e0d9e19fc45";
 // The two teams take turns: the Philippines covers the day (8 AM to 10 PM Manila), the Americas the night.
 // `mine` marks where to look for my next shift.
-const SCHEDULES = [
+export const SCHEDULES = [
   { key: "ph", name: "Philippines", full: "Kastl Incident Commanders (Philippines)", id: "1a2e4a4e-f27a-424c-999e-1cb8d6062c85", mine: true },
   { key: "americas", name: "Americas", full: "PURE Incident Commanders Schedule", id: "a39cd3b9-f39f-4c6c-8c2f-017fca628d36" },
 ];

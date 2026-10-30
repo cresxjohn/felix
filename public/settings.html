@@ -497,6 +497,7 @@ const CONNECTIONS = [
   { id: "jira", name: "Jira", find: "jira atlassian token board sprint", card: "My Jira Board" },
   { id: "datadog", name: "Datadog", find: "datadog on call incident commander token", card: "Incident Commander" },
   { id: "google", name: "Google Calendar", find: "google calendar bridge apps script vacation tracker out of office invites", card: "Calendar and Team out of office" },
+  { id: "wais", name: "Wais", find: "wais money budget safe to spend token", card: "Wais" },
   { id: "slack", name: "Slack", find: "slack token attendance post", off: "Not connected. Until it is, Start my day gives you its messages to copy and post yourself." },
 ];
 let connected = null;
@@ -605,7 +606,7 @@ function appGroupHtml() {
  */
 const NAV = [
   { title: "General", ids: ["home", "refresh"] },
-  { title: "Cards", ids: ["ic", "jira", "prs", "ai", "cal", "slack", "ooo", "tasks"] },
+  { title: "Cards", ids: ["ic", "jira", "prs", "ai", "cal", "slack", "ooo", "tasks", "myday", "timeoff", "lists", "habits", "dates", "journal", "wais"] },
   { title: "Felix", ids: ["felix", "friend", "memory"] },
   { title: "Music", ids: ["music"] },
   { title: "Work day", ids: ["shift"] },

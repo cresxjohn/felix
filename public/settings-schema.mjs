@@ -20,6 +20,8 @@
  * `voices` makes a text setting a menu of this Mac's own voices. `hidden` keeps a setting off the Settings page: one
  * Felix sets himself, like how long he's paused.
  */
+import { PLACES } from "./places.mjs";
+
 const UNTIL = /^$|^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const MODEL_ID = /^[\w.:\-[\]=,]{1,100}$/;
 // Typed text may not carry control characters; a box of lines may carry line breaks.
@@ -114,6 +116,13 @@ export const GROUPS = Object.freeze([
   { id: "slack", title: "Slack", about: "Where people mentioned you, what you saved for later, and the channels you watch, from Slack, as you." },
   { id: "ooo", title: "Team out of office", about: "Who on your team is on leave, from the Tech Team Vacation Tracker." },
   { id: "tasks", title: "Tasks", about: "The Work and Personal task cards. Tasks are saved on this Mac." },
+  { id: "lists", title: "Lists", about: "The Personal Lists card: groceries, packing, a wishlist and any list you make. Saved on this Mac." },
+  { id: "myday", title: "My day", about: "The Personal My day card: the weather where you are, the next Philippine holiday, and today on your personal calendar." },
+  { id: "timeoff", title: "My time off", about: "The Personal My time off card: your next break and the leave you've booked, from the Tech Team Vacation Tracker." },
+  { id: "journal", title: "Journal", about: "The Personal Journal card: a few lines a day, with a gentle prompt. It stays on this Mac and is never sent anywhere." },
+  { id: "dates", title: "Important dates", about: "The Personal Important dates card: birthdays, anniversaries and countdowns you add. Saved on this Mac." },
+  { id: "wais", title: "Wais", about: "The Personal Wais card: what's safe to spend and the outlook, read-only from your Wais account. Your Wais bills show in the Personal Tasks card. Connect it from the card." },
+  { id: "habits", title: "Habits", about: "The Personal Habits card: small daily habits you choose, with today's tick and your streak. Saved on this Mac." },
   { id: "music", title: "Music", about: "The player in the bottom bar. Sign in to Spotify and your music plays right here in Felix." },
   { id: "felix", title: "Felix", about: "Your buddy in the bottom bar. Type a question or a command; Felix answers from your cards' data and checks every fact first." },
   { id: "voice", title: "Voice and presence", about: "How Felix sounds, how you cut in or hold a key to talk, and when he speaks up on his own or stays quiet. The pill in the top bar shows what he's doing, and mutes or pauses him." },
@@ -159,7 +168,7 @@ export const SETTINGS = Object.freeze([
   { key: "cardUpdated", group: "home", part: "Cards", label: "When cards were updated", type: "boolean", default: true, help: "\"Updated 2m ago\" at the foot of each card." },
   {
     key: "autoRefresh", group: "refresh", label: "Auto refresh", type: "boolean", default: true,
-    help: "Reloads the live cards on a timer while the window is in view. The ring around the refresh button shows how long until the next reload.",
+    help: "Reloads the live cards on a timer while the window is in view, in Work and Personal. The ring around the refresh button shows how long until the next reload.",
   },
   {
     key: "refreshMinutes", group: "refresh", label: "Refresh every", type: "choice", default: 1, requires: "autoRefresh",
@@ -349,6 +358,74 @@ export const SETTINGS = Object.freeze([
     options: [...SOUNDS.map((s) => ({ value: s, label: s })), { value: "none", label: "No sound" }],
   },
   cardRefresh("tasks", "the Work Tasks card"),
+  // ---------- Lists (Personal) ----------
+  {
+    key: "listsStart", group: "lists", label: "Opens on", type: "choice", default: "last", help: "The list the card shows when it loads.",
+    options: [{ value: "last", label: "The one I picked last" }, { value: "first", label: "The first list" }],
+  },
+  {
+    key: "listsNewAt", group: "lists", label: "New items go", type: "choice", default: "bottom", help: "Where an item you add lands on the list.",
+    options: [{ value: "bottom", label: "At the bottom" }, { value: "top", label: "At the top" }],
+  },
+  {
+    key: "listsTicked", group: "lists", label: "Ticked items", type: "choice", default: "bottom",
+    help: "Where an item goes when you tick it off. Clear ticked takes them off the list.",
+    options: [{ value: "bottom", label: "Move to the bottom" }, { value: "stay", label: "Stay where they are" }],
+  },
+  // ---------- Habits (Personal) ----------
+  {
+    key: "habitsDots", group: "habits", label: "Days on each row", type: "choice", default: "last7",
+    help: "The small dots by each habit: one per day, filled when you kept it.",
+    options: [{ value: "last7", label: "The last 7 days" }, { value: "week", label: "This week" }, { value: "off", label: "None" }],
+  },
+  {
+    key: "habitsWeekStart", group: "habits", label: "Week starts on", type: "choice", default: 1, only: { habitsDots: ["week"] },
+    help: "The first day of the week, for This week.", options: [{ value: 1, label: "Monday" }, { value: 0, label: "Sunday" }],
+  },
+  // ---------- My day (Personal) ----------
+  {
+    key: "mydayPlace", group: "myday", label: "Weather for", type: "choice", default: "manila", help: "Where the weather is for. Only this place's map position is sent to the weather service.",
+    options: PLACES.map((p) => ({ value: p.id, label: p.name })),
+  },
+  { key: "mydayHours", group: "myday", label: "Next hours", type: "boolean", default: true, help: "Shows the weather for the next few hours under today's." },
+  { key: "mydayHoliday", group: "myday", label: "Holidays", type: "boolean", default: true, help: "Shows today's or the next Philippine holiday." },
+  // ---------- My time off (Personal) ----------
+  {
+    key: "timeoffMe", group: "timeoff", label: "You on the team list", type: "text", default: "", max: 40, pattern: /^[\w-]{0,40}$/, hidden: true,
+    help: "Which person on your team list is you. Picked on the card.",
+  },
+  {
+    key: "timeoffAhead", group: "timeoff", label: "Look ahead", type: "choice", default: 180, help: "How far ahead the card looks for your leave and holidays.",
+    options: [{ value: 90, label: "90 days" }, { value: 180, label: "6 months" }, { value: 365, label: "A year" }],
+  },
+  { key: "timeoffYear", group: "timeoff", label: "This year so far", type: "boolean", default: true, help: "Shows how many days off you've taken this year, by kind." },
+  // ---------- Wais (Personal) ----------
+  {
+    key: "waisEnv", group: "wais", label: "Wais environment", type: "choice", default: "dev",
+    help: "Which Wais Felix reads. Dev for now; Prod shows your real figures once Wais is deployed.",
+    options: [{ value: "dev", label: "Dev" }, { value: "prod", label: "Prod" }],
+  },
+  {
+    key: "waisPath", group: "wais", label: "Server path", type: "text", default: "/Users/cresjohnlazo/dev/wais-app/apps/web/mcp/dist/wais-mcp.mjs",
+    max: 500, pattern: /^\/[^\0]*\.m?js$/, help: "Where Wais's MCP server is built on this Mac. Felix starts it with Node.",
+  },
+  {
+    key: "waisChoices", group: "wais", label: "Card choices", type: "text", default: "", max: 4000, hidden: true,
+    help: "The space, periods, accounts and tab the Wais card shows, picked on the card.",
+  },
+  // ---------- Journal (Personal) ----------
+  { key: "journalPrompt", group: "journal", label: "Prompt", type: "boolean", default: true, help: "Shows a gentle question to start from, a new one each day. Another gives a different one." },
+  { key: "journalMood", group: "journal", label: "How it's going", type: "boolean", default: true, help: "Shows a few faces to pick how the day felt. Picking one is up to you." },
+  // ---------- Important dates (Personal) ----------
+  {
+    key: "datesAhead", group: "dates", label: "Look ahead", type: "choice", default: 90, help: "How far ahead the card shows dates.",
+    options: [14, 30, 60, 90, 180, 365].map((n) => ({ value: n, label: n === 365 ? "A year" : `${n} days` })),
+  },
+  {
+    key: "datesRows", group: "dates", label: "Dates to show", type: "choice", default: 4, help: "How many dates the card lists, soonest first.",
+    options: [3, 4, 5, 6, 8].map((n) => ({ value: n, label: `Up to ${n}` })),
+  },
+  { key: "habitsStreak", group: "habits", label: "Streak", type: "boolean", default: true, help: "Shows how many days in a row you've kept each habit." },
   {
     key: "musicSeekSeconds", group: "music", label: "Arrow keys jump", type: "choice", default: 10,
     help: "How far ← and → move in the song while the player is open. Shift with an arrow goes to the previous or next song.",
@@ -533,7 +610,7 @@ export const SETTINGS = Object.freeze([
   },
   {
     key: "felixProgress", group: "voice", part: "While he works", label: "Say what I'm doing", type: "boolean", default: true, requires: "felixOn",
-    help: "When Felix reads a reply aloud and it takes a moment, he says once what he's doing, like \"Hold on, checking GitHub\". The reply cuts it off, and so does Stop talking.",
+    help: "When Felix reads a reply aloud and it takes a moment, he says once what he's doing, like \"Hold on, checking GitHub\". Only real steps: while he's just thinking he stays quiet. The reply cuts it off, and so does Stop talking.",
   },
   {
     key: "felixProgressDelay", group: "voice", part: "While he works", label: "Speak up after", type: "choice", default: 1.5, requires: "felixProgress",

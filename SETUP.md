@@ -1,6 +1,6 @@
 # Felix — setup guide
 
-This project runs Felix (formerly the Tech Lead Command Center) on your Mac at `http://localhost:4777`. The home page has an Incident Commander card (from Datadog) and an Open PRs card; the rest are placeholders for now. The Open PRs page (`/prs`) lists your PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
+This project runs Felix (formerly the Tech Lead Command Center) on your Mac at `http://localhost:4777`. The home page has a Work mode (Incident Commander, Open PRs, AI usage, Jira, Calendar, Team out of office, Slack and Tasks) and a Personal mode (My day, Felix, Important dates, My time off, Habits, Tasks, Lists, Wais and Journal). The Open PRs page (`/prs`) lists your PRs and the PRs waiting on your review in fm and bm. It can also run Claude Code reviews and fixes in hidden sessions that you can follow from your phone.
 
 The plan for the rest is here: https://claude.ai/artifact/AKv4sNUDchA8npNnx8cjTB
 
@@ -83,8 +83,13 @@ The server expects this layout. The folder *above* `felix` is the workspace that
     ├── keychain.mjs             reads secrets from the Keychain
     ├── tailnet.mjs              which pages may send change requests (localhost, tailnet)
     ├── settings.mjs             keeps your settings in data/settings.json
+    ├── personal.mjs             the Personal cards' store (data/personal.db)
+    ├── myday.mjs, timeoff.mjs   the My day and My time off cards' data
+    ├── wais.mjs                 the Wais card, through Wais's own MCP server
+    ├── felix*.mjs               Felix: his commands, AI, tools, helpers and voice
+    ├── tools/                   the tools Felix built himself
     ├── test/                    tests (./prs test)
-    ├── prs                      start / stop script
+    ├── prs                      start / stop / release script
     ├── public/home.html         the home page (cards)
     ├── public/index.html        the Open PRs page
     ├── public/settings.html     the Settings page
@@ -140,7 +145,7 @@ Bring these over from the old Mac by hand (they are not in this repo):
 
 - `repo/.claude/skills/review-staged/` if you use it. The review-pr skill comes with this repo: on first start the server links it into `repo/.claude/skills/`. If that folder already has a review-pr, the server leaves it alone.
 - `repo/.claude/settings.local.json` if you want the same Claude permissions in the workspace,
-- `felix/data/` only if you want your old review history; otherwise it starts fresh.
+- `felix/data/` if you want your old review history, tasks, Personal cards (lists, habits, journal, important dates) and settings; otherwise it starts fresh. Leave out `data/releases/` and `data/live`: `./prs install` makes a new release.
 
 Commits in this repo use your personal identity (`cresxjohn`), which is your global git setting. If that ever changes, set it for this repo only: `git config user.email cresellejohn@gmail.com`.
 
@@ -153,7 +158,7 @@ From the `felix` folder:
 ./prs install
 ```
 
-This starts the server and sets it to start by itself every time you log in. It also restarts the server if it ever crashes. The page opens in your browser.
+This makes Felix's first release (see section 5), starts the server and sets it to start by itself every time you log in. It also restarts the server if it ever crashes. The page opens in your browser.
 
 Check it:
 
@@ -170,9 +175,12 @@ You normally do nothing: the page is there after you log in. Keep it open in a p
 
 - `./prs start`: start it, if you stopped it
 - `./prs stop`: stop it until you log in again (or run start)
-- `./prs restart`: restart it, after you change `server.mjs` (edits to `public/index.html` only need a page reload)
+- `./prs restart`: make a fresh release and restart on it, after you change anything in this folder
+- `./prs release`: make a release without restarting; Felix moves to it on his next start
 - `./prs status`: is it running, and does it start at login
 - `./prs logs`: watch the server log
+
+Felix doesn't run from this folder. He serves a release: a frozen copy of it in `data/releases/<date-time>/`, with `data/live` pointing at the one in use. So an edit here, to the server or to a page, doesn't reach Felix, or the app on your iPad, until `./prs restart` makes a new release. His data, the tools he builds (`tools/`) and the tests stay in this folder and aren't copied. The last five releases are kept. Apply to Felix, when Felix changes himself, restarts the same way.
 
 The home page is `/`. The Open PRs page's links are shareable views: `/prs/mine`, `/prs/review`, plus search settings such as `/prs/review?status=failing&pr=fm-12247&panel=files`. Old `/mine` and `/review` links still work.
 
@@ -193,7 +201,10 @@ The Open PRs page sends these, so keep `/prs` open in a pinned tab; the home pag
 
 - `data/reviews.json`: every Claude review and fix session, its status, its step log and its report
 - `data/server.log`: the server's log
-- `data/settings.json`: your Felix settings (mode, Fit to screen, auto refresh); change them on the Settings page
+- `data/settings.json`: your Felix settings (mode, Fit to screen, auto refresh, the Wais card's choices); change them on the Settings page
+- `data/personal.db`: your lists, habits, journal and important dates (Personal mode); `data/tasks.db`: your tasks
+- `data/releases/` and `data/live`: the frozen copies Felix serves, and which one is in use (section 5)
+- `data/felix/`: Felix's own things: his workbench, memory, log, jobs and every version of the tools he built
 - `hooks/settings.json`: rewritten on every server start; don't edit it
 - `~/Library/LaunchAgents/local.felix.plist`: the start-at-login entry (made by `./prs install`)
 - `~/.warp/launch_configurations/openprs-*.yaml`: short-lived files that open Warp windows; they delete themselves
@@ -202,7 +213,7 @@ The Open PRs page sends these, so keep `/prs` open in a pinned tab; the home pag
 - your browser: the last PR list and on-call data (so pages load instantly), your model choice and notification setting
 - `repo/.claude/skills/review-pr`: a link to `skills/review-pr` in this project, made by the server on first start
 
-Nothing secret is saved in this folder. The GitHub token is read from `gh` each time.
+Nothing secret is saved in this folder. The GitHub token is read from `gh` each time, and every other token is in the Keychain (section 10).
 
 
 ## 8. Settings you can change
@@ -228,6 +239,8 @@ On an Intel Mac, Homebrew uses `/usr/local/bin`, so set `GH_BIN` and `TMUX_BIN`.
 - **Fix with Claude fails right after "Preparing worktree"**: bm runs `npm install` in a git hook after checkout. The server skips hooks for that one step; if you see this again, check `./prs logs`.
 - **"Cursor isn't signed in"**: run `cursor-agent login`, then start the review again. Cursor's model list fills in after that (reload the page).
 - **Port 4777 is taken**: find what uses it with `lsof -iTCP:4777 -sTCP:LISTEN`.
+- **An edit you made doesn't show**: Felix serves a release, not this folder. Run `./prs restart`.
+- **The Wais card says Felix couldn't start the Wais connection**: the server path in Settings → Wais is wrong, or Wais's MCP server isn't built yet (section 10).
 - **The page looks stuck on old data**: press **R** or the refresh button. The header says "Saved list from …" until fresh data arrives.
 
 
@@ -257,7 +270,31 @@ The server sends it in the `DD-APPLICATION-KEY` header. Make a new one when it e
 security add-generic-password -s cmd-center-jira -a <your Jira email> -w
 ```
 
-Google Calendar (both your calendar and the Tech Team Vacation Tracker) needs no command. The page will have a one-time "Sign in with Google" button that saves its own token to the Keychain as `cmd-center-google-oauth`. On a new Mac, you sign in again once.
+**Google Calendar, work** (your calendar and the Tech Team Vacation Tracker) needs no command. The Calendar or Team out of office card shows **Connect Google Calendar**: you copy a small Apps Script (the calendar bridge, `google-bridge/Code.gs`, with a random key Felix made in it) into your own Google account, deploy it as a web app, and paste its address back. Felix tries it, then keeps the address and key in the Keychain as `cmd-center-google-bridge`. On a new Mac, connect it again from the card.
+
+**Holiday names: update the bridge to version 3.** My day and My time off name the Philippine holidays from Google's public "Holidays in the Philippines" calendar. A bridge made before Oct 30 (version 2) can't read that calendar, so the cards fall back to your personal Google sign-in if you have one, or else to the tracker's "PH Holiday" days, which have no names. The cards don't ask you to update; to get the names:
+
+1. In Settings → Connections → Google Calendar, click **Disconnect** (twice). This forgets the old key; the script stays deployed.
+2. On the Work side, the Calendar card shows the Connect Google Calendar steps again. Click **Copy script** (and **Copy settings**).
+3. Open your Felix project in Apps Script, paste the script over all of `Code.gs` (and the settings over `appsscript.json`), and save.
+4. Choose **Deploy → Manage deployments**, edit the web app (the pencil), set Version to **New version**, and Deploy. The address stays the same.
+5. Paste the Web app URL into the card. Felix tries it and saves it. Press refresh on the Personal home to see the names at once.
+
+**Google Calendar, personal** (My day's "today on your personal calendar") is a read-only sign-in with your own Gmail, through a Google app you make once. On the Personal home, click **Connect your personal calendar** on My day, then follow its steps:
+
+1. Signed in with your personal Gmail, make a Google Cloud project and turn on the Google Calendar API in it.
+2. On the OAuth consent screen, choose External and add your Gmail as a test user. Google ends a Testing app's sign-ins after 7 days, so publish it ("In production") if you don't want to sign in again each week; Google then shows an "unverified app" warning once, which is fine since only you use it.
+3. Under Credentials, choose Create credentials → OAuth client ID → **Desktop app**.
+4. Paste its client ID and secret into the card and click **Save Google app** (kept in the Keychain as `cmd-center-google-personal-client`).
+5. Click **Sign in with Google** and pick your Gmail. Felix asks only to read your calendar. On the Mac the window finishes on its own. On the iPad, Google's last page won't load, because it points at the Mac (`http://127.0.0.1:4777/…`): copy the whole address from the address bar, paste it into the box on My day, and tap **Finish**. The sign-in is kept in the Keychain as `cmd-center-google-personal`.
+
+**Wais** (the Personal Wais card) is read-only and goes through Wais's own MCP server on this Mac, which lives in the Wais repo at `~/dev/wais-app/apps/web/mcp/dist/wais-mcp.mjs`. If that file isn't there, build it once in `~/dev/wais-app/apps/web` with `npm run mcp:build`.
+
+1. In Settings → Wais, check **Wais environment** (Dev for now; Prod once Wais is deployed there) and **Server path** (the file above).
+2. In that Wais, open **Settings → Security → Access tokens** and make a token. It starts with `wais_pat_` and only works with the Wais it was made in.
+3. On the Personal home, the Wais card shows **Connect Wais**. Paste the token there. Felix tries it with Wais first, then keeps it in the Keychain as `cmd-center-wais` (account `wais`). It never shows in a log or a file.
+
+If Wais later turns the token down (revoked in Wais, most likely), the card says so and asks for a new one. Settings → Connections → Wais disconnects it. Changing the environment or the path in Settings starts the connection again, and the space, periods and accounts you pick on the card are kept per space in Settings.
 
 On a new Mac, add the keys again the same way. The plan doc's "What I need from you" section says where each key comes from. Later, a setup wizard in the page will walk you through these steps.
 

@@ -8,6 +8,8 @@ window.FelixPickers = (() => {
     time: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
     prev: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>`,
     next: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`,
+    prevYear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 6-6 6 6 6M18 6l-6 6 6 6"/></svg>`,
+    nextYear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6M12 6l6 6-6 6"/></svg>`,
   };
   const STEP_MINUTES = 30;
   let open = null;
@@ -137,9 +139,12 @@ window.FelixPickers = (() => {
       const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
       const weeks = days.slice(35).every((d) => d.getMonth() !== first.getMonth()) ? days.slice(0, 35) : days;
       const heads = Array.from({ length: 7 }, (_, i) => new Date(2023, 0, 1 + i).toLocaleDateString([], { weekday: "narrow" }));
-      pop.innerHTML = `<div class="pick-head"><button type="button" class="pick-nav" data-move="-1" aria-label="Previous month">${ICONS.prev}</button>`
+      // A year at a time too, for a birthday's February 29 or a trip months away.
+      pop.innerHTML = `<div class="pick-head"><span><button type="button" class="pick-nav" data-move="-12" aria-label="Previous year">${ICONS.prevYear}</button>`
+        + `<button type="button" class="pick-nav" data-move="-1" aria-label="Previous month">${ICONS.prev}</button></span>`
         + `<b>${first.toLocaleDateString([], { month: "long", year: "numeric" })}</b>`
-        + `<button type="button" class="pick-nav" data-move="1" aria-label="Next month">${ICONS.next}</button></div>`
+        + `<span><button type="button" class="pick-nav" data-move="1" aria-label="Next month">${ICONS.next}</button>`
+        + `<button type="button" class="pick-nav" data-move="12" aria-label="Next year">${ICONS.nextYear}</button></span></div>`
         + `<div class="pick-grid" role="grid">${heads.map((h) => `<span class="pick-wd">${h}</span>`).join("")}`
         + weeks.map((d) => {
           const day = ymd(d);

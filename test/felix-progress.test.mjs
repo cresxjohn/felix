@@ -86,9 +86,9 @@ test("progress lines start after the delay, update every few seconds, and stop w
   assert.deepEqual(said, ["Hold on, checking GitHub."]);
   await after(6000);
   assert.deepEqual(said, ["Hold on, checking GitHub.", "Still checking GitHub."]);
-  progress.step("Looking into it");
+  progress.step("Running the tests");
   await after(6000);
-  assert.equal(said.at(-1), "Hold on, looking into it.");
+  assert.equal(said.at(-1), "Hold on, running the tests.");
   progress.stop();
   await after(60_000);
   assert.equal(said.length, 3);
@@ -106,6 +106,7 @@ test("an update due while a line is still being said is skipped, and a failed li
     return undefined;
   };
   const progress = createProgress({ delayMs: 1000, everyMs: 2000, phrases: ["A {step}.", "B {step}.", "Still {step}."], say, random: () => 0, timers });
+  progress.step("Checking Jira");
   await after(1000);
   await after(2000);
   assert.equal(said.length, 1);
@@ -128,13 +129,39 @@ test("progress lines use the real timers when none are given, called the way a b
   };
   const said = [];
   const progress = createProgress({ delayMs: 5, everyMs: 1000, phrases: ["Hold on, {step}."], say: (l) => said.push(l) });
+  progress.step("Checking Slack");
   try {
     await new Promise((resolve) => real(resolve, 30));
   } finally {
     globalThis.setTimeout = real;
   }
   progress.stop();
-  assert.deepEqual(said, ["Hold on, pulling that up."]);
+  assert.deepEqual(said, ["Hold on, checking Slack."]);
+});
+
+test("while Felix is only thinking he says nothing, and speaks up once there's a real step", async () => {
+  const said = [];
+  const { timers, after } = fakeTimers();
+  const progress = createProgress({ delayMs: 1500, everyMs: 0, phrases: ["Hold on, {step}."], say: (l) => said.push(l), random: () => 0, timers });
+  for (const step of ["", "Getting ready", "Looking into it", "Double-checking"]) {
+    progress.step(step);
+    await after(2000);
+  }
+  assert.deepEqual(said, [], "no filler line for thinking");
+  progress.step("Checking your calendar");
+  await after(500);
+  assert.deepEqual(said, ["Hold on, checking your calendar."]);
+  progress.step("Looking into it");
+  await after(10_000);
+  assert.equal(said.length, 1, "and still only the one line");
+  progress.stop();
+  const quick = [];
+  const q = createProgress({ delayMs: 1500, everyMs: 0, phrases: ["Hold on, {step}."], say: (l) => quick.push(l), timers });
+  q.step("Looking into it");
+  await after(3000);
+  q.stop();
+  await after(10_000);
+  assert.deepEqual(quick, [], "an answer that comes while he's thinking gets no line at all");
 });
 
 test("with updates off, Felix says one line when he starts and no more", async () => {

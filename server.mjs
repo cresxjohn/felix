@@ -25,14 +25,41 @@
 //                                  project, tags, links, done); a repeating task done makes its next one
 // POST /api/tasks/<id>/delete   -> delete a task and its subtasks
 // POST /api/tasks/reorder       -> { ids } the order after a drag
-// GET  /api/google/status      -> { work } whether the work Google app is saved and signed in
-// GET  /api/google/connect/work -> starts the Google sign-in (in a popup); /api/google/callback/work finishes it
+// Personal mode's own things, from data/personal.db (personal.mjs). Never shown in Work mode; Felix reaches them only
+// when you ask (his personal commands and personal_ tools), never in work answers, briefings or the tools he builds:
+// GET  /api/personal/lists[?list=<id>][&ticked=bottom|stay] -> { lists, list, items } the Lists card (starter lists on first use)
+// POST /api/personal/lists      -> { name } a new list; /lists/reorder { ids } the lists' order
+// POST /api/personal/lists/<id> -> { name } rename; /<id>/delete the list and its items; /<id>/items { text, at? } add
+//                                  (one per line); /<id>/reorder { ids } the items' order; /<id>/clear delete the ticked
+// POST /api/personal/items/<id> -> { patch: { text?, done? } } change or tick an item; /items/<id>/delete
+// GET  /api/personal/habits[?weekStart=0-6] -> { today, days, habits, doneToday, archived } each habit with today, its
+//                                  streaks and seven days (the last 7, or this week from weekStart)
+// POST /api/personal/habits     -> { name, icon?, perDay? } a new habit; /habits/reorder { ids }
+// POST /api/personal/habits/<id> -> { patch: { name?, icon?, perDay?, archived? } }; /<id>/check { day?, count? } tick
+//                                  today (or a day in the last 60); /<id>/delete the habit and its check-ins
+// GET  /api/personal/journal[?day=] -> { today, day, entry, earlier } a day's journal entry (today by default) and the
+//                                  days written, newest first
+// POST /api/personal/journal/<day> -> { text?, mood?, prompt? } save that day's entry as you type; empty removes it
+// GET  /api/personal/timeoff[?fresh=1][&pick=1] -> My time off: your next break, booked leave and this year's days by kind, from the
+//                                  vacation tracker for the person picked as you (timeoffMe); { needsMe, people } until then
+// GET  /api/personal/myday[?fresh=1] -> My day: { weather, weatherError, holidays: { today, next, source, note }, calendar }
+//                                  weather from Open-Meteo for mydayPlace, Philippine holidays, today's personal events
+// GET  /api/wais[?space=&period=&accounts=a,b&outlook=&fresh=1] -> { connected, refused?, problem?, spaces, accounts, safe,
+//                                  tasks, outlook, problems } the Wais card, from Wais's MCP server (read-only), kept 2 minutes
+// POST /api/connect/wais        -> { fields: { token } } try a Wais access token with its spaces tool, then save it to the
+//                                  Keychain; /api/disconnect/wais removes it
+// GET  /api/personal/dates[?ahead=&limit=] -> { today, upcoming, later, all } birthdays, anniversaries and countdowns
+// POST /api/personal/dates      -> { kind, title, month, day, year? } add one; /dates/<id> { patch } change it;
+//                                  /dates/<id>/delete
+// GET  /api/google/status      -> { work, personal, bridge } whether each Google app is saved and signed in
+// GET  /api/google/connect/<work|personal> -> starts that Google sign-in (in a popup); /api/google/callback/<id> finishes it
+// POST /api/google/finish/<work|personal> { address } -> finishes a sign-in begun on the iPad, from the address Google sent you back to
 // GET  /api/shift              -> the work day (Start my day): its state, its settings, the times and whether Slack is connected
 // POST /api/shift              -> { action: start|break|back|end } a step of the day; snooze ("not yet"); post|skip { id } the
 //                                 step's Slack message, which only goes out on post
-// GET  /api/connections        -> which accounts the cards use are connected (Jira, Datadog, Slack, Google), for Settings
+// GET  /api/connections        -> which accounts the cards use are connected (Jira, Datadog, Slack, Wais, Google), for Settings
 // POST /api/connect/<service>  -> { fields } try a service's token (jira, datadog, slack) and save it to the Keychain if it works;
-//                                 google-work saves your Google app's client ID and secret
+//                                 google-work and google-personal save that Google app's client ID and secret
 // POST /api/disconnect/<service> -> remove that service's token from the Keychain
 // GET  /api/prs               -> my PRs and PRs waiting on my review, fresh from GitHub, plus review sessions
 // GET  /api/reviews           -> review sessions only (cheap; the page polls this while a review runs)
@@ -133,7 +160,12 @@ import { createGoogle } from "./google.mjs";
 import { createCalendar } from "./calendar.mjs";
 import { createBridge } from "./google-bridge.mjs";
 import { createOoo } from "./ooo.mjs";
-import { createTasks, taskPrefs } from "./tasks.mjs";
+import { createTasks, taskPrefs, ymd } from "./tasks.mjs";
+import { createTimeOff } from "./timeoff.mjs";
+import { createMyDay } from "./myday.mjs";
+import { createPersonal, personalRoute } from "./personal.mjs";
+import { createPersonalFelix } from "./felix-personal.mjs";
+import { WAIS_ACCOUNT, WAIS_SERVICE, createWais } from "./wais.mjs";
 import { aiUsage } from "./ai-usage.mjs";
 import { createOriginCheck, readTailscaleStatus } from "./tailnet.mjs";
 import { createSettings } from "./settings.mjs";
@@ -211,7 +243,14 @@ const bridge = createBridge();
 const calendarSource = { get: async (account, url) => ((await bridge.ready()) ? bridge.get(url) : google.get(account, url)) };
 const calendar = createCalendar({ google: calendarSource });
 const ooo = createOoo({ google: calendarSource, dir: DATA });
+// Personal mode's My day (weather, holidays, your personal calendar) and My time off (your own leave from the tracker).
+const myDay = createMyDay({ calendarSource, google, ooo });
+const timeOff = createTimeOff({ ooo, holidayNames: (from, to) => myDay.holidayNames(from, to), today: () => ymd(Date.now()) });
 const tasks = await createTasks({ file: path.join(DATA, "tasks.db") });
+// Personal mode's lists, habits, journal and dates. The /api/personal routes reach it, and Felix through
+// personalFelix: his local commands and his personal_ tools, when you ask. Never his facts, briefings or own tools.
+const personal = await createPersonal({ file: path.join(DATA, "personal.db") });
+const personalFelix = createPersonalFelix({ store: personal, timeOff, myDay, settings });
 // Where new tasks go, their priority, the "at 3" rule and done-today follow the Tasks settings.
 tasks.configure(taskPrefs(await settings.get()));
 settings.onChange((s) => tasks.configure(taskPrefs(s)));
@@ -227,6 +266,15 @@ setInterval(async () => {
       "Felix · task due", r.title, tasksSound], () => {});
   }
 }, 30e3).unref();
+// Wais, the money planner (the Personal Wais card), read-only through its own MCP server with your access token.
+// A new environment or server path in Settings starts it again.
+const wais = createWais({ settings });
+let waisWhere = "";
+settings.onChange((s) => {
+  const where = `${s.waisEnv}|${s.waisPath}`;
+  if (waisWhere && where !== waisWhere) wais.reset();
+  waisWhere = where;
+});
 const connections = createConnections({
   dir: DATA,
   // The board number lives in Settings (My Jira Board); the card's Set up form saves it there.
@@ -236,6 +284,7 @@ const connections = createConnections({
   },
   datadog: { service: DATADOG_SERVICE, check: checkDatadog, reset: resetDatadogCache },
   slack: { service: SLACK_SERVICE, account: SLACK_ACCOUNT, check: checkSlack, reset: () => slack.reset() },
+  wais: { service: WAIS_SERVICE, account: WAIS_ACCOUNT, check: (fields) => wais.check(fields), reset: () => wais.reset() },
 });
 // The work day (Start my day), kept in data/shift.json; Felix's local commands reach it too.
 const slack = createSlack();
@@ -255,6 +304,8 @@ const builtinTools = createTools({
   tasks,
   prs: () => prsCache.get(),
   usage: () => aiUsage({}),
+  personal: personalFelix,
+  wais: { call: (tool, args) => wais.call(tool, args) },
 });
 // What the tools Felix builds himself can reach: reads, and your tasks. They live in tools/, one file each.
 const toolCtx = ctxServices({
@@ -312,6 +363,8 @@ setInterval(() => {
 const brain = createBrain({ bin: CLAUDE, cursorBin: CURSOR, cwd: agent.workbench.dir, systemPrompt: agent.rules, tools: agent.tools, allow: agent.allow, mcpServers: agent.cursorMcp });
 const felix = createFelix({
   tasks,
+  personal: personalFelix,
+  wais: { call: (tool, args) => wais.call(tool, args) },
   facts: createFacts({
     readers: {
       oncall: () => incidentCommander({}),
@@ -1662,6 +1715,10 @@ const ASSETS = {
   "/felix-hints.js": "text/javascript; charset=utf-8",
   "/felix-idle.js": "text/javascript; charset=utf-8",
   "/pickers.js": "text/javascript; charset=utf-8",
+  "/reorder.js": "text/javascript; charset=utf-8",
+  "/journal-prompts.mjs": "text/javascript; charset=utf-8",
+  "/places.mjs": "text/javascript; charset=utf-8",
+  "/wais-choices.mjs": "text/javascript; charset=utf-8",
   "/voice-device.js": "text/javascript; charset=utf-8",
   "/vendor/kokoro.web.js": "text/javascript; charset=utf-8",
   "/ai-models.js": "text/javascript; charset=utf-8",
@@ -1671,7 +1728,9 @@ const ASSETS = {
   "/shift.js": "text/javascript; charset=utf-8",
   "/shift-clock.mjs": "text/javascript; charset=utf-8",
   "/felix-progress.mjs": "text/javascript; charset=utf-8",
+  "/felix-diff.mjs": "text/javascript; charset=utf-8",
   "/felix-wake-clips.mjs": "text/javascript; charset=utf-8",
+  "/card-load.mjs": "text/javascript; charset=utf-8",
   "/app.js": "text/javascript; charset=utf-8",
   "/sw.js": "text/javascript; charset=utf-8",
   "/offline.html": "text/html; charset=utf-8",
@@ -2115,13 +2174,32 @@ createServer(async (req, res) => {
         return json(res, e.code === "input" ? 400 : 500, { error: e.message, code: e.code || "error" });
       }
     }
+    if (req.method === "GET" && (pathname === "/api/personal/timeoff" || pathname === "/api/personal/myday")) {
+      const q = new URL(req.url, `http://localhost:${PORT}`).searchParams;
+      const fresh = q.get("fresh") === "1";
+      const s = await settings.get();
+      try {
+        if (pathname === "/api/personal/myday") return json(res, 200, await myDay.view({ place: s.mydayPlace, fresh }));
+        return json(res, 200, await timeOff.view({ me: s.timeoffMe, ahead: s.timeoffAhead, fresh, cacheMinutes: s.oooCache, pick: q.get("pick") === "1" }));
+      } catch (e) {
+        return json(res, e.status || 502, { error: e.message, code: e.code || "error" });
+      }
+    }
+    if (req.method === "GET" && pathname === "/api/wais") {
+      const q = new URL(req.url, `http://localhost:${PORT}`).searchParams;
+      return json(res, 200, await wais.view({ space: q.get("space") || "", period: q.get("period") || "", accounts: q.get("accounts") || "", outlook: q.get("outlook") || "", fresh: q.get("fresh") === "1" }));
+    }
+    if (req.method === "GET" && pathname.startsWith("/api/personal/")) {
+      const answer = personalRoute(personal, { method: "GET", pathname, query: new URL(req.url, `http://localhost:${PORT}`).searchParams });
+      return json(res, answer.status, answer.body);
+    }
     if (req.method === "GET" && pathname === "/api/google-bridge/version") {
       try { return json(res, 200, { version: await bridge.version() }); } catch (e) { return json(res, e.status || 502, { error: e.message, code: e.code || "error" }); }
     }
     if (req.method === "GET" && pathname === "/api/connections") {
       return json(res, 200, { ...(await connections.status()), google: { bridge: await bridge.ready(), app: await google.status("work") } });
     }
-    if (req.method === "GET" && pathname === "/api/google/status") return json(res, 200, { work: await google.status("work"), bridge: await bridge.ready() });
+    if (req.method === "GET" && pathname === "/api/google/status") return json(res, 200, { work: await google.status("work"), personal: await google.status("personal"), bridge: await bridge.ready() });
     if (req.method === "GET" && pathname.startsWith("/api/google/connect/")) {
       try {
         redirect(res, await google.connectUrl(pathname.split("/")[4], "/"));
@@ -2136,6 +2214,7 @@ createServer(async (req, res) => {
         await google.finish(pathname.split("/")[4], { code: q.get("code"), state: q.get("state"), error: q.get("error") });
         calendar.reset();
         ooo.reset();
+        myDay.reset();
         googleDone(res, true, "Signed in to Google. You can close this window.");
       } catch (e) {
         googleDone(res, false, e.message);
@@ -2206,6 +2285,10 @@ createServer(async (req, res) => {
       await checkWrite(req);
       const body = await readBody(req, bodyLimit(pathname));
       if (pathname.startsWith("/api/felix/") && (await felixPost(res, pathname, body))) return;
+      if (pathname.startsWith("/api/personal/")) {
+        const answer = personalRoute(personal, { method: "POST", pathname, body });
+        return json(res, answer.status, answer.body);
+      }
       if (pathname === "/api/voice-web/download") return json(res, 200, { job: voiceWeb.download(String(body.variant || "")) });
       if (pathname === "/api/voice-web/report") {
         await voiceWeb.report(body && typeof body === "object" ? body : {});
@@ -2239,13 +2322,30 @@ createServer(async (req, res) => {
       else if (pathname === "/api/settings") return json(res, 200, { ok: true, settings: await settings.update(body.patch) });
       else if (pathname === "/api/settings/reset") return json(res, 200, { ok: true, settings: await settings.reset(body.keys) });
       else if (pathname === "/api/shift") return json(res, 200, await shiftPost(body));
-      else if (pathname === "/api/connect/google-work") {
+      else if (pathname === "/api/connect/google-work" || pathname === "/api/connect/google-personal") {
         try {
-          await google.saveClient("work", body.fields || {});
+          await google.saveClient(pathname.endsWith("work") ? "work" : "personal", body.fields || {});
           calendar.reset();
+          myDay.reset();
           return json(res, 200, { ok: true });
         } catch (e) {
           return json(res, e.status || 502, { error: e.message, code: e.code || "error" });
+        }
+      }
+      else if (pathname === "/api/google/finish/work" || pathname === "/api/google/finish/personal") {
+        // Signing in from the iPad: Google sends you back to this Mac's own address, which the iPad can't open, so
+        // you paste that address here and Felix finishes on the Mac. Its state must match the sign-in Felix started.
+        const id = pathname.endsWith("work") ? "work" : "personal";
+        try {
+          const back = new URL(String(body.address || "").trim());
+          if (back.pathname !== `/api/google/callback/${id}`) throw httpError(400, "That isn't the address Google sent you back to. Copy the whole address from the page that didn't load.");
+          await google.finish(id, { code: back.searchParams.get("code"), state: back.searchParams.get("state"), error: back.searchParams.get("error") });
+          calendar.reset();
+          ooo.reset();
+          myDay.reset();
+          return json(res, 200, { ok: true });
+        } catch (e) {
+          return json(res, e.status || 400, { error: e instanceof TypeError ? "That doesn't look like an address. Copy the whole address from the page that didn't load." : e.message });
         }
       }
       else if (pathname === "/api/team") return json(res, 200, { ok: true, people: await ooo.saveTeam(body.people) });
@@ -2279,9 +2379,10 @@ createServer(async (req, res) => {
           return json(res, e.code === "input" ? 400 : e.status || 500, { error: e.message, code: e.code || "error" });
         }
       }
-      else if (pathname === "/api/disconnect/google-work") {
-        await google.signOut("work");
+      else if (pathname === "/api/disconnect/google-work" || pathname === "/api/disconnect/google-personal") {
+        await google.signOut(pathname.endsWith("work") ? "work" : "personal");
         calendar.reset();
+        myDay.reset();
         return json(res, 200, { ok: true });
       }
       else if (pathname.startsWith("/api/connect/")) {

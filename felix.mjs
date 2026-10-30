@@ -141,7 +141,8 @@ const ROUTES = [
 ];
 const NOT_YET = [
   { re: /slack|\bdms?\b|message|channel|mention|thread/i, name: "Slack" },
-  { re: /habit|journal/i, name: "your habits and journal" },
+  // Your journal stays private: Felix can add a line to it when you ask, but his AI never reads it.
+  { re: /journal/i, name: "your journal" },
 ];
 const OFF_RECORD = /^off the record[,:.!—–-]*\s+(.+)$/is;
 /** The cheap model each AI tool learns from a conversation with: one small step, after it ends. */
@@ -211,10 +212,12 @@ export const SYSTEM_PROMPT = [
   "- Never touch their logins, keys, tokens, secrets or the Keychain, even if asked.",
   "- Search or read the web only when they asked you to look something up; then name each source's site and when it's from (\"According to Reuters, today\"), keep it apart from their own work data, and if sources disagree or you find nothing solid, say so.",
   "",
-  "Their services (your tools named calendar_events, calendar_rsvp, out_of_office, on_call, jira_search, slack_search, slack_post, tasks_list, tasks_add, tasks_update, tasks_delete, prs_open, ai_usage; and gh for anything else on GitHub):",
+  "Their services (your tools named calendar_events, calendar_rsvp, out_of_office, on_call, jira_search, slack_search, slack_post, tasks_list, tasks_add, tasks_update, tasks_delete, prs_open, ai_usage, and the personal_ and wais_ ones; and gh for anything else on GitHub):",
   "- The data in their message is only a start. When a question needs more (other days, other tickets, older messages, a person's PRs), look it up yourself with these before answering. Never say you only have what you were given, and never ask them to look it up.",
   "- To do something for them (answer an invite, post in Slack), use the matching tool: Felix shows them a card to allow it first. Say it's done only once the tool says so.",
   "- Their tasks are yours to manage fully: add, change anything (due day, time, name, notes, priority, repeat, project, labels, links), tick off, undo or delete, at once and without asking. Find a task's id with tasks_list first.",
+  "- Their money in Wais (wais_spaces, wais_safe_to_spend, wais_tasks, wais_outlook) is read-only and private: use those tools only when they ask about their money, bills or budget, say the formatted figures, and never bring it into work answers, wrap-ups or briefings.",
+  "- Their Personal cards (personal_lists, personal_list_add, personal_habits, personal_habit_check, personal_journal_add, personal_dates, personal_timeoff) are theirs to ask you about: use them only when they ask about their lists, habits, journal, important dates or time off, and act at once, without asking. Never bring personal things into work answers, wrap-ups or briefings. The journal is private: you can add a line when asked, and there's no way to read it.",
   "- Tell them what you found in plain words: no commands, JQL, tool names or raw data.",
   "- Write ticket and PR numbers the usual way (PMHUB-32975, fm#12293), never spelled out digit by digit: when you're read aloud, Felix's voice already says them one digit at a time.",
  
@@ -353,9 +356,13 @@ export function oldDataNote(text, facts) {
  * @param {ReturnType<typeof import("./felix-watch.mjs").createWatchers>} [deps.watchers] What Felix watches PRs for.
  * @param {{ save: (entry: object) => Promise<void> }} [deps.evals] Felix's test set, which "that's wrong" adds to.
  * @param {Awaited<ReturnType<typeof import("./tasks.mjs").createTasks>>} [deps.tasks] Your tasks, for "add a task", "what's due" and "mark it done".
+ * @param {ReturnType<typeof import("./felix-personal.mjs").createPersonalFelix>} [deps.personal] Your Personal cards, for "add eggs to
+ *   groceries", "I drank water" and the like. Asked only when you ask; never read into work answers or briefings.
+ * @param {{ call: (tool: string, args?: object) => Promise<any> }} [deps.wais] Wais, for "how much can I spend" and
+ *   "what bills are due". Read-only, and only when you ask.
  */
 export function createFelix({ facts, brain, settings, actions, log = () => {}, now = Date.now, random = Math.random, timeZone, modelName = modelId,
-  gate, workbench, memory, notes, setTimer, clearTimer, tasks, phrases, watchers, evals }) {
+  gate, workbench, memory, notes, setTimer, clearTimer, tasks, phrases, watchers, evals, personal, wais }) {
   const say = createSay(random);
   const conversation = createConversation({ now });
   const learner = notes ? createLearner({
@@ -405,8 +412,12 @@ export function createFelix({ facts, brain, settings, actions, log = () => {}, n
     const remembered = reply.remembered?.length ? [{ label: `Memory updated · ${reply.remembered.join(", ")}`, link: null }] : [];
     const text = tool ? reply.text : `${reply.text}${oldDataNote(reply.text, used)}`;
     /** @type {Answer} */
-    const out = { id: randomUUID(), text, chips: [...chipsFor(used, timeZone), ...remembered], how, by: answeredBy(how, tool, modelName) };
-    for (const key of ["navigate", "settings", "music", "tests", "restarting", "tasks"]) if (reply[key] !== undefined) out[key] = reply[key];
+    // A place outside Felix comes with a chip to open it, for when the page can't open it on its own (a spoken
+    // command on the iPad has no tap to open a new window with).
+    const outside = reply.link ? [{ label: `Open ${reply.link.name}`, link: reply.link.url }] : [];
+    const out = { id: randomUUID(), text, chips: [...outside, ...chipsFor(used, timeZone), ...remembered], how, by: answeredBy(how, tool, modelName) };
+    for (const key of ["navigate", "settings", "music", "tests", "restarting", "tasks", "personal"]) if (reply[key] !== undefined) out[key] = reply[key];
+    if (reply.link) out.link = reply.link.url;
     if (reply.changes?.length) out.changes = reply.changes;
     if (reply.confirm) {
       const id = randomUUID();
@@ -642,11 +653,16 @@ export function createFelix({ facts, brain, settings, actions, log = () => {}, n
     const name = String(prefs.felixName || "Felix");
     // "Merge the first one" after a list of PRs means the first PR in it.
     const said = withReferences(plain, conversation.lastAnswer());
-    let command = matchCommand(said, name, wakePhrase(prefs));
+    // Your lists, items, habits and dates, so "add eggs to groceries" matches only when you have a Groceries list.
+    const known = knownPersonal();
+    let command = matchCommand(said, name, wakePhrase(prefs), known);
     const learned = !command && phrases ? await phrases.commandFor(said, name, wakePhrase(prefs)) : null;
-    if (learned) command = matchCommand(learned);
+    if (learned) command = matchCommand(learned, undefined, undefined, known);
     if (!command) {
+      const before = personal?.version();
       const answer = await answerWithAi(said, prefs, { onProgress, onText, onAsk, onModel });
+      // The AI changed a Personal card with its tools: the open cards load again.
+      if (personal && personal.version() !== before) answer.personal = true;
       // Talk in a crisis is never kept, and personal talk only when Settings let Felix remember it.
       const keep = lastKind === "work" || (lastKind === "personal" && prefs.felixFriendRemember !== "work");
       if (!offOnce && keep) learner?.heard(said, answer.text);
@@ -668,16 +684,19 @@ export function createFelix({ facts, brain, settings, actions, log = () => {}, n
    */
   async function runLocal(command, said, prefs, offOnce) {
     const lastApply = async () => (actions.lastApply ? actions.lastApply() : null);
-    const ctx = { read: facts.read, say, lastFacts: () => lastFacts, timeZone, lastApply, now, notes, learner, tasks, said, mode: prefs.mode,
+    const ctx = { read: facts.read, say, lastFacts: () => lastFacts, timeZone, lastApply, now, notes, learner, tasks, personal, wais, said, mode: prefs.mode,
       quiet: prefs.felixFriendOn === false || inQuietHours(prefs, now(), timeZone) };
     const slots = asWritten(command.slots, said);
     const reply = OWN[command.intent] ? await OWN[command.intent](slots, prefs) : await ANSWERS[command.intent](ctx, slots);
     keepUndo(command.intent, reply, prefs);
     lastData = reply.facts?.length ? dataFor(reply.facts) : {};
-    log({ at: new Date(now()).toISOString(), question: said, how: command.intent, text: reply.text });
+    const own = isPersonalIntent(command.intent);
+    // A journal line stays out of the log; it's kept only in the journal.
+    log({ at: new Date(now()).toISOString(), question: command.intent === "journal.add" ? "(a journal line, kept private)" : said, how: command.intent, text: reply.text });
     const sources = Object.entries(ROUTE_OF).find(([k]) => command.intent.startsWith(k))?.[1];
     conversation.add(said, reply.text, sources ? { sources, prs: [], notYet: [], followsOn: false } : null);
-    if (!offOnce && !command.intent.startsWith("memory.")) learner?.heard(said, reply.text);
+    // Personal commands aren't passed to Felix's learning, which asks an AI: your lists and journal stay here.
+    if (!offOnce && !command.intent.startsWith("memory.") && !own) learner?.heard(said, reply.text);
     return finish(reply, command.intent);
   }
 
@@ -744,6 +763,14 @@ export function createFelix({ facts, brain, settings, actions, log = () => {}, n
     const mine = fact.error ? [] : fact.record.yourPrs.filter((p) => !p.draft && fits(p));
     if (mine.length === 1) return { ref: mine[0].ref, pr: mine[0], fact };
     return { ref: null, which: mine.map((p) => p.ref), fact };
+  }
+
+  /**
+   * Your lists, items, habits and dates for matching, or nothing when the Personal cards aren't here or can't be read.
+   * @returns {import("./felix-personal.mjs").Known | undefined}
+   */
+  function knownPersonal() {
+    try { return personal?.known(); } catch { return undefined; }
   }
 
   /** The local commands that need Felix's own state: undo, "that's wrong", watchers and fixes. */
@@ -1037,6 +1064,13 @@ export function asWritten(slots, said) {
   }
   return out;
 }
+
+/**
+ * Whether a command is about your Personal cards (lists, habits, journal, dates, time off, My day).
+ * @param {string} intent
+ * @returns {boolean}
+ */
+export const isPersonalIntent = (intent) => /^(lists|habits|journal|dates|timeoff|myday|wais)\./.test(intent);
 
 /**
  * What Felix adds to an answer that changed his workbench: how the tests went there, so you know before Apply.

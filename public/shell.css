@@ -700,3 +700,53 @@ textarea.field { height: auto; min-height: 76px; padding: 9px 12px; line-height:
 .felix-confirm.danger .fc-btn.primary:focus-visible { box-shadow: 0 0 0 3px var(--bad-soft); }
 @keyframes fc-in { from { opacity: 0; transform: translateY(8px) scale(.97); } }
 @media (prefers-reduced-motion: reduce) { .felix-confirm, .felix-confirm::backdrop { animation: none; } }
+
+/* A sheet Felix opens over the page (the code he changed, a picture of it): inside the app, with Close at the top
+   right, so there's always a way back. */
+.fx-sheet-back { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); background: rgb(0 0 0 / .45); animation: fx-fade .15s ease-out; }
+@keyframes fx-fade { from { opacity: 0; } }
+.fx-sheet { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(720px, 100%); max-height: min(86vh, 100%); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); color: var(--fg); box-shadow: 0 24px 60px rgb(0 0 0 / .35); overflow: hidden; }
+.fx-sheet.wide { width: min(1100px, 100%); }
+.fx-sheet-head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+.fx-sheet-title { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.fx-sheet-title b { font: 600 15px/1.3 var(--sans); }
+.fx-sheet-sub { color: var(--muted); font-size: 12.5px; }
+.fx-sheet-actions { display: flex; gap: 8px; }
+.fx-sheet-actions button { height: 32px; padding: 0 14px; border-radius: 8px; font: 600 13px var(--sans); cursor: pointer; }
+.fx-apply { border: 0; background: var(--accent); color: var(--on-accent); }
+.fx-apply:hover { background: var(--accent-hover); }
+.fx-discard { border: 1px solid var(--line); background: none; color: var(--muted); }
+.fx-discard:hover { border-color: var(--bad); color: var(--bad); }
+.fx-sheet-close { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-2); color: var(--fg); cursor: pointer; }
+.fx-sheet-close:hover, .fx-sheet-close:focus-visible { border-color: var(--accent); outline: none; }
+.fx-sheet-close svg { width: 16px; height: 16px; }
+.fx-sheet-body { overflow: auto; padding: 12px 14px 16px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.fx-sheet-note { display: flex; align-items: center; gap: 8px; margin: 12px 4px; color: var(--muted); font-size: 13px; }
+.fx-picture { display: block; width: 100%; height: auto; border-radius: var(--r-box); }
+/* One file of the change: what happened to it, its path and its counts, then its lines. */
+.fx-file { margin-top: 10px; border: 1px solid var(--line); border-radius: var(--r-box); overflow: hidden; }
+.fx-file:first-child { margin-top: 0; }
+.fx-file > summary { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--surface-2); cursor: pointer; list-style: none; font-size: 13px; }
+.fx-file > summary::-webkit-details-marker { display: none; }
+.fx-status { flex: none; padding: 2px 8px; border-radius: var(--r-tag); background: var(--accent-soft); color: var(--accent-ink); font: 600 11px/1.4 var(--sans); }
+.fx-status.new { background: var(--ok-soft); color: var(--ok); }
+.fx-status.deleted { background: var(--bad-soft); color: var(--bad); }
+.fx-path { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fx-path .dir { color: var(--muted); }
+.fx-counts { display: flex; gap: 8px; font: 600 12px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.fx-counts .add { color: var(--ok); }
+.fx-counts .del { color: var(--bad); }
+.fx-code { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fx-code table { width: 100%; border-collapse: collapse; font: 12px/1.6 var(--mono); }
+.fx-code td { padding: 0 10px; vertical-align: top; }
+.fx-code td.no { width: 1%; padding: 0 6px; color: var(--faint); text-align: right; user-select: none; white-space: nowrap; }
+.fx-code td.src { white-space: pre; }
+.fx-code .sign { display: inline-block; width: 14px; color: var(--muted); user-select: none; }
+.fx-code tr.add { background: var(--ok-soft); }
+.fx-code tr.add .sign { color: var(--ok); }
+.fx-code tr.del { background: var(--bad-soft); }
+.fx-code tr.del .sign { color: var(--bad); }
+.fx-code tr.hunk td { padding: 4px 10px; background: var(--accent-soft); color: var(--muted); font-family: var(--sans); font-size: 11.5px; }
+@media (max-width: 640px) { .fx-sheet-actions button { padding: 0 10px; } .fx-code td.no:first-child { display: none; } }
+/* The picture of a change opens bigger in a sheet, so it's a button that looks like the picture. */
+.felix-panel button.shot { padding: 0; font: inherit; cursor: zoom-in; }

@@ -10,7 +10,7 @@ import { createConnections } from "../connections.mjs";
  * @param {string} dir
  * @param {{ fail?: string, slack?: boolean }} [options] `fail` names a service whose check throws.
  */
-function connector(dir, { fail = "", slack = true } = {}) {
+function connector(dir, { fail = "", slack = true, wais = false } = {}) {
   const keychain = new Map(); // "service|account" -> secret
   const log = [];
   const service = (id) => ({
@@ -29,6 +29,7 @@ function connector(dir, { fail = "", slack = true } = {}) {
     jira: service("jira"),
     datadog,
     ...(slack ? { slack: service("slack") } : {}),
+    ...(wais ? { wais: service("wais") } : {}),
     keychain: {
       write: async (s, a, secret) => { keychain.set(`${s}|${a}`, secret); },
       remove: async (s, a) => { log.push(["remove", s, a]); keychain.delete(`${s}|${a}`); },
@@ -171,4 +172,24 @@ test("with board and setBoard, the Jira board is read from and saved to Felix's 
   assert.equal((await c.status()).jira.board, 42);
   saved.board = undefined;
   assert.equal((await c.status()).jira.board, 181);
+}));
+
+test("Wais is tried with its own check, then its token is saved under its account, and status shows it", () => inTemp(async (dir) => {
+  const { c, keychain, log } = connector(dir, { wais: true });
+  const token = `wais_pat_${"ab".repeat(24)}`;
+  assert.deepEqual(await c.connect("wais", { token: `  ${token} ` }), { ok: true, name: "wais person" });
+  assert.deepEqual(log.find((l) => l[0] === "check" && l[1] === "wais"), ["check", "wais", { token }], "the check sees the token, trimmed");
+  assert.equal(keychain.get("svc-wais|wais-user"), token);
+  assert.equal((await c.status()).wais.connected, true);
+  assert.ok(!JSON.stringify(await c.status()).includes(token), "no secret in the status");
+  await c.disconnect("wais");
+  assert.equal((await c.status()).wais.connected, false);
+  assert.equal(log.filter((l) => l[0] === "reset" && l[1] === "wais").length, 2, "the server starts again with the new token, or none");
+  assert.equal("wais" in (await connector(dir).c.status()), false, "no Wais in the status when it isn't given");
+}));
+
+test("a token Wais refuses is never saved", () => inTemp(async (dir) => {
+  const { c, keychain } = connector(dir, { wais: true, fail: "wais" });
+  await assert.rejects(c.connect("wais", { token: "wais_pat_x" }), { code: "auth" });
+  assert.equal(keychain.size, 0);
 }));

@@ -1,10 +1,11 @@
-// Felix calendar bridge. Felix on your Mac calls this web app to read your work calendar and the Tech Team
-// Vacation Tracker, and to send your reply to an invite (Yes, Maybe, No). Nothing else: it can't make, change or
-// delete events, and it reads no other calendar. Every call must carry the key below, which only your Mac's
+// Felix calendar bridge. Felix on your Mac calls this web app to read your work calendar, the Tech Team Vacation
+// Tracker and Google's public Holidays in the Philippines calendar, and to send your reply to an invite (Yes, Maybe,
+// No). Nothing else: it can't make, change or delete events, and it reads no other calendar. Every call must carry the key below, which only your Mac's
 // Keychain has. To shut it off, archive the deployment (Deploy → Manage deployments) or delete this project.
 const KEY = "__FELIX_KEY__";
 const TRACKER = "c_jieq9t3t5r8c2ino7235kp71vo@group.calendar.google.com";
-const CALENDARS = ["primary", TRACKER];
+const PH_HOLIDAYS = "en.philippines#holiday@group.v.calendar.google.com";
+const CALENDARS = ["primary", TRACKER, PH_HOLIDAYS];
 const REPLIES = ["accepted", "tentative", "declined"];
 
 function doPost(e) {
@@ -16,7 +17,7 @@ function doPost(e) {
   }
   if (!body || body.key !== KEY) return out({ error: "key" });
   try {
-    if (body.action === "ping") return out({ ok: true, felix: "calendar-bridge", version: 2 });
+    if (body.action === "ping") return out({ ok: true, felix: "calendar-bridge", version: 3 });
     if (body.action === "events") return out(events(body.calendar, body.params || {}));
     if (body.action === "rsvp") return out(rsvp(body.eventId, body.response, body.comment));
     return out({ error: "bad-request" });
@@ -29,7 +30,7 @@ function doGet() {
   return out({ felix: "calendar-bridge" });
 }
 
-// Events on one of the two calendars, repeating ones expanded, in the same shape as Google's Calendar API.
+// Events on one of those calendars, repeating ones expanded, in the same shape as Google's Calendar API.
 function events(calendar, params) {
   if (CALENDARS.indexOf(calendar) < 0) return { error: "calendar" };
   const max = Math.min(Number(params.maxResults) || 250, 500);

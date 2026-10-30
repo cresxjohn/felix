@@ -7,6 +7,10 @@
 import { PROGRESS_PHRASES } from "./settings-schema.mjs";
 
 const STILL = /\bstill\b/i;
+// Steps that say nothing about the question ("Looking into it" while he thinks): never read out. Felix waits for a
+// real step, like checking your calendar, and says nothing at all when the answer comes first.
+const GENERIC = /^(|looking into it|getting ready|double-checking|on it|working|thinking it over)$/i;
+const RECHECK_MS = 500;
 const GERUND = /^([A-Z][a-z]+(?:-[a-z]+)?ing)\b/;
 
 /**
@@ -82,7 +86,8 @@ export function lineFor(step, phrases, { update, sameStep, last, random = Math.r
 const BROWSER_TIMERS = { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) };
 
 /**
- * Starts Felix's progress lines for one answer. After `delayMs` with no answer he says the first line, then one
+ * Starts Felix's progress lines for one answer. After `delayMs` with no answer, once he's on a real step (not just
+ * thinking), he says the first line, then one
  * every `everyMs` while it's still coming (never, with 0). A line still being said when the next is due is let finish, and that
  * update is skipped. `stop` ends them, when the answer starts or you stop him.
  * @param {{ delayMs: number, everyMs: number, phrases: string[], say: (line: string) => Promise<unknown> | unknown,
@@ -102,6 +107,11 @@ export function createProgress({ delayMs, everyMs, phrases, say, random = Math.r
    */
   function tick() {
     if (stopped) return;
+    // Nothing worth saying yet: look again shortly, until a real step comes or the answer does.
+    if (GENERIC.test(step.trim())) {
+      timer = timers.set(tick, RECHECK_MS);
+      return;
+    }
     // With updates off (0), the first line is the only one: one "hold on" per question.
     if (everyMs > 0) timer = timers.set(tick, everyMs);
     if (saying) return;

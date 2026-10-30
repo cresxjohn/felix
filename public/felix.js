@@ -377,15 +377,106 @@ window.FelixBuddy = (window.frameElement?.classList.contains("felix-page") && wi
       : `<p class="wb-tests bad">Tests fail in my workbench, so it isn't ready to apply. Ask me to fix it.</p><pre class="detail">${esc(tests.tail)}</pre>`;
     const count = `${changes.length} file${changes.length === 1 ? "" : "s"}`;
     const view = shot
-      ? `<a class="shot" href="${esc(shot)}" target="_blank" rel="noopener" title="Open the picture" data-state="loading">`
+      ? `<button type="button" class="shot" data-felix="picture" data-src="${esc(shot)}" title="See it bigger" data-state="loading">`
         + `<img src="${esc(shot)}" alt="Felix with these changes" onload="this.parentElement.dataset.state='ready'"`
         + ` onerror="this.parentElement.dataset.state='failed'"><span class="shot-note">Taking a picture of the change…</span>`
-        + `<span class="shot-failed">Couldn't take a picture. Changed ${esc(count)}.</span></a>`
+        + `<span class="shot-failed">Couldn't take a picture. Changed ${esc(count)}.</span></button>`
       : `<p class="changed">Changed ${esc(count)}, with nothing new to see on screen.</p>`;
     return `<div class="wb"><div class="wb-shot">${view}</div>${testLine}<div class="wb-f">`
       + (failed ? "" : `<button type="button" class="yes" data-felix="apply">Apply to Felix</button>`)
-      + `<a class="chip" href="/api/felix/diff" target="_blank" rel="noopener">See the code</a>`
+      + `<button type="button" class="chip" data-felix="code" data-ready="${failed ? "0" : "1"}">See the code</button>`
       + `<button type="button" class="ghost" data-felix="discard">Discard</button></div></div>`;
+  }
+
+  /**
+   * A sheet over the page, inside Felix: a title, what's in it, and Close (also Esc, or a tap outside it). Nothing
+   * opens in a new tab, which in the iPad app has no way back.
+   * @param {{ title: string, sub?: string, body: string, actions?: string, wide?: boolean }} o
+   * @returns {HTMLElement} The sheet, to fill in once its content is ready.
+   */
+  function openSheet({ title, sub = "", body, actions = "", wide = false }) {
+    closeSheet();
+    const back = document.createElement("div");
+    back.className = "fx-sheet-back";
+    back.innerHTML = `<section class="fx-sheet${wide ? " wide" : ""}" role="dialog" aria-modal="true" aria-label="${esc(title)}">`
+      + `<header class="fx-sheet-head"><div class="fx-sheet-title"><b>${esc(title)}</b><span class="fx-sheet-sub">${esc(sub)}</span></div>`
+      + `<span class="fx-sheet-actions">${actions}</span><button type="button" class="fx-sheet-close" data-sheet="close" aria-label="Close">${ICONS.close}</button></header>`
+      + `<div class="fx-sheet-body">${body}</div></section>`;
+    back.addEventListener("click", (e) => {
+      const t = /** @type {HTMLElement} */ (e.target);
+      const act = t.closest("[data-sheet]")?.getAttribute("data-sheet");
+      if (t === back || act === "close") return closeSheet();
+      if (act === "apply" || act === "discard") {
+        closeSheet();
+        if (!state.busy) workbench(act);
+      }
+    });
+    document.body.append(back);
+    document.addEventListener("keydown", sheetKeys, true);
+    back.querySelector(".fx-sheet-close")?.focus();
+    return /** @type {HTMLElement} */ (back.querySelector(".fx-sheet"));
+  }
+
+  /** Closes the open sheet, if there is one. */
+  function closeSheet() {
+    document.querySelector(".fx-sheet-back")?.remove();
+    document.removeEventListener("keydown", sheetKeys, true);
+  }
+
+  /** Esc closes the sheet. @param {KeyboardEvent} e */
+  function sheetKeys(e) {
+    if (e.key !== "Escape") return;
+    e.stopPropagation();
+    closeSheet();
+  }
+
+  /**
+   * The code Felix changed in his workbench, read for people: each file with what happened to it and how many
+   * lines came and went, then its lines, added ones tinted green and removed ones red, numbered as before and after.
+   * Apply and Discard sit at the top.
+   * @param {boolean} ready Whether his tests passed, so Apply is offered.
+   */
+  async function openCode(ready) {
+    const actions = (ready ? `<button type="button" class="fx-apply" data-sheet="apply">Apply to Felix</button>` : "")
+      + `<button type="button" class="fx-discard" data-sheet="discard">Discard</button>`;
+    const sheet = openSheet({ title: "What Felix changed", sub: "Reading the change…", body: `<p class="fx-sheet-note">${SPINNER}Reading the change…</p>`, actions, wide: true });
+    let files = [];
+    let summary = "";
+    try {
+      const [text, kit] = await Promise.all([fetch("/api/felix/diff", { cache: "no-store" }).then((r) => r.text()), import("/felix-diff.mjs")]);
+      files = kit.parseDiff(text);
+      summary = files.length ? kit.diffSummary(files) : "";
+    } catch {
+      if (sheet.isConnected) sheet.querySelector(".fx-sheet-body").innerHTML = `<p class="fx-sheet-note">Couldn't read the change. Try again in a moment.</p>`;
+      return;
+    }
+    if (!sheet.isConnected) return;
+    sheet.querySelector(".fx-sheet-sub").textContent = summary || "Nothing changed";
+    const STATUS = { new: "New", deleted: "Deleted", renamed: "Renamed", changed: "Changed" };
+    const num = (n) => (n === null ? "" : String(n));
+    const fileHtml = (f, i) => {
+      const slash = f.path.lastIndexOf("/");
+      const dir = slash < 0 ? "" : f.path.slice(0, slash + 1);
+      const name = f.path.slice(slash + 1);
+      const rows = f.binary ? `<p class="fx-sheet-note">A picture or another file that isn't text: nothing to read here.</p>`
+        : !f.lines.length ? `<p class="fx-sheet-note">${f.status === "renamed" ? `Moved from ${esc(f.from || "")}, with nothing else changed.` : "Nothing to show."}</p>`
+        : `<div class="fx-code"><table><tbody>${f.lines.map((l) => (l.kind === "hunk"
+          ? `<tr class="hunk"><td colspan="3">⋯ ${esc(l.text)}</td></tr>`
+          : `<tr class="${l.kind}"><td class="no">${num(l.old)}</td><td class="no">${num(l.new)}</td><td class="src"><span class="sign">${l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span>${esc(l.text)}</td></tr>`)).join("")}</tbody></table></div>`;
+      return `<details class="fx-file"${i < 8 ? " open" : ""}><summary><span class="fx-status ${f.status}">${STATUS[f.status]}</span>`
+        + `<span class="fx-path"><span class="dir">${esc(dir)}</span><b>${esc(name)}</b>${f.from && f.status === "renamed" ? `<span class="dir"> from ${esc(f.from)}</span>` : ""}</span>`
+        + `<span class="fx-counts"><span class="add">+${f.added}</span><span class="del">−${f.removed}</span></span></summary>${rows}</details>`;
+    };
+    sheet.querySelector(".fx-sheet-body").innerHTML = files.length ? files.map(fileHtml).join("") : `<p class="fx-sheet-note">Nothing changed in my workbench.</p>`;
+  }
+
+  /**
+   * The picture of a change, big, in a sheet.
+   * @param {string | undefined} src
+   */
+  function openPicture(src) {
+    if (!src) return;
+    openSheet({ title: "Felix with this change", sub: "A picture of the page as it would look", body: `<img class="fx-picture" src="${esc(src)}" alt="Felix with these changes">`, wide: true });
   }
 
   /**
@@ -683,14 +774,21 @@ window.FelixBuddy = (window.frameElement?.classList.contains("felix-page") && wi
 
   /**
    * Does what an answer asks of the page: open a page, change settings, or control the music.
-   * @param {{ navigate?: string, settings?: Record<string, unknown>, music?: string }} answer
+   * @param {{ navigate?: string, link?: string, settings?: Record<string, unknown>, music?: string }} answer
    * @returns {Promise<void>}
    */
   async function carryOut(answer) {
     if (answer.navigate) open(answer.navigate);
+    // A place outside Felix opens in a new tab or its app. A spoken command may not be allowed to open one; the
+    // reply's chip opens it then.
+    if (answer.link) {
+      try { window.open(answer.link, "_blank", "noopener"); } catch { /* the chip opens it */ }
+    }
     if (answer.music) window.FelixMusic?.command(answer.music);
     // A task Felix added or ticked off: the Tasks card on Home loads again.
     if (answer.tasks) new BroadcastChannel("felix-tasks").postMessage("changed");
+    // Something on a Personal card (a list, habit, journal or date): those cards on Home load again.
+    if (answer.personal) new BroadcastChannel("felix-personal").postMessage("changed");
     if (answer.settings) {
       try {
         await window.FelixShell.saveSettings(answer.settings);
@@ -1334,6 +1432,8 @@ window.FelixBuddy = (window.frameElement?.classList.contains("felix-page") && wi
     if (b?.dataset.felix === "yes" || b?.dataset.felix === "no") return answerConfirm(b.dataset.id, b.dataset.felix === "yes");
     if (b?.dataset.felix === "allow" || b?.dataset.felix === "deny") return answerAllow(b.dataset.id, b.dataset.felix === "allow");
     if (b?.dataset.felix === "apply" || b?.dataset.felix === "discard") return state.busy ? undefined : workbench(b.dataset.felix);
+    if (b?.dataset.felix === "code") return openCode(b.dataset.ready === "1");
+    if (b?.dataset.felix === "picture") return openPicture(b.dataset.src);
     const chip = e.target.closest("a.chip[href^='/']");
     if (chip) {
       e.preventDefault();
@@ -1560,7 +1660,8 @@ window.FelixBuddy = (window.frameElement?.classList.contains("felix-page") && wi
     let pressedInside = false;
     document.addEventListener("pointerdown", (e) => {
       const path = e.composedPath();
-      pressedInside = Boolean((state.panel && path.includes(state.panel)) || path.includes(el));
+      // A sheet Felix opened (the code he changed) belongs to the chat too: using it doesn't close the chat.
+      pressedInside = Boolean((state.panel && path.includes(state.panel)) || path.includes(el) || e.target.closest?.(".fx-sheet-back"));
     }, true);
     document.addEventListener("click", (e) => {
       const path = e.composedPath();

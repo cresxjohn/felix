@@ -80,18 +80,28 @@ export function toneProblems(text, { chatty = "normal", long = false } = {}) {
   return problems;
 }
 
+// The style line as it's sent, which is what a model reads back when it echoes it after its reply.
+const ECHO_MARK = "(style for this reply";
+
 /**
- * A reply without its style line read back at the start, which some models do on a fresh session despite being
- * told not to: the echoed paragraph is dropped, and the reply is what follows it.
+ * A reply without its style line read back, which some models do despite being told not to: at the start, the
+ * echoed paragraph is dropped and the reply is what follows it; later on, the echoed line is cut out.
  * @param {string} text
  * @returns {string}
  */
 export function withoutEcho(text) {
   const said = String(text || "");
   const lead = said.trimStart();
-  if (!ECHO_STARTS.some((e) => lead.toLowerCase().startsWith(e))) return said;
-  const end = lead.search(/\n\s*\n/);
-  return end < 0 ? "" : lead.slice(end).trimStart();
+  if (ECHO_STARTS.some((e) => lead.toLowerCase().startsWith(e))) {
+    const end = lead.search(/\n\s*\n/);
+    return end < 0 ? "" : lead.slice(end).trimStart();
+  }
+  const at = said.toLowerCase().indexOf(ECHO_MARK);
+  if (at < 0) return said;
+  // The echoed line ends at its closing bracket at the end of a line; anything after it is still the reply.
+  const after = said.slice(at);
+  const close = after.search(/\)\s*(\n|$)/);
+  return `${said.slice(0, at).trimEnd()}${close < 0 ? "" : `\n\n${after.slice(close + 1).trim()}`}`.trim();
 }
 
 /**
@@ -103,9 +113,33 @@ export function withoutEcho(text) {
 export function createEchoFilter(next) {
   let held = "";
   let passing = false;
+  // Once the reply is passing, a "(" is held until it's clear whether the style line is being read back there.
+  let tail = "";
+  let dropping = false;
+
+  /**
+   * Passes on a piece of a reply that's already passing, holding back from a "(" that may start an echoed style
+   * line, and dropping the rest once one does.
+   * @param {string} piece
+   */
+  function pass(piece) {
+    if (dropping) return;
+    tail += piece;
+    while (tail) {
+      const at = tail.indexOf("(");
+      if (at < 0) { next(tail); tail = ""; return; }
+      if (at > 0) { next(tail.slice(0, at)); tail = tail.slice(at); }
+      const lead = tail.toLowerCase();
+      if (ECHO_MARK.startsWith(lead)) return;
+      if (lead.startsWith(ECHO_MARK)) { dropping = true; tail = ""; return; }
+      next("(");
+      tail = tail.slice(1);
+    }
+  }
+
   return {
     add(piece) {
-      if (passing) return next(piece);
+      if (passing) return pass(piece);
       held += piece;
       const lead = held.trimStart().toLowerCase();
       // Still the start of what an echo would say: wait to see.
@@ -116,15 +150,20 @@ export function createEchoFilter(next) {
         if (!rest) return;
         held = "";
         passing = true;
-        return next(rest);
+        return pass(rest);
       }
       const out = held;
       held = "";
       passing = true;
-      next(out);
+      pass(out);
     },
     end() {
-      if (passing || !held) return;
+      if (passing) {
+        if (tail && !dropping) next(tail);
+        tail = "";
+        return;
+      }
+      if (!held) return;
       const out = withoutEcho(held);
       held = "";
       passing = true;

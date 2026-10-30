@@ -51,23 +51,6 @@ window.FelixCards = (() => {
    */
   const person = (name, sub) => `<div class="person"><span class="face" aria-hidden="true">${name[0]}</span><span><b>${name}</b><span class="sub">${sub}</span></span></div>`;
 
-  /**
-   * An item with a muted line under it.
-   * @param {string} title
-   * @param {string} sub
-   * @param {string} [cls]
-   * @returns {string}
-   */
-  const item = (title, sub, cls = "") => `<div class="item ${cls}"><b>${title}</b><span class="sub">${sub}</span></div>`;
-
-  /**
-   * A week of habit squares: 1 done, 0 missed.
-   * @param {string} name
-   * @param {string} week Seven 1s and 0s.
-   * @returns {string}
-   */
-  const habit = (name, week) => `<div class="habit"><span>${name}</span><span class="days">${[...week].map((d) => `<i class="${d === "1" ? "on" : ""}"></i>`).join("")}</span></div>`;
-
   const label = (text) => `<span class="label">${text}</span>`;
   const addBox = (text) => `<div class="add"><b>+</b>${text}</div>`;
   const check = (text, done = false) => `<div class="check${done ? " done" : ""}"><span class="box"></span>${text}</div>`;
@@ -90,28 +73,17 @@ window.FelixCards = (() => {
       + `${task("Prep sprint demo notes", "#sprint", "Overdue", "late")}${task("Ask the data team about the reindex", "#data", "Tomorrow")}`
       + `${task("Renew an access token", "#admin", "Done", "done")}`
       + `<div class="roomy">${task("Update the on-call runbook", "#oncall", "Fri")}${task("Book a 1:1 with Alex", "#team", "Next week")}</div>`,
-    myday: `<div class="weather"><span class="temp">29°</span><span>Partly cloudy<span class="sub">Manila</span></span></div>`
-      + `<hr>${item("Dinner with family", "Tonight, 7:00 PM")}${item("Badminton with friends", "Sat, 8:00 AM")}<span class="chip warm">Nov 1 · All Saints' Day</span>`,
     buddy: `<div class="bubble">How did the interview go today?</div><div class="sub">You told me on Tuesday</div>`
       + `<div class="sub">Your week, as you shared it</div><div class="mood"><i class="ok"></i><i class="ok"></i><i class="warn"></i><i class="ok"></i><i class="accent"></i><i></i><i></i></div>`
       + chips(["Talk", "Type"]),
-    dates: `${item("Nov 3 · Mom's birthday", "in 5 days", "soon")}${item("Nov 14 · Anniversary", "in 16 days")}${item("Dec 20 · Trip to Baguio", "in 52 days")}<div class="sub">From calendars and Felix</div>`,
-    timeoff: `${label("Next break")}<div class="big">Dec 22 to Jan 2</div><div class="sub accent">in 54 days · 12 days off</div>`
-      + `<hr>${label("Booked")}<div>Dec 22 to Jan 2 · VL</div><div>Feb 13 · Offset</div><div class="sub">From the vacation tracker</div>`,
-    habits: `${habit("Water", "1111111")}${habit("Exercise", "1011100")}${habit("Reading", "1101101")}${habit("Sleep 8h", "0110100")}<div class="sub">Water: 12-day streak</div>`,
-    bills: `${kv("Electricity", "Nov 5", "warn")}${kv("Internet", "Nov 8")}${kv("Streaming", "Nov 12")}${kv("Car insurance", "Dec 1")}<div class="sub">Reminders only</div>`,
     ptasks: `${addBox("Add: Buy a gift for Mom Sat !high #family")}${chips(["Today", "Upcoming", "Done"])}`
       + `${task("Buy a gift for Mom", "#family", "Sat", "high")}${task("Book the bus to Baguio", "#trip", "Today")}`
       + `${task("Pay the electricity bill", "#bills", "Nov 5")}${task("Renew passport", "#errands", "Overdue", "late")}`
       + `${task("Call Grandma", "#family", "Done", "done")}<div class="sub">Kept apart from work tasks</div>`,
-    lists: `${chips(["Groceries", "Packing", "+"])}${check("Eggs", true)}${check("Rice, 5 kg")}${check("Coffee beans")}${check("Dish soap")}`,
-    journal: `<div class="accent"><b>Best part of today?</b></div><div class="bubble plain">The demo went really well, and dinner with family.</div><div class="sub">Stays on this Mac</div>`,
   };
 
-  const SAVED_HERE = "Saved on this Mac. Nothing to set up.";
-
   /**
-   * @type {Record<string, { title: string, icon: string, link?: { href: string, label: string, external?: boolean }, soon?: { about: string, needs: string, preview: string } }>}
+   * @type {Record<string, { title: string, icon: string, link?: { href: string, label: string, external?: boolean }, soon?: { about: string, needs: string, preview: string, tools?: string } }>}
    */
   const CARDS = {
     ic: {
@@ -154,7 +126,6 @@ window.FelixCards = (() => {
     myday: {
       title: "My day",
       icon: strokeIcon(`<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>`),
-      soon: { about: "The weather, your next personal plans, and the next holiday.", needs: "Needs: a Google sign-in with your personal account.", preview: PREVIEWS.myday },
     },
     buddy: {
       title: "Felix",
@@ -164,22 +135,18 @@ window.FelixCards = (() => {
     dates: {
       title: "Important dates",
       icon: strokeIcon(`<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8c-1.5-3-5-3.5-5-1.5S10 8 12 8zm0 0c1.5-3 5-3.5 5-1.5S14 8 12 8z"/>`),
-      soon: { about: "Birthdays, anniversaries and trips, each with a countdown.", needs: "Needs: the personal Google sign-in.", preview: PREVIEWS.dates },
     },
     timeoff: {
       title: "My time off",
       icon: strokeIcon(`<path d="M3 12a9 9 0 0 1 18 0H3zM12 12v7a2 2 0 0 0 4 0"/>`),
-      soon: { about: "Your next break and the leave you have booked.", needs: "Needs: the work Google sign-in, for the vacation tracker.", preview: PREVIEWS.timeoff },
     },
     habits: {
       title: "Habits",
       icon: strokeIcon(`<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>`),
-      soon: { about: "Small daily habits through the week, with streaks.", needs: SAVED_HERE, preview: PREVIEWS.habits },
     },
     bills: {
-      title: "Bills & renewals",
+      title: "Wais",
       icon: strokeIcon(`<path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6"/>`),
-      soon: { about: "Bills and renewals coming due. Reminders only: Felix pays nothing.", needs: SAVED_HERE, preview: PREVIEWS.bills },
     },
     ptasks: {
       title: "Tasks",
@@ -188,12 +155,10 @@ window.FelixCards = (() => {
     lists: {
       title: "Lists",
       icon: strokeIcon(`<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>`),
-      soon: { about: "Groceries, packing and other checklists.", needs: SAVED_HERE, preview: PREVIEWS.lists },
     },
     journal: {
       title: "Journal",
       icon: strokeIcon(`<path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"/><path d="M14 6l3 3"/>`),
-      soon: { about: "One question a day, and your answer.", needs: "Stays on this Mac. Nothing to set up.", preview: PREVIEWS.journal },
     },
   };
 

@@ -3,6 +3,107 @@
  * and answer fast. Anything that doesn't match goes to the AI. Each command names an intent and the parts it
  * picked out of what you said (its slots).
  */
+import { SCHEDULES, SITE as DATADOG_SITE } from "./datadog.mjs";
+import { findDates, findHabits, findItems, findList, parseDay, saysNot, splitItems } from "./felix-personal.mjs";
+
+/** No lists, items, habits or dates: what matching knows when nothing is passed. @type {import("./felix-personal.mjs").Known} */
+const NOTHING_KNOWN = Object.freeze({ lists: [], items: [], habits: [], dates: [] });
+
+/**
+ * A habit command's parts, when what you said names habits you have and doesn't say you didn't.
+ * @param {string} said
+ * @param {import("./felix-personal.mjs").Known} k
+ * @returns {{ ids: string, said: string } | null}
+ */
+const habitSlots = (said, k) => {
+  if (!said || saysNot(said)) return null;
+  const found = findHabits(said, k.habits);
+  return found.length ? { ids: found.map((h) => h.id).join(","), said } : null;
+};
+
+/**
+ * A tick-off command's parts, when every thing you named is an open item (on the list you named, if you named one).
+ * @param {string} what
+ * @param {string | undefined} listSaid
+ * @param {import("./felix-personal.mjs").Known} k
+ * @returns {{ items: string, list: string } | null}
+ */
+const tickSlots = (what, listSaid, k, { ticked = false } = {}) => {
+  const list = listSaid ? findList(listSaid, k.lists) : null;
+  if (listSaid && !list) return null;
+  const things = splitItems(what);
+  // Ticking looks only at what's still open; removing takes ticked items too.
+  const pool = ticked ? k.items : k.items.filter((i) => !i.done);
+  return things.length && things.every((t) => findItems(t, pool, list).length) ? { items: what, list: list || "" } : null;
+};
+
+/**
+ * Your Personal cards by voice and chat: lists, habits, the journal, important dates, time off and My day. Each one
+ * that changes or reads something by name fires only on a list, item, habit or date you have, so near-misses
+ * ("groceries were expensive", "I drank coffee") are left alone.
+ * @type {Array<{ intent: string, re: RegExp, slots?: (m: RegExpMatchArray, k: import("./felix-personal.mjs").Known) => (Record<string, string | boolean> | null) }>}
+ */
+const PERSONAL = [
+  {
+    intent: "journal.add",
+    re: /^(?:note|write|add|put|jot)(?: (?:this|that|down|it))? (?:in|to|into|on|down in) (?:my |the )?(?:journal|diary)(?: that)?[:,]? (.+)$|^(?:journal|dear diary)[:,] (.+)$|^(?:add to|note for) (?:my |the )?journal[:,]? (.+)$/,
+    slots: (m) => ({ text: m.slice(1).find(Boolean) }),
+  },
+  { intent: "lists.add", re: /^(?:add|put) (.+?) (?:to|on|onto|in|into) (?:my |the |our )?(.+?)$/, slots: (m, k) => { const list = findList(m[2], k.lists); return list ? { list, items: m[1] } : null; } },
+  { intent: "lists.remove", re: /^(?:remove|delete|take|cross) (.+?) (?:off|from|out of)(?: of)? (?:my |the |our )?(.+?)$/, slots: (m, k) => { const list = findList(m[2], k.lists); return list && tickSlots(m[1], m[2], k, { ticked: true }) ? { list, items: m[1] } : null; } },
+  { intent: "lists.tick", re: /^(?:i )?(?:got|bought|picked up|packed|have) (.+?)(?: (?:for|from|on|in) (?:my |the |our )?(.+?))?$/, slots: (m, k) => tickSlots(m[1], m[2], k) },
+  { intent: "lists.tick", re: /^(?:tick|check|cross) off (.+?)(?: (?:on|from) (?:my |the |our )?(.+?))?$/, slots: (m, k) => tickSlots(m[1], m[2], k) },
+  {
+    intent: "lists.show",
+    re: /^(?:what'?s|what is|what do i have|anything) (?:on|in) (?:my |the |our )?(.+?)$|^(?:read|show|tell)(?: me)? (?:my |the |our )?(.+?) list$/,
+    slots: (m, k) => { const list = findList(m[1] || m[2], k.lists); return list ? { list } : null; },
+  },
+  {
+    intent: "habits.check",
+    re: /^(?:i )?(?:just |already |finally )?(?:did|finished|completed|did my) (.+?)(?: today| tonight| this morning)?$|^(?:i'?m |i am )?done with (?:my )?(.+?)(?: for today| today)?$|^(?:mark|tick|check)(?: off)? (.+?)(?: as)? (?:done|complete)(?: for today| today)?$/,
+    slots: (m, k) => habitSlots(m.slice(1).find(Boolean), k),
+  },
+  { intent: "habits.check", re: /^i (?:just |already |finally )?(.+?)(?: today| tonight| this morning| already)?$/, slots: (m, k) => habitSlots(m[1], k) },
+  { intent: "habits.status", re: /^how are my habits(?: doing| going| today)?$|^how am i doing (?:on|with) (?:my )?habits(?: today)?$|^(?:what are |show me |read me )?my habits(?: today)?$|^(?:any )?habits (?:left|to do)(?: today)?$/ },
+  {
+    intent: "habits.streak",
+    re: /^(?:what'?s|what is|how long is|how'?s) my (.+?) streak$/,
+    slots: (m, k) => ({ what: m[1], ids: findHabits(m[1], k.habits).map((h) => h.id).join(",") }),
+  },
+  {
+    intent: "dates.add",
+    re: /^(?:remind me|remember|note|save)(?: that)? (.+?) (birthday|anniversary) is (?:on )?(.+)$/,
+    slots: (m) => (parseDay(m[3]) ? { title: `${m[1]} ${m[2]}`, kind: m[2], date: m[3] } : null),
+  },
+  { intent: "dates.add", re: /^(?:remind me|remember|note|save)(?: that)? (.+?) is (?:on )?(.+)$/, slots: (m) => (parseDay(m[2]) ? { title: m[1], kind: "event", date: m[2] } : null) },
+  { intent: "dates.upcoming", re: /^(?:what'?s|what is) coming up$|^(?:any )?(?:birthdays|anniversaries|important dates)(?: coming up| soon| this month)?$|^(?:what are |when are )?(?:my |the )?(?:next |upcoming )(?:birthdays|anniversaries|important dates|dates)$/ },
+  {
+    intent: "timeoff.next",
+    re: /^when(?:'?s| is) my next (?:break|day off|days off|leave|vacation|long weekend|holiday)$|^when do i (?:get|have) (?:a |my next )?(?:break|day off)$/,
+  },
+  {
+    intent: "timeoff.used",
+    re: /^how many (?:leave |vacation |pto |)days(?: off)? (?:have i|did i|i'?ve) (?:used|taken|take|use|had)(?: so far)?(?: this year)?$|^how much (?:leave|pto|vacation)(?: time)? (?:have i|did i|i'?ve) (?:used|taken|take|use)(?: so far)?(?: this year)?$/,
+  },
+  {
+    intent: "myday.weather",
+    re: /^(?:what'?s|how'?s|what is|how is) the weather(?: like)?(?: (today|tomorrow|now|outside|right now))?$|^weather(?: (today|tomorrow))?$|^(?:is it|will it) (?:going to |gonna )?rain(?: (today|tomorrow))?$|^(?:how hot is it|what'?s the temperature|what is the temperature)(?: (today|tomorrow|now|outside))?$/,
+    slots: (m) => ({ when: m.slice(1).includes("tomorrow") ? "tomorrow" : "today", rain: /rain/.test(m[0]) }),
+  },
+  {
+    intent: "myday.holiday",
+    re: /^is (today|tomorrow) a (?:public |bank )?holiday$|^(?:is there a )?holiday (today|tomorrow)$|^(?:when'?s|when is|what'?s|what is) the next (?:public )?holiday$|^(?:any )?holidays? (?:coming up|soon)$/,
+    slots: (m) => ({ day: m[1] || m[2] || "next" }),
+  },
+  // Wais, your money planner: read-only.
+  { intent: "wais.safe", re: /^how much (?:can i|am i able to|is safe to) spend(?: (?:until|till|before) (?:payday|pay day))?$|^(?:what'?s|what is) (?:my )?safe to spend$|^safe to spend$/ },
+  { intent: "wais.tasks", re: /^(?:what|which|any) bills (?:are )?(?:due|left|to pay)(?: today| this week| soon)?$|^(?:what|which) bills do i (?:have|need) to pay(?: today| this week)?$|^any (?:late|overdue) bills$/ },
+  {
+    intent: "dates.when",
+    re: /^when(?:'?s| is) (?:the |my |our )?(.+)$|^how (?:many days|long) (?:until|till|to) (?:the |my |our )?(.+)$/,
+    slots: (m, k) => { const what = m[1] || m[2]; return findDates(what, k.dates).length || /\b(birthday|anniversary)\b/.test(what) ? { what } : null; },
+  },
+];
 
 /** Places Felix can open, by how you might name them. */
 const PLACES = [
@@ -18,6 +119,123 @@ const PLACES = [
 ];
 
 const PR_REF = /^(fm|bm) ?#? ?(\d{1,6})$/;
+
+/** The PRs page's filters by how you'd say them; some only exist on one tab. */
+const PR_FILTERS = [
+  { re: /\bfail(ing|ed)?\b|\bbroken\b/, id: "failing", label: "with failing checks" },
+  { re: /\bconflicts?\b|\bconflicting\b/, id: "conflict", label: "with conflicts" },
+  { re: /\bready to merge\b|\bmergeable\b/, id: "ready-merge", label: "ready to merge", only: "mine" },
+  { re: /\bin (the )?merge queue\b|\bqueued\b/, id: "in-queue", label: "in the merge queue", only: "mine" },
+  { re: /\bapproved\b/, id: "approved", label: "that are approved" },
+  { re: /\bchanges requested\b|\brequested changes\b/, id: "changes", label: "with changes requested" },
+  { re: /\bdrafts?\b/, id: "draft", label: "that are drafts" },
+  { re: /\b(checks )?running( checks)?\b|\bpending checks\b/, id: "running", label: "with checks running" },
+  { re: /\bnew commits\b/, id: "new-commits", label: "with new commits", only: "review" },
+  { re: /\bneed(s|ing)? (a )?review\b|\bunreviewed\b/, id: "needs", label: "that need a review" },
+];
+/** Words that mean the PRs waiting on your review, not your own. */
+const REVIEW_TAB = /\b(waiting (on|for) (me|my review)|to review|for (my )?review|need(s)? my review|review requests?|i('m| am) reviewing)\b/;
+/** A PR's panel tabs by how you'd say them. */
+const PANELS = [
+  { re: /^(files?|changes|diff|code)$/, id: "files", label: "files" },
+  { re: /^(checks?|ci|builds?)$/, id: "checks", label: "checks" },
+  { re: /^commits?$/, id: "commits", label: "commits" },
+  { re: /^(conversation|comments?|discussion)$/, id: "conversation", label: "conversation" },
+  { re: /^(ai review|ai|claude|cursor|review)$/, id: "claude", label: "AI review" },
+];
+const PANEL_WORDS = "files?|changes|diff|code|checks?|ci|builds?|commits?|conversation|comments?|discussion|ai review|ai|claude|cursor|review";
+const PR_PANEL = new RegExp(`^(?:the )?(${PANEL_WORDS})(?: tab)? (?:of|for|on|in) (fm|bm) ?#? ?(\\d{1,6})$|^(fm|bm) ?#? ?(\\d{1,6})(?:'s)?(?: pr)?(?:'s)? (${PANEL_WORDS})(?: tab)?$`);
+
+/**
+ * The cards on Home you can go to by name, and the mode each is in. "Tasks" alone is the Tasks card of the mode
+ * you're in.
+ */
+const CARDS = [
+  { re: /^(my )?work (tasks?|to-?dos?)$/, card: "tasks", name: "your work tasks" },
+  { re: /^(my )?personal (tasks?|to-?dos?)$/, card: "ptasks", name: "your personal tasks" },
+  { re: /^(my |the )?(tasks?|to-?dos?|to-?do list)( card)?$/, card: "here-tasks", name: "your tasks" },
+  { re: /^(my |the )?habits?( card)?$/, card: "habits", name: "your habits" },
+  { re: /^(my |the )?lists?( card)?$/, card: "lists", name: "your lists" },
+  { re: /^(my |the )?journal( card)?$/, card: "journal", name: "your journal" },
+  { re: /^(the )?my day( card)?$/, card: "myday", name: "My day" },
+  { re: /^(my |the )?(important dates|dates|birthdays|countdowns)( card)?$/, card: "dates", name: "your important dates" },
+  { re: /^(my |the )?(time off|leaves?|leave)( card)?$/, card: "timeoff", name: "your time off" },
+  { re: /^(the )?wais( card)?$|^(my |the )?(money|budget|safe to spend|outlook)( card)?$/, card: "bills", name: "Wais" },
+  { re: /^(the )?felix card$|^(my |the )?check-?ins?$/, card: "buddy", name: "your check-ins" },
+  { re: /^(the )?(on-?call|incident commander|ic)( card)?$/, card: "ic", name: "on-call" },
+  { re: /^(my |the )?(jira( board)?|sprint|tickets)( card)?$/, card: "jira", name: "your Jira board" },
+  // "Show my meetings" is a question Felix answers with your meetings; "open my calendar" goes to the card.
+  { re: /^(my |the )?(calendar|meetings)( card)?$/, card: "cal", name: "your calendar", notShown: true },
+  { re: /^(the )?(team )?(out of office|who'?s out|ooo)( card)?$/, card: "ooo", name: "who's out" },
+  { re: /^(my |the )?slack( card)?$/, card: "slack", name: "your Slack" },
+  { re: /^(my |the )?ai usage( card)?$/, card: "ai", name: "AI usage" },
+];
+
+/**
+ * A list of PRs with filters, from words like "PRs waiting on me with failing checks": the tab and its filters. Plain
+ * ones ("my PRs") are left to PLACES.
+ * @param {string} name
+ * @returns {{ route: string, name: string } | null}
+ */
+function prListFor(name) {
+  if (!/\bprs?\b|\bpull requests?\b/.test(name)) return null;
+  const tab = REVIEW_TAB.test(name) ? "review" : "mine";
+  const picked = PR_FILTERS.filter((f) => f.re.test(name) && (!f.only || f.only === tab));
+  if (!picked.length) return null;
+  const whose = tab === "review" ? "the PRs waiting on your review" : "your PRs";
+  const labels = picked.map((f) => f.label);
+  return { route: `/prs/${tab}?status=${picked.map((f) => f.id).join(",")}`, name: `${whose} ${labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}` : labels[0]}` };
+}
+
+/**
+ * A PR with one of its tabs open, from words like "fm#12247's files" or "the checks of bm 7001".
+ * @param {string} name
+ * @returns {{ route: string, name: string } | null}
+ */
+function prPanelFor(name) {
+  const m = PR_PANEL.exec(name);
+  if (!m) return null;
+  const [word, repo, number] = m[1] ? [m[1], m[2], m[3]] : [m[6], m[4], m[5]];
+  const panel = PANELS.find((p) => p.re.test(word));
+  return panel ? { route: `/prs/mine?pr=${repo}-${number}&panel=${panel.id}`, name: `${repo}#${number}'s ${panel.label}` } : null;
+}
+
+/**
+ * A card on Home, from its name: Home scrolls to it and points it out, switching mode first when it's on the other
+ * side.
+ * @param {string} name
+ * @param {string} [verb] How you asked: "show" + a question-like card (your meetings) is left for Felix to answer.
+ * @returns {{ route: string, name: string } | null}
+ */
+function cardFor(name, verb = "open") {
+  const c = CARDS.find((x) => x.re.test(name) && !(x.notShown && /^show/.test(verb)));
+  return c ? { route: `/?card=${c.card}`, name: c.name } : null;
+}
+
+/** Slack's link that opens a channel by its name, in the app or on the web. */
+const SLACK_TEAM = "TRA9H4H8D";
+const SLACK_CHANNEL = /^(?:the )?#([a-z0-9][a-z0-9._-]*)(?: channel)?(?: (?:in|on) slack)?$|^(?:the )?([a-z0-9][a-z0-9 ._-]*?) channel(?: (?:in|on) slack)?$/;
+
+/**
+ * A place outside Felix, from its name: a Slack channel ("#incident-response", "the incident response channel"), an
+ * on-call schedule in Datadog ("the Datadog schedule" is yours, the Philippines one; "the Americas schedule"), or
+ * Datadog's On-Call.
+ * @param {string} name
+ * @returns {{ url: string, name: string } | null}
+ */
+export function linkFor(name) {
+  const ch = SLACK_CHANNEL.exec(name);
+  if (ch) {
+    const channel = (ch[1] || ch[2]).trim().replace(/\s+/g, "-");
+    return { url: `https://slack.com/app_redirect?team=${SLACK_TEAM}&channel=${encodeURIComponent(channel)}`, name: `#${channel} in Slack` };
+  }
+  if (/\b(schedules?|rotation|rota)\b/.test(name) && /\b(datadog|on-?call|ic|incident commanders?)\b|\b(americas|us|pure|philippines|ph|kastl)\b/.test(name)) {
+    const which = /\b(americas|us|pure)\b/.test(name) ? SCHEDULES.find((s) => s.key === "americas") : SCHEDULES.find((s) => s.key === "ph");
+    return { url: `https://${DATADOG_SITE}/on-call/schedules/${which.id}`, name: `the ${which.name} on-call schedule in Datadog` };
+  }
+  if (/^(the )?datadog( on-?call)?$|^(the )?on-?call (page )?in datadog$/.test(name)) return { url: `https://${DATADOG_SITE}/on-call`, name: "Datadog On-Call" };
+  return null;
+}
 const RSVP = { accept: "accepted", "say yes to": "accepted", decline: "declined", "say no to": "declined", "say maybe to": "tentative", maybe: "tentative", "tentatively accept": "tentative" };
 const MUSIC = { play: "play", resume: "play", pause: "pause", stop: "pause", next: "next", skip: "next", previous: "previous", last: "previous", back: "previous" };
 /** Words that say "it" rather than name something to play, left for the AI. */
@@ -69,7 +287,7 @@ const SHIFT_SAYINGS = [
 
 /**
  * The commands, in the order they're tried. `slots` reads the parts a match picked out.
- * @type {Array<{ intent: string, re: RegExp, slots?: (m: RegExpMatchArray) => (Record<string, string | boolean> | null) }>}
+ * @type {Array<{ intent: string, re: RegExp, slots?: (m: RegExpMatchArray, k: import("./felix-personal.mjs").Known) => (Record<string, string | boolean> | null) }>}
  */
 const COMMANDS = [
   { intent: "greeting", re: /^(hi|hello|hey|yo|good (morning|afternoon|evening))$/ },
@@ -102,6 +320,8 @@ const COMMANDS = [
     re: /^turn (on|off) (auto ?refresh|fit to screen)$|^turn (auto ?refresh|fit to screen) (on|off)$/,
     slots: (m) => ({ key: SETTING_NAMES[(m[2] || m[3]).replace(/^auto ?refresh$/, "auto refresh")], on: (m[1] || m[4]) === "on" }),
   },
+  { intent: "mode", re: /^(switch to |go to |open )(the )?(work ?space|workspace)$/, slots: () => ({ mode: "work" }) },
+  { intent: "mode", re: /^work ?space$/, slots: () => ({ mode: "work" }) },
   { intent: "mode", re: /^(switch to |go to )?(work|personal)( mode)?$/, slots: (m) => (m[1] || m[3] ? { mode: m[2] } : null) },
   { intent: "merge", re: /^merge (fm|bm) ?#? ?(\d{1,6})$/, slots: (m) => ({ repo: m[1], number: m[2] }) },
   { intent: "merge.which", re: /^merge my (pr|pull request)$/ },
@@ -131,6 +351,8 @@ const COMMANDS = [
     re: /^(?:what|which|any|show(?: me)?|list)? ?(?:are |is )?(?:my |the )?(?:open )?(?:tasks|to-?dos|task list|to-?do list)(?: are| do i have)?(?: due)?(?: for)?(?: (today|tomorrow|overdue|this week|upcoming|coming up))?$|^what'?s on my (?:task list|tasks|to-?do list|to-?dos|todo list|list)(?: for)?(?: (today|tomorrow))?$|^what (?:tasks|to-?dos) (?:are |do i have )?(?:due )?(today|tomorrow|overdue|this week|coming up)$|^what do i (?:have|need) to do(?: (today|tomorrow))?$|^(?:what'?s|anything) (overdue)$|^(?:any|show(?: me)?(?: my)?) (overdue|upcoming) (?:tasks|to-?dos)$|^what is on my (?:task list|tasks|to-?do list|to-?dos|list)(?: for)?(?: (today|tomorrow))?$/,
     slots: (m) => ({ when: m.slice(1).find(Boolean) || "today" }),
   },
+  // Personal cards first, so "done with reading" ticks your habit before it looks for a task by that name.
+  ...PERSONAL,
   {
     intent: "tasks.done",
     re: /^(?:mark|tick|check)(?: off)? (.+?)(?: as)? (?:done|complete|completed|finished)$|^(?:tick|check) off (.+)$|^(?:i'?m )?done with (.+)$|^(?:i )?(?:finished|completed) (.+)$/,
@@ -171,19 +393,25 @@ const COMMANDS = [
     re: /^(accept|decline|say yes to|say no to|say maybe to|maybe|tentatively accept) (?:the |my )?(.+?(?:meeting|invite|invitation|call|event|standup|sync|1:1|one))(?: and (?:say|tell them|add a note|note)(?: that)? (.+))?$/,
     slots: (m) => ({ response: RSVP[m[1]], what: m[2], note: m[3] || "" }),
   },
-  { intent: "navigate", re: /^(open|show( me)?|go to|take me to|bring up) (.+)$/, slots: (m) => placeFor(m[3]) },
+  { intent: "link", re: /^(open|show( me)?|go to|take me to|bring up|jump to) (.+)$/, slots: (m) => linkFor(m[3]) },
+  // Moving cards around isn't built yet: Felix says so and opens the layout settings there are.
+  { intent: "layout", re: /^(edit|change|customi[sz]e|rearrange|personali[sz]e|arrange) (the |my )?(layout|cards|home( page)?|dashboard)$/ },
+  { intent: "navigate", re: /^(open|show( me)?|go to|take me to|bring up|jump to) (.+)$/, slots: (m) => placeFor(m[3], m[1]) },
 ];
 
 /**
- * Where a place name leads: a Felix page, or a PR in the Open PRs page.
+ * Where a place name leads: a Felix page (with the PRs page's filters or a PR's tab), a PR, or a card on Home.
  * @param {string} name
+ * @param {string} [verb] How you asked ("open", "show me").
  * @returns {{ route: string, name: string } | null}
  */
-export function placeFor(name) {
+export function placeFor(name, verb = "open") {
+  const filtered = prListFor(name) || prPanelFor(name);
+  if (filtered) return filtered;
   const pr = PR_REF.exec(name);
   if (pr) return { route: `/prs/mine?pr=${pr[1]}-${pr[2]}`, name: `${pr[1]}#${pr[2]}` };
   const place = PLACES.find((p) => p.re.test(name));
-  return place ? { route: place.route, name: place.name } : null;
+  return place ? { route: place.route, name: place.name } : cardFor(name, verb);
 }
 
 /**
@@ -216,14 +444,15 @@ export function normalize(text, name = "felix", wake = "") {
  * @param {string} text
  * @param {string} [name]
  * @param {string} [wake]
+ * @param {import("./felix-personal.mjs").Known} [known] Your lists, items, habits and dates, for the Personal commands.
  * @returns {{ intent: string, slots: Record<string, string | boolean> } | null}
  */
-export function matchCommand(text, name, wake) {
+export function matchCommand(text, name, wake, known = NOTHING_KNOWN) {
   const said = normalize(text, name, wake);
   for (const c of COMMANDS) {
     const m = said.match(c.re);
     if (!m) continue;
-    const slots = c.slots ? c.slots(m) : {};
+    const slots = c.slots ? c.slots(m, known) : {};
     if (slots) return { intent: c.intent, slots };
   }
   return null;

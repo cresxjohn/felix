@@ -4,6 +4,8 @@
  * Slack, tasks, PRs, AI usage) runs at once. Doing something (an RSVP, a task, a Slack message) shows you a card to
  * allow first, unless Settings allow everything. Tasks are the exception: you gave Felix full say over them, so adding,
  * changing, ticking off and deleting run at once. GitHub is reached with the gh command, which Felix's AI already has.
+ * Your Personal cards (lists, habits, the journal, important dates, time off) work the same way, with no cards, and
+ * only when you ask about them. The journal can be added to, never read.
  */
 
 /**
@@ -22,10 +24,13 @@
  *   prs: () => Promise<unknown>,
  *   usage: () => Promise<unknown>,
  *   onTasks?: () => void,
+ *   personal?: ReturnType<typeof import("./felix-personal.mjs").createPersonalFelix>,
+ *   wais?: { call: (tool: string, args?: Record<string, unknown>) => Promise<unknown> },
  * }} Services
  */
 
 import { linkOf } from "./tasks.mjs";
+import { findList } from "./felix-personal.mjs";
 
 const DAY = { type: "string", description: "A day as YYYY-MM-DD." };
 /** What a task change may touch. */
@@ -139,6 +144,8 @@ export function createTools(s) {
         return { deleted: String(a.id) };
       },
     },
+    ...personalTools(s),
+    ...waisTools(s),
     {
       name: "prs_open",
       description: "The user's open PRs and the ones waiting on their review in fm and bm, with checks, approvals and conflicts. For anything else on GitHub, use the gh command.",
@@ -153,4 +160,131 @@ export function createTools(s) {
     },
   ];
   return tools;
+}
+
+/**
+ * The tools for your Personal cards: few and clear. They run at once, like tasks, and only on what you have.
+ * @param {Services} s
+ * @returns {Tool[]}
+ */
+function personalTools(s) {
+  /** Felix's way into the Personal cards, or a plain error when they aren't here. */
+  const p = () => {
+    if (!s.personal) throw new Error("The Personal cards aren't set up here.");
+    return s.personal;
+  };
+  /** A list by the name the user used ("groceries", "my packing list"). */
+  const listFor = (name) => {
+    const own = findList(String(name || ""), p().lists().map((l) => l.name));
+    const list = own && p().listNamed(own);
+    if (!list) throw new Error(`There's no list called ${name}. The lists are ${p().lists().map((l) => l.name).join(", ") || "none yet"}.`);
+    return list;
+  };
+  return [
+    {
+      name: "personal_lists",
+      description: "The user's own lists from Personal mode (like Groceries, Packing, Wishlist): every list with how many items are left and ticked, or, with list, that list's items.",
+      inputSchema: { type: "object", properties: { list: { type: "string", description: "A list's name, to see its items." } } },
+      run: async (a) => (a.list ? { list: listFor(a.list), items: p().items(listFor(a.list).id) } : { lists: p().lists() }),
+    },
+    {
+      name: "personal_list_add",
+      description: "Adds items to one of the user's lists, by the list's name. Runs at once: the user gave you full say over their lists.",
+      inputSchema: { type: "object", properties: { list: { type: "string" }, items: { type: "array", items: { type: "string" } } }, required: ["list", "items"] },
+      run: async (a) => {
+        const things = (Array.isArray(a.items) ? a.items : [a.items]).map((t) => String(t).trim()).filter(Boolean);
+        if (!things.length) throw new Error("Say what to add.");
+        return { list: listFor(a.list).name, added: p().addItems(listFor(a.list).id, things.join("\n")) };
+      },
+    },
+    {
+      name: "personal_habits",
+      description: "The user's daily habits: each one's id, today's count and goal, current and best streak, and the last 7 days.",
+      inputSchema: { type: "object", properties: {} },
+      run: async () => p().habits(),
+    },
+    {
+      name: "personal_habit_check",
+      description: "Marks one of the user's habits done (or, with done: false, not done) for today or a past day, by its id from personal_habits. Runs at once.",
+      inputSchema: { type: "object", properties: { id: { type: "string" }, day: DAY, done: { type: "boolean" } }, required: ["id"] },
+      run: async (a) => p().setHabit(String(a.id), { day: a.day || undefined, done: a.done !== false }),
+    },
+    {
+      name: "personal_journal_add",
+      description: "Adds a line to the end of today's journal entry, in the user's own words. It never replaces what's there, and the journal can't be read back: it stays private.",
+      inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+      run: async (a) => {
+        const line = String(a.text || "").trim();
+        if (!line) throw new Error("Say what to write.");
+        p().journalAppend(line);
+        return { added: true };
+      },
+    },
+    {
+      name: "personal_dates",
+      description: "The user's important dates (birthdays, anniversaries, countdowns), each with when it next comes round. With add, saves a new one first: kind birthday or anniversary (every year; year optional, for the age) or event (a countdown, with its year).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          add: {
+            type: "object",
+            properties: { kind: { type: "string", enum: ["birthday", "anniversary", "event"] }, title: { type: "string" }, month: { type: "number" }, day: { type: "number" }, year: { type: ["number", "null"] } },
+            required: ["kind", "title", "month", "day"],
+          },
+        },
+      },
+      run: async (a) => {
+        const added = a.add ? p().addDate({ kind: a.add.kind, title: a.add.title, month: a.add.month, day: a.add.day, year: a.add.year ?? null }) : null;
+        return { ...(added ? { added } : {}), ...p().datesView({ ahead: 366, limit: 20 }) };
+      },
+    },
+    {
+      name: "personal_timeoff",
+      description: "The user's own time off from the vacation tracker: the next break (days off, weekends counted), booked leave, and this year's days off by kind.",
+      inputSchema: { type: "object", properties: {} },
+      run: async () => p().timeoff(),
+    },
+  ];
+}
+
+/**
+ * The tools for Wais, the user's money planner: read-only, over Wais's own MCP server. Money comes as { amount,
+ * formatted }; say the formatted figure.
+ * @param {Services} s
+ * @returns {Tool[]}
+ */
+function waisTools(s) {
+  /** Calls Wais, or says plainly that it isn't connected here. */
+  const wais = (tool, args) => {
+    if (!s.wais) throw new Error("Wais isn't connected here.");
+    return s.wais.call(tool, args);
+  };
+  const SPACE = { type: "string", description: "A space's id, from wais_spaces. Leave it out for the user's default space." };
+  const PERIODS = ["30", "60", "90", "365", "730", "1095", "1825"];
+  return [
+    {
+      name: "wais_spaces",
+      description: "The user's Wais spaces (their own, shared ones) and which is the default.",
+      inputSchema: { type: "object", properties: {} },
+      run: () => wais("spaces", {}),
+    },
+    {
+      name: "wais_safe_to_spend",
+      description: "What the user can safely spend in Wais: until payday or over a number of days, the day money runs short if it does, the lowest point, and bills ahead. Without period or accounts it uses their saved choice.",
+      inputSchema: { type: "object", properties: { space: SPACE, period: { type: "string", enum: ["payday", ...PERIODS] }, accounts: { type: "array", items: { type: "string" } } } },
+      run: (a) => wais("safe_to_spend", Object.fromEntries(Object.entries({ space: a.space, period: a.period, accounts: a.accounts }).filter(([, v]) => v !== undefined && v !== ""))),
+    },
+    {
+      name: "wais_tasks",
+      description: "The user's money tasks in Wais (bills to pay today, to review, or late), with due days and amounts.",
+      inputSchema: { type: "object", properties: { space: SPACE } },
+      run: (a) => wais("tasks", a.space ? { space: a.space } : {}),
+    },
+    {
+      name: "wais_outlook",
+      description: "The user's projected balance in Wais over a period (30 days unless asked): now, the lowest point and when, and the end.",
+      inputSchema: { type: "object", properties: { space: SPACE, period: { type: "string", enum: PERIODS } } },
+      run: (a) => wais("outlook", { ...(a.space ? { space: a.space } : {}), period: PERIODS.includes(a.period) ? a.period : "30" }),
+    },
+  ];
 }

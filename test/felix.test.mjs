@@ -17,7 +17,7 @@ const AUTO = { felixTool: "auto", felixModel: "auto" };
  *   merge?: Function, review?: Function, pastLimit?: boolean }} [options]
  */
 function setup({ draft = () => ({ text: "Okay.", error: null, limit: false }), cursor = () => ({ text: "Sonito Mole is on call.", error: null, limit: false }),
-  prefs = {}, facts = fakeFacts(), merge, review, pastLimit = false } = {}) {
+  prefs = {}, facts = fakeFacts(), merge, review, pastLimit = false, personal } = {}) {
   const calls = { ask: [], cursor: [], warm: [], merge: [], review: [], log: [] };
   let clock = NOW;
   const streamed = (answer, onDelta) => {
@@ -42,7 +42,7 @@ function setup({ draft = () => ({ text: "Okay.", error: null, limit: false }), c
   };
   const felix = createFelix({
     facts, brain, actions, settings: { get: async () => ({ ...PREFS, ...prefs }) }, log: (e) => calls.log.push(e),
-    now: () => clock, random: () => 0, timeZone: TZ,
+    now: () => clock, random: () => 0, timeZone: TZ, personal,
   });
   return { felix, calls, later: (ms) => { clock += ms; } };
 }
@@ -883,4 +883,39 @@ test("naming a work source or a PR makes a message a work question", async () =>
   assert.equal(namesWork("I'm stressed about the release", routeQuestion("I'm stressed about the release")), true);
   assert.equal(namesWork("I'm stressed about fm#12", routeQuestion("I'm stressed about fm#12")), true);
   assert.equal(namesWork("I'm stressed", routeQuestion("I'm stressed")), false);
+});
+
+/** Felix's facade over a real Personal store in memory. */
+async function personalFacade() {
+  const { createPersonal } = await import("../personal.mjs");
+  const { createPersonalFelix } = await import("../felix-personal.mjs");
+  const store = await createPersonal({ file: ":memory:" });
+  return { store, personal: createPersonalFelix({ store, settings: { get: async () => ({}) } }) };
+}
+
+test("Personal commands answer here in either mode, flag the cards to load again, and keep a journal line out of the log", async () => {
+  const { store, personal } = await personalFacade();
+  const { felix, calls } = setup({ personal, prefs: { mode: "work" } });
+  const added = await felix.ask("Felix, add eggs and milk to groceries");
+  assert.deepEqual([added.how, added.text, added.personal], ["lists.add", "Added eggs and milk to Groceries.", true]);
+  assert.deepEqual(store.items(store.lists()[0].id).map((i) => i.text), ["Eggs", "Milk"]);
+  assert.equal(calls.ask.length, 0, "no AI");
+  const noted = await felix.ask("note in my journal: Told Mama about the new job");
+  assert.equal(noted.how, "journal.add");
+  assert.equal(calls.log.at(-1).question, "(a journal line, kept private)");
+  assert.ok(!JSON.stringify(calls.log).includes("new job"), "the line is only in the journal");
+  // Without any lists of that name, the same words go to the AI as before.
+  assert.notEqual((await felix.ask("add a comment to the PR")).how, "lists.add");
+});
+
+test("when the AI changes a Personal card with its tools, the answer says so, so the cards load again", async () => {
+  const { store, personal } = await personalFacade();
+  const { felix } = setup({
+    personal,
+    draft: () => { personal.addItems(store.lists()[1].id, "Sunscreen"); return { text: "Okay.", error: null, limit: false }; },
+  });
+  const answer = await felix.ask("pack something for the beach trip, you pick");
+  assert.equal(answer.personal, true);
+  const { felix: quiet } = setup({ personal });
+  assert.equal((await quiet.ask("how's the release going")).personal, undefined);
 });

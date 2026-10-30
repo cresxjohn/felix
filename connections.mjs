@@ -22,12 +22,13 @@ const SLACK_TOKEN = /^(xoxe\.)?xoxp-[\w-]{8,400}$/;
  * @param {{ dir: string, jira: { check: Function, reset: Function, service: string, board?: () => Promise<number>, setBoard?: (board: number) => Promise<unknown> },
  *   datadog: { check: Function, reset?: Function, service: string },
  *   slack?: { check: Function, reset?: Function, service: string, account: string },
+ *   wais?: { check: Function, reset?: Function, service: string, account: string },
  *   keychain?: { write: typeof writeKeychain, remove: typeof deleteKeychain, account: typeof readKeychainAccount } }} options
  *   `dir` is Felix's data folder. `check` tries a service's credentials and throws a coded error when they fail.
  *   Jira's `board` and `setBoard` read and save the board number in Felix's settings; without them it lives in
  *   connections.json.
  */
-export function createConnections({ dir, jira, datadog, slack, keychain = { write: writeKeychain, remove: deleteKeychain, account: readKeychainAccount } }) {
+export function createConnections({ dir, jira, datadog, slack, wais, keychain = { write: writeKeychain, remove: deleteKeychain, account: readKeychainAccount } }) {
   const file = path.join(dir, "connections.json");
 
   /**
@@ -104,6 +105,22 @@ export function createConnections({ dir, jira, datadog, slack, keychain = { writ
     };
   }
 
+  // Wais (the Personal Wais card) is read with an access token made in Wais; Felix tries it with Wais's spaces tool
+  // first, which also checks the token format, so only a working one is saved.
+  if (wais) {
+    services.wais = {
+      check: (fields) => wais.check(fields),
+      async save({ token }) {
+        await keychain.write(wais.service, wais.account, token);
+        wais.reset?.();
+      },
+      async remove() {
+        await keychain.remove(wais.service, wais.account);
+        wais.reset?.();
+      },
+    };
+  }
+
   /**
    * The service by its id.
    * @param {string} id
@@ -143,16 +160,18 @@ export function createConnections({ dir, jira, datadog, slack, keychain = { writ
    * Which services are connected, for Settings: Jira's email and board, and whether Datadog and Slack have a token.
    * Only names are read from the Keychain, never a secret.
    * @returns {Promise<{ jira: { connected: boolean, who: string | null, board: number | null }, datadog: { connected: boolean },
-   *   slack?: { connected: boolean } }>}
+   *   slack?: { connected: boolean }, wais?: { connected: boolean } }>}
    */
   async function status() {
-    const [email, dd, sl, saved] = await Promise.all([
-      keychain.account(jira.service), keychain.account(datadog.service), slack ? keychain.account(slack.service) : null, choices(),
+    const [email, dd, sl, wa, saved] = await Promise.all([
+      keychain.account(jira.service), keychain.account(datadog.service), slack ? keychain.account(slack.service) : null,
+      wais ? keychain.account(wais.service) : null, choices(),
     ]);
     return {
       jira: { connected: Boolean(email), who: email || null, board: email ? ((jira.board ? await jira.board() : saved.jira?.board) ?? 181) : null },
       datadog: { connected: Boolean(dd) },
       ...(slack ? { slack: { connected: Boolean(sl) } } : {}),
+      ...(wais ? { wais: { connected: Boolean(wa) } } : {}),
     };
   }
 

@@ -338,3 +338,164 @@ test("the clock answers in your time zone", () => {
   assert.deepEqual(ANSWERS.clock({ now: () => at, timeZone: "Asia/Manila" }, { what: "time" }), { text: "It's 1:05 PM on Friday." });
   assert.deepEqual(ANSWERS.clock({ now: () => at, timeZone: "Asia/Manila" }, { what: "date" }), { text: "It's Friday, October 30." });
 });
+
+// ---------- Personal cards ----------
+
+/**
+ * A Personal context: a real store in memory (9 AM Friday Oct 30, 2026, Manila), Felix's facade over it, and fixed
+ * time off and My day answers.
+ * @param {{ timeoff?: Function, myday?: Function }} [o]
+ */
+async function personalCtx(o = {}) {
+  process.env.TZ = "Asia/Manila";
+  const { createPersonal } = await import("../personal.mjs");
+  const { createPersonalFelix } = await import("../felix-personal.mjs");
+  const store = await createPersonal({ file: ":memory:", now: () => Date.parse("2026-10-30T01:00:00Z") });
+  const personal = createPersonalFelix({
+    store, settings: { get: async () => ({}) },
+    timeOff: { view: o.timeoff || (async () => ({ needsMe: true, people: [] })) },
+    myDay: { view: o.myday || (async () => { throw new Error("offline"); }) },
+  });
+  const base = ctx();
+  return { store, personal, at: (said) => ({ ...base, personal, said }) };
+}
+
+test("lists: adding keeps your words, ticking and taking off find the item, and a list reads out what's left", async () => {
+  const { store, personal, at } = await personalCtx();
+  const groceries = personal.listNamed("Groceries");
+  const added = ANSWERS["lists.add"](at("Add eggs and Calamansi to groceries"), { list: "Groceries", items: "eggs and calamansi" });
+  assert.deepEqual(added, { text: "Added eggs and calamansi to Groceries.", personal: true });
+  assert.deepEqual(store.items(groceries.id).map((i) => i.text), ["Eggs", "Calamansi"], "a capital first letter, your own capitals kept");
+  assert.equal(ANSWERS["lists.add"](at("add x to y"), { list: "Shopping", items: "x" }).text, "You don't have a Shopping list.");
+  assert.equal(ANSWERS["lists.show"](at(""), { list: "Groceries" }).text, "Groceries has 2 things left: eggs and calamansi.");
+  assert.deepEqual(ANSWERS["lists.tick"](at("got the eggs"), { items: "the eggs", list: "" }), { text: "Ticked off eggs.", personal: true });
+  assert.equal(ANSWERS["lists.tick"](at("got bread"), { items: "bread", list: "" }).text, "I couldn't find bread on your lists.");
+  assert.deepEqual(ANSWERS["lists.remove"](at("remove calamansi from groceries"), { items: "calamansi", list: "Groceries" }), { text: "Took calamansi off Groceries.", personal: true });
+  assert.equal(ANSWERS["lists.show"](at(""), { list: "Groceries" }).text, "Everything on Groceries is ticked off.");
+  assert.equal(ANSWERS["lists.show"](at(""), { list: "Packing" }).text, "Nothing on Packing yet.");
+  // The same item on two lists: ask which.
+  personal.addItems(groceries.id, "Water");
+  personal.addItems(personal.listNamed("Packing").id, "Water");
+  assert.equal(ANSWERS["lists.tick"](at("got water"), { items: "water", list: "" }).text, "Which water? Water on Groceries or Water on Packing.");
+});
+
+test("habits: a tick says the streak, a done habit isn't undone, several-times-a-day counts up, and status reads the day", async () => {
+  const { store, at } = await personalCtx();
+  const water = store.addHabit({ name: "Drink water" });
+  const read = store.addHabit({ name: "Read", perDay: 2 });
+  store.check(water.id, { day: "2026-10-29" });
+  assert.deepEqual(ANSWERS["habits.check"](at("I drank water"), { ids: water.id }), { text: "Nice! Drink water is done for today, a 2-day streak.", personal: true });
+  assert.deepEqual(ANSWERS["habits.check"](at("I drank water"), { ids: water.id }), { text: "Drink water is already done today, a 2-day streak." });
+  assert.deepEqual(ANSWERS["habits.check"](at("did my reading"), { ids: read.id }), { text: "Read: 1 of 2 today.", personal: true });
+  assert.equal(ANSWERS["habits.check"](at(""), { ids: `${water.id},${read.id}` }).text, "Which one? Drink water or Read.");
+  assert.equal(ANSWERS["habits.status"](at("")).text, "1 of 2 done today: drink water. Still to go: read.");
+  assert.equal(ANSWERS["habits.streak"](at(""), { what: "water", ids: water.id }).text, "Your drink water streak is 2 days.");
+  assert.equal(ANSWERS["habits.streak"](at(""), { what: "reading", ids: read.id }).text, "No read streak yet. Tick it today to start one.");
+  assert.equal(ANSWERS["habits.streak"](at(""), { what: "yoga", ids: "" }).text, "I don't see a habit like yoga.");
+});
+
+test("the journal gets your line added after what's there, and the reply doesn't repeat it", async () => {
+  const { store, at } = await personalCtx();
+  store.writeJournal("2026-10-30", { text: "Rainy morning." });
+  const reply = ANSWERS["journal.add"](at("note in my journal: Long walk with Mama"), { text: "long walk with mama" });
+  assert.deepEqual(reply, { text: "Added to today's journal.", personal: true });
+  assert.equal(store.journalDay().entry.text, "Rainy morning.\nLong walk with Mama");
+});
+
+test("important dates: what's coming up, when one is with the age, and adding one with a plain confirmation", async () => {
+  const { store, at } = await personalCtx();
+  assert.match(ANSWERS["dates.upcoming"](at("")).text, /^You don't have any important dates yet/);
+  store.addDate({ kind: "birthday", title: "Mama's birthday", month: 11, day: 3, year: 1966 });
+  store.addDate({ kind: "event", title: "Trip to Baguio", month: 12, day: 20, year: 2026 });
+  assert.equal(ANSWERS["dates.upcoming"](at("")).text, "Coming up: Mama's birthday in 4 days and Trip to Baguio in 51 days.");
+  assert.equal(ANSWERS["dates.when"](at(""), { what: "mama's birthday" }).text, "Mama's birthday is on Tuesday, Nov 3, in 4 days. Turns 60.");
+  assert.match(ANSWERS["dates.when"](at(""), { what: "mom's birthday" }).text, /^I don't have mom's birthday saved/);
+  const added = ANSWERS["dates.add"](at("remind me Lola's birthday is November 3"), { title: "lola's birthday", kind: "birthday", date: "november 3" });
+  assert.deepEqual(added, { text: "Got it: Lola's birthday, November 3. That's in 4 days.", personal: true });
+  assert.match(ANSWERS["dates.add"](at("remind me Lola's birthday is November 3"), { title: "lola's birthday", kind: "birthday", date: "november 3" }).text, /^You already have Lola's birthday/);
+  const trip = ANSWERS["dates.add"](at("remind me the concert is March 1"), { title: "the concert", kind: "event", date: "march 1" });
+  assert.equal(trip.text, "Got it: Concert, March 1. That's in 122 days.", "a countdown with no year is the next March 1");
+  assert.equal(store.datesView().all.find((d) => d.title === "Concert").year, 2027);
+  assert.equal(ANSWERS["dates.add"](at(""), { title: "x", kind: "birthday", date: "feb 30" }).text, "I didn't catch the day. Try \"November 3\".");
+});
+
+test("time off: your next break, the days you've used, and plain words when it can't tell", async () => {
+  const view = { needsMe: false, ahead: 180, next: { from: "2026-10-31", to: "2026-11-02", days: 3, inDays: 1, now: false, holidays: [{ day: "2026-11-02", name: "All Souls' Day" }], kinds: [] },
+    year: { total: 7, kinds: [{ kind: "PTO", days: 5 }, { kind: "VL", days: 2 }] } };
+  const { at } = await personalCtx({ timeoff: async () => view });
+  assert.equal((await ANSWERS["timeoff.next"](at(""))).text, "Your next break is October 31 to November 2, tomorrow: 3 days off. It's for All Souls' Day.");
+  assert.equal((await ANSWERS["timeoff.used"](at(""))).text, "You've taken 7 days off this year: 5 PTO and 2 VL.");
+  view.next = { ...view.next, now: true, from: "2026-10-28" };
+  assert.equal((await ANSWERS["timeoff.next"](at(""))).text, "You're on a break now. You're back on Tuesday, Nov 3.");
+  view.next = null;
+  view.year = { total: 0, kinds: [] };
+  assert.equal((await ANSWERS["timeoff.next"](at(""))).text, "No break in the next 6 months.");
+  assert.equal((await ANSWERS["timeoff.used"](at(""))).text, "You haven't taken any leave this year yet.");
+  const pick = await personalCtx();
+  assert.match((await ANSWERS["timeoff.next"](pick.at(""))).text, /^Pick yourself on the My time off card/);
+  const down = await personalCtx({ timeoff: async () => { throw new Error("tracker down"); } });
+  assert.equal((await ANSWERS["timeoff.used"](down.at(""))).text, "I can't reach the vacation tracker right now.");
+});
+
+test("My day: the weather today and tomorrow, rain in plain words, and holidays", async () => {
+  const hours = [
+    { time: "2026-10-30T20:00", temp: 27, sky: "Rain", rain: 70 },
+    { time: "2026-10-31T09:00", temp: 25.2, sky: "Partly cloudy", rain: 10 },
+    { time: "2026-10-31T13:00", temp: 31.4, sky: "Partly cloudy", rain: 30 },
+    { time: "2026-10-31T18:00", temp: 28, sky: "Rain", rain: 40 },
+  ];
+  const weather = { place: "Manila", now: { time: "2026-10-30T19:45", temp: 28.4, sky: "Cloudy" }, today: { high: 31.2, low: 25.1, rain: 60 }, hours };
+  const day = { today: "2026-10-30", weather, holidays: { today: [], next: { day: "2026-10-31", name: "All Saints' Day Eve" }, error: "" } };
+  const { at } = await personalCtx({ myday: async () => day });
+  assert.equal((await ANSWERS["myday.weather"](at(""), { when: "today", rain: false })).text, "It's 28° and cloudy in Manila. Today's high is 31°, low 25°, with a 60% chance of rain.");
+  assert.equal((await ANSWERS["myday.weather"](at(""), { when: "today", rain: true })).text, "Likely: a 60% chance of rain today.");
+  assert.equal((await ANSWERS["myday.weather"](at(""), { when: "tomorrow", rain: false })).text, "Tomorrow in Manila: 25° to 31°, mostly partly cloudy, up to a 40% chance of rain.");
+  assert.equal((await ANSWERS["myday.weather"](at(""), { when: "tomorrow", rain: true })).text, "Maybe: up to a 40% chance of rain tomorrow.");
+  assert.equal((await ANSWERS["myday.holiday"](at(""), { day: "tomorrow" })).text, "Yes, tomorrow is All Saints' Day Eve.");
+  assert.equal((await ANSWERS["myday.holiday"](at(""), { day: "today" })).text, "No, today isn't a holiday. The next one is All Saints' Day Eve, Saturday, Oct 31.");
+  assert.equal((await ANSWERS["myday.holiday"](at(""), { day: "next" })).text, "The next holiday is All Saints' Day Eve, Saturday, Oct 31, tomorrow.");
+  weather.stale = true;
+  assert.match((await ANSWERS["myday.weather"](at(""), { when: "today", rain: false })).text, /That's from a little while ago\.$/);
+  const off = await personalCtx();
+  assert.equal((await ANSWERS["myday.weather"](off.at(""), { when: "today", rain: false })).text, "I can't get the weather right now.");
+  assert.equal((await ANSWERS["myday.holiday"](off.at(""), { day: "today" })).text, "I can't check the holidays right now.");
+});
+
+test("Personal answers say so plainly when the cards aren't here", async () => {
+  for (const intent of ["lists.add", "lists.tick", "lists.remove", "lists.show", "habits.check", "habits.status", "habits.streak", "journal.add", "dates.upcoming", "dates.when", "dates.add", "timeoff.next", "timeoff.used", "myday.weather", "myday.holiday"]) {
+    assert.equal((await ANSWERS[intent](ctx(), {})).text, "Your Personal cards aren't set up here.", intent);
+  }
+});
+
+test("Wais: what's safe to spend says the period and a short day, and bills name the ones on Wais's card", async () => {
+  const m = (amount) => ({ amount, formatted: `₱${amount.toLocaleString("en-US")}` });
+  const answers = {
+    safe_to_spend: { period: { id: "payday", label: "Until payday" }, payday: "2026-10-31", safeToSpend: m(18450), runsShortOn: "2026-11-14" },
+    tasks: { count: 4, items: [
+      { title: "Meralco", state: "today", days: 0, formatted: "-\u2060₱3,280", onCard: true },
+      { title: "Globe Fiber", state: "late", days: -2, formatted: "₱1,699", onCard: true },
+      { title: "Car insurance", state: "review", days: 5, formatted: "₱12,400", onCard: true },
+      { title: "Netflix", state: "today", days: 0, formatted: "₱549", onCard: false },
+    ] },
+  };
+  const wais = { call: async (tool) => answers[tool] };
+  const at = { ...ctx(), wais };
+  assert.equal((await ANSWERS["wais.safe"](at)).text, "You can safely spend ₱18,450 until payday on Saturday, Oct 31. Heads up: money runs short on Saturday, Nov 14.");
+  answers.safe_to_spend = { period: { id: "30", label: "Next 30 days" }, safeToSpend: m(25000), runsShortOn: null };
+  assert.equal((await ANSWERS["wais.safe"](at)).text, "You can safely spend ₱25,000 over the next 30 days.");
+  assert.equal((await ANSWERS["wais.tasks"](at)).text, "4 bills to see to: Meralco, ₱3,280, today; Globe Fiber, ₱1,699, 2 days late; Car insurance, ₱12,400, in 5 days. And 1 more.");
+  answers.tasks = { count: 0, items: [] };
+  assert.equal((await ANSWERS["wais.tasks"](at)).text, "No bills to pay right now.");
+  const down = { ...ctx(), wais: { call: async () => { throw new Error("Wais refused the token. It may have been revoked."); } } };
+  assert.equal((await ANSWERS["wais.safe"](down)).text, "I couldn't reach Wais: Wais refused the token. It may have been revoked.");
+  assert.equal((await ANSWERS["wais.tasks"](ctx())).text, "Wais isn't connected here.");
+});
+
+test("an outside place is opened with a chip to tap, and the layout says plainly what isn't built", async () => {
+  const say = (_, lines) => lines[0];
+  const link = await ANSWERS.link({ say }, { url: "https://slack.com/app_redirect?team=T&channel=incident-response", name: "#incident-response in Slack" });
+  assert.deepEqual(link, { text: "Opening #incident-response in Slack.", link: { url: "https://slack.com/app_redirect?team=T&channel=incident-response", name: "#incident-response in Slack" } });
+  const layout = await ANSWERS.layout({ say });
+  assert.equal(layout.navigate, "/settings#home");
+  assert.match(layout.text, /isn't built yet/);
+});

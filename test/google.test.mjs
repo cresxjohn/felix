@@ -76,7 +76,7 @@ test("status says whether the client is saved and the account signed in", async 
 
 test("an unknown account is a 400 everywhere", async () => {
   const { google } = setup();
-  for (const id of ["personal", "toString", "__proto__"]) {
+  for (const id of ["home", "toString", "__proto__"]) {
     await assert.rejects(google.status(id), { status: 400, code: "input" }, id);
     await assert.rejects(google.connectUrl(id, "/"), { status: 400 }, id);
     await assert.rejects(google.finish(id, {}), { status: 400 }, id);

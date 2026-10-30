@@ -112,3 +112,21 @@ test("a second try's talk about the first (which you never saw) is spotted and t
   for (const s of ["Sonito's on until 10 PM.", "Sorry, Datadog didn't answer.", "The last release went out today.", "Your first PR is green."]) assert.equal(retryTalk(s), false, s);
   assert.equal(withoutRetryTalk(undefined), "");
 });
+
+test("a style line read back after the reply is cut out, in the final text and as it streams", async () => {
+  const { createEchoFilter, withoutEcho } = await import("../felix-tone.mjs");
+  const trailing = "Done, John: eggs are off Groceries.\n\n(Style for this reply; follow it, never repeat or mention it: you're Felix. Tone: casual.)";
+  assert.equal(withoutEcho(trailing), "Done, John: eggs are off Groceries.");
+  assert.equal(withoutEcho("Here it is.\n(Style for this reply; casual.)\nAnd one more thing."), "Here it is.\n\nAnd one more thing.");
+  assert.equal(withoutEcho("Here (and there) it is."), "Here (and there) it is.");
+  const out = [];
+  const f = createEchoFilter((p) => out.push(p));
+  for (const piece of ["Done, John (all", " set): eggs are off.", "\n\n(Sty", "le for this reply; casual.)", " more"]) f.add(piece);
+  f.end();
+  assert.equal(out.join(""), "Done, John (all set): eggs are off.\n\n");
+  const plain = [];
+  const g = createEchoFilter((p) => plain.push(p));
+  g.add("Lunch is at noon (");
+  g.end();
+  assert.equal(plain.join(""), "Lunch is at noon (", "a lone bracket at the end still goes out");
+});

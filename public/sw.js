@@ -5,7 +5,7 @@
  * A window's own page load gets Felix's outer page (X-Felix-Host), the same for every address, so it is kept once
  * under its own key instead of over the page it frames.
  */
-const CACHE = "felix-v20";
+const CACHE = "felix-v25";
 const OFFLINE = "/offline.html";
 const HOST_KEY = "/__felix-host";
 const PRECACHE = [
@@ -21,9 +21,9 @@ const PRECACHE = [
   "/cards.js",
   "/dropdown.js", "/ai-models.js",
   "/music.js", "/music.css",
-  "/felix-voice.js", "/felix.js", "/felix-hints.js", "/felix-idle.js", "/pickers.js", "/voice-device.js",
+  "/felix-voice.js", "/felix.js", "/felix-hints.js", "/felix-idle.js", "/pickers.js", "/reorder.js", "/voice-device.js",
   "/music-signed-in",
-  "/settings-schema.mjs", "/felix-progress.mjs", "/felix-wake-clips.mjs",
+  "/settings-schema.mjs", "/journal-prompts.mjs", "/places.mjs", "/wais-choices.mjs", "/felix-progress.mjs", "/felix-diff.mjs", "/felix-wake-clips.mjs", "/card-load.mjs",
   "/app.js",
   "/manifest.webmanifest",
   "/icons/icon.svg",

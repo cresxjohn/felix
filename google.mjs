@@ -23,6 +23,13 @@ export const ACCOUNTS = Object.freeze({
     token: "cmd-center-google-work",
     scopes: ["openid", "email", "https://www.googleapis.com/auth/calendar.events"],
   },
+  // Your own Gmail, for the Personal mode's My day: read-only, it can't change anything.
+  personal: {
+    name: "personal",
+    client: "cmd-center-google-personal-client",
+    token: "cmd-center-google-personal",
+    scopes: ["openid", "email", "https://www.googleapis.com/auth/calendar.readonly"],
+  },
 });
 
 /**

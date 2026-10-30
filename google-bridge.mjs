@@ -84,7 +84,7 @@ export function createBridge({ fetchImpl = fetch, now = Date.now, random = rando
       throw failure(403, "bridge-access", "Google answered with a page instead of the bridge. In Deploy → Manage deployments, set \"Who has access\" to Anyone, then try again.");
     }
     if (answer.error === "key") throw failure(401, "bridge-key", "The bridge didn't accept Felix's key. Copy the script again, paste it over the old one, and deploy a new version.");
-    if (answer.error === "calendar") throw failure(403, "forbidden", "The bridge only reads your calendar and the vacation tracker.");
+    if (answer.error === "calendar") throw failure(403, "forbidden", "The bridge only reads your calendar, the vacation tracker and the Philippine holidays.");
     if (answer.error === "not-invited") throw failure(409, "not-invited", "You aren't a guest on that event, so there's nothing to reply to.");
     if (answer.error === "google") throw failure(502, "google", `Google said: ${answer.message || "something went wrong"}.`);
     if (answer.error) throw failure(400, "input", "The bridge didn't understand Felix's request. Copy the script again and deploy a new version.");
@@ -165,7 +165,8 @@ export function createBridge({ fetchImpl = fetch, now = Date.now, random = rando
   }
 
   /**
-   * Which version of the script is deployed: 1 can't send a note with a reply; 2 can. Null when there's no bridge.
+   * Which version of the script is deployed: 1 can't send a note with a reply; 2 can; 3 also reads the Philippine
+   * holidays. Null when there's no bridge.
    * @returns {Promise<number | null>}
    */
   async function version() {

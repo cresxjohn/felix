@@ -8,7 +8,8 @@ Status key: todo / running / done / blocked
    text (follows the name unless set), tone (casual / balanced / professional), chattiness, humor. Progress lines:
    spoken after ~1.5 s with no answer, naming the real step, updates every few seconds, never the same line twice in
    a row, interruptible; settings on/off, delay, interval, own phrases. "When unsure, it asks". Old data called out
-   ("as of 10 minutes ago").
+   ("as of 10 minutes ago"). Changed later on Oct 30: steps that say nothing ("Looking into it" and the like) are
+   never spoken; he waits for a real step, or stays quiet if the answer comes first.
 2. Wake phrase: "Hey Felix" or just "Felix" (the user asked for this next, with its settings) — done (verified 2026-10-30: 318/318 pass, 99.76%; real-mic check left to the user)
    Off by default; a Settings switch turns it on. While a Felix window is open and in view, the browser keeps the mic
    open and watches the level (the same quiet-floor logic as felix-voice.js); only when someone speaks is that short
@@ -60,6 +61,7 @@ Status key: todo / running / done / blocked
    nudges after long stretches without a break.
 
 Blocked (needs a connection Felix doesn't have yet): calendar questions and accept/decline/join (Google
-Calendar: card + /api/calendar now built, needs the user's sign-in), Jira questions (Jira card + /api/jira built, needs the token), Slack drafts and opening channels (Slack app), Start my day / breaks / end
+Calendar: card + /api/calendar now built, needs the user's sign-in), Jira questions (Jira card + /api/jira built, needs the token), Slack drafts and opening channels (Slack app; the
+Felix Slack app A0CDH3UGQJV is waiting on a PURE PM admin's approval, and so is Slack's own MCP server), Start my day / breaks / end
 my day (Start my day isn't built), staying quiet in meetings from the calendar, "your voice only" speaker
 recognition (no free local engine chosen yet; record as blocked unless one is found that's free and local).
