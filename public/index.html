@@ -5,43 +5,62 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open PRs · fm + bm</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%232563EB' d='M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z'/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Felix">
+<meta name="application-name" content="Felix">
+<meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1113" media="(prefers-color-scheme: dark)">
+<script src="/app.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/theme.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script src="/pr-status.js"></script>
+<link rel="stylesheet" href="/shell.css">
+<script src="/shell.js"></script>
+<script src="/music.js"></script>
+<script src="/voice-device.js"></script>
+<script src="/felix-voice.js"></script>
+<script src="/felix.js"></script>
+<script src="/dropdown.js"></script>
+<script src="/ai-models.js"></script>
 <style>
-/* Layout: list column on the left; the PR details panel takes the right half of the screen when open.
-   Colors and type come from /theme.css. */
-.main { padding: 16px 16px 64px; }
-body.panel-open .main, body.panel-empty .main { margin-right: 50vw; }
-.wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 20px; container-type: inline-size; }
-
-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-header h1 { margin: 0; font-size: 22px; font-weight: 600; }
-header .who { color: var(--muted); font-family: var(--mono); font-size: 13px; }
-header .spacer { flex: 1; }
-/* Same tinted square as the card icons on the Felix home page. */
-header .home { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent-bg); color: var(--accent); }
-header .home:hover { background: var(--accent); color: #fff; }
-header .home svg { width: 17px; height: 17px; }
-.updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.refresh {
-  display: inline-grid; place-items: center;
-  width: 36px; height: 36px; border: 0; border-radius: 6px;
-  background: var(--accent); color: #fff; cursor: pointer;
+/* Layout, inside Felix's shell (/shell.css): two cards like the home page's, the PR list and the details panel,
+   side by side and down to the bottom bar. Each scrolls inside; the page never does. Narrow windows stack the list
+   and open the panel over it. Colors and type come from /theme.css. */
+.work { display: grid; gap: 16px; }
+.list-card, .panel {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--surface); border: 1px solid var(--card-border); border-radius: var(--r-card); box-shadow: var(--card-shadow);
 }
-.refresh:hover { background: var(--accent-hover); }
-.bell { height: 36px; padding: 0 12px; font-size: 13px; }
+.list-card > .tabs-row { padding: 4px 16px 0; }
+.wrap { display: grid; gap: 20px; align-content: start; padding: 16px; container-type: inline-size; }
+@media (min-width: 901px) {
+  html, body { height: 100%; overflow: hidden; }
+  .app { height: 100dvh; min-height: 0; }
+  .work { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .wrap { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .dock { position: static; margin-top: 0; padding-top: 0; background: none; }
+  /* In a Felix window the bar floats over the cards' bottom edge, so the cards run down to it and their scrolling
+     insides leave room under the last item. */
+  html.framed .app { padding-bottom: 16px; }
+  html.framed .wrap { padding-bottom: 88px; }
+  html.framed .panel-body { padding-bottom: 96px; }
+}
+
+.topbar .who { color: var(--muted); font-family: var(--mono); font-size: 13px; }
+.updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@container app (max-width: 699px) { .updated { display: none; } }
+/* The bell sits in the top bar with its 34px buttons, so it takes their size and corners, not the list's small button. */
+.topbar .bell { height: 34px; padding: 0 12px; border-radius: var(--r-box); font-size: 13px; }
 /* Narrow list column: the bell shows just its icon (its tooltip keeps the words) so the header stays on one line. */
-@container (max-width: 760px) { .bell { width: 36px; padding: 0; justify-content: center; } .bell span { display: none; } .bell svg { width: 16px; height: 16px; } }
+@container (max-width: 760px) { .topbar .bell { width: 34px; padding: 0; justify-content: center; } .bell span { display: none; } .bell svg { width: 16px; height: 16px; } }
 .bell[data-state="on"] { color: var(--ok); border-color: var(--ok); }
 .bell[data-state="blocked"] { color: var(--bad); }
-.refresh svg { width: 18px; height: 18px; }
-.refresh.spinning svg, .spin { animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .refresh.spinning svg, .spin { animation: none; } }
+.spin { animation: spin 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
 /* The list tabs */
 .tabs-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); container-type: inline-size; }
@@ -55,25 +74,26 @@ header .home svg { width: 17px; height: 17px; }
 @container (min-width: 520px) { .ai-settings > .btn > :not(:first-child) { display: inline-flex; } }
 .ai-pop {
   position: absolute; right: 0; top: calc(100% + 4px); z-index: 50; width: 300px;
-  display: grid; gap: 10px; padding: 14px; background: var(--surface);
-  border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(41, 46, 63, 0.18);
+  display: grid; gap: 10px; padding: 14px; background: var(--raised);
+  border-radius: var(--r-box); box-shadow: var(--pop-shadow);
 }
 .ai-pop h3 { margin: 0; font-size: 14px; }
 .ai-pop .sort { display: grid; grid-template-columns: 52px 1fr; }
 .ai-pop .dd-btn { width: 100%; height: 32px; }
+.local-model .dd-btn { height: 32px; }
 .ai-pop .cost { margin: 0; }
 .tabs a {
-  display: inline-flex; align-items: baseline; gap: 6px;
-  padding: 10px 14px; margin-bottom: -1px; text-decoration: none;
-  border-bottom: 2px solid transparent; color: var(--muted); font-weight: 500; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 12px; margin-bottom: -1px; text-decoration: none;
+  border-bottom: 2px solid transparent; color: var(--muted); font: 600 14px/1 var(--sans); white-space: nowrap;
 }
 .tabs a:hover { color: var(--fg); }
-.tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
-.tabs .n { padding: 0 7px; border-radius: 999px; background: var(--neutral-bg); font-size: 12px; font-variant-numeric: tabular-nums; }
-.tabs a[aria-current="page"] .n { background: var(--accent-bg); }
-.sub { margin: -8px 0 0; color: var(--muted); }
+.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--fg); }
+.tabs .n { padding: 3px 7px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); font: 600 11px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.tabs a[aria-current="page"] .n { background: var(--neutral-soft); color: var(--fg); }
+.sub { margin: 0; color: var(--muted); }
 
-.banner { padding: 10px 14px; border-radius: 6px; background: var(--bad-bg); color: var(--bad); }
+.banner { padding: 10px 14px; border-radius: var(--r-box); background: var(--bad-bg); color: var(--bad); }
 .banner code { font-family: var(--mono); }
 
 .toolbar { display: grid; gap: 10px; }
@@ -81,57 +101,52 @@ header .home svg { width: 17px; height: 17px; }
 .search { position: relative; flex: 1 1 260px; min-width: 0; }
 .search svg { position: absolute; left: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .search input {
-  width: 100%; height: 36px; padding: 0 64px 0 34px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  width: 100%; height: 38px; padding: 0 64px 0 34px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface-2); color: var(--fg);
 }
 .search input::placeholder { color: var(--muted); }
-.search input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-bg); }
+.search input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 .search .hint {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   font-family: var(--mono); font-size: 11px; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 4px; padding: 0 5px;
+  border: 1px solid var(--line); border-radius: var(--r-tag); padding: 0 5px;
 }
 .search .clear {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  border: 0; background: var(--neutral-bg); border-radius: 4px; padding: 1px 6px; font-size: 12px; cursor: pointer; color: var(--muted);
+  border: 0; background: var(--neutral-bg); border-radius: var(--r-tag); padding: 1px 6px; font-size: 12px; cursor: pointer; color: var(--muted);
 }
-.seg { display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 2px; }
-.seg button {
-  border: 0; background: none; padding: 0 12px; height: 30px; border-radius: 4px; cursor: pointer; color: var(--muted);
-  font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;
-}
-.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.seg > button { height: 28px; padding-block: 0; font-variant-numeric: tabular-nums; }
 .seg .n { opacity: 0.75; margin-left: 4px; }
 .sort { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
-.sort select { height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.sort select { height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-box); background: var(--surface); }
 
 .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 12px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 13px; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; height: 28px;
+  padding: 0 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong); background: none;
+  font: 500 12px/1 var(--sans); color: var(--muted); cursor: pointer;
 }
-.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
-.chip b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.chip b { color: var(--fg); font-weight: 700; font-variant-numeric: tabular-nums; }
 .chip.zero { opacity: 0.55; }
-.chip:hover { border-color: var(--accent); }
-.chip[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); opacity: 1; }
-.chip[aria-pressed="true"] b { color: var(--accent); }
+.chip.zero::before { background: var(--faint); }
+.chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+.chip[aria-pressed="true"] { background: var(--neutral-soft); border-color: var(--fg); color: var(--fg); opacity: 1; }
 .filters .spacer { flex: 1; }
-.linkbtn { border: 0; background: none; padding: 4px 2px; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 500; }
+.linkbtn { border: 0; background: none; padding: 4px 2px; color: var(--link); cursor: pointer; font: 600 13px/1 var(--sans); }
 .linkbtn:hover { text-decoration: underline; }
 .showing { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 #repos { display: grid; gap: 20px; }
 section { display: grid; gap: 8px; }
-section h2 { margin: 0; display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+section h2 { margin: 0; display: flex; align-items: baseline; gap: 8px; font: 650 15px/1.2 var(--sans); }
 section h2 .repo { font-family: var(--mono); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
 section h2 .count { margin-left: auto; font-weight: 500; color: var(--muted); letter-spacing: 0; text-transform: none; }
 section h2 a { text-decoration: none; }
 section h2 a:hover { color: var(--accent); }
 
-.list { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; container-type: inline-size; }
+.list { background: var(--surface); border: 1px solid var(--card-border); border-radius: var(--r-card); box-shadow: var(--card-shadow); overflow: hidden; container-type: inline-size; }
 /* When the list is narrow (panel open, small window), buttons go under the title instead of squeezing it. */
 @container (max-width: 640px) {
   .list .pr { grid-template-columns: minmax(0, 1fr); }
@@ -143,16 +158,15 @@ section h2 a:hover { color: var(--accent); }
 .pr {
   display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 4px 12px;
   padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer;
-  box-shadow: inset 3px 0 0 transparent;
 }
 .pr:first-child { border-top: 0; }
-.pr:hover { background: color-mix(in srgb, var(--accent-bg) 45%, transparent); }
-.pr.selected { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.pr:hover { background: var(--surface-2); }
+.pr.selected { background: var(--accent-soft); }
 .pr .num { font-family: var(--mono); font-size: 13px; color: var(--muted); padding-top: 1px; display: grid; align-content: start; gap: 2px; }
-.pr .num .rk { font-family: var(--sans); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.pr .num .rk { font: 600 12px/1 var(--sans); }
 .pr .head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-.pr .title { flex: 1; min-width: 0; font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
-.pr .title:hover { color: var(--accent); }
+.pr .title { flex: 1; min-width: 0; font: 600 14px/1.35 var(--sans); text-decoration: none; overflow-wrap: anywhere; }
+.pr .title:hover { color: var(--accent-ink); }
 .pr .meta { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); font-size: 12px; }
 .author b { font-weight: 500; color: var(--fg); }
 .pr .branch { font-family: var(--mono); overflow-wrap: anywhere; }
@@ -162,51 +176,51 @@ section h2 a:hover { color: var(--accent); }
 mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
 .pills { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
 .pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px; border-radius: 999px;
-  font-size: 12px; font-weight: 500;
-  background: var(--neutral-bg); color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px; height: 22px;
+  padding: 0 9px; border-radius: var(--r-pill);
+  font: 600 12px/1 var(--sans); white-space: nowrap;
+  background: var(--neutral-soft); color: var(--muted);
 }
 .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .pill.ok { background: var(--ok-bg); color: var(--ok); }
 .pill.warn { background: var(--warn-bg); color: var(--warn); }
 .pill.alert { background: var(--alert-bg); color: var(--alert); }
 .pill.bad { background: var(--bad-bg); color: var(--bad); }
-.pill.run { background: var(--accent-bg); color: var(--accent); }
+.pill.run { background: var(--info-soft); color: var(--info); }
 .pill.run::before { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.25; } }
 .pill.claude { font-weight: 600; }
 .ticket {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent);
-  color: var(--accent); font-family: var(--mono); font-size: 12px; font-weight: 500; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 4px; height: 22px;
+  padding: 0 8px; border-radius: var(--r-tag); background: var(--surface-2);
+  color: var(--fg); font: 500 12px/1 var(--mono); text-decoration: none;
 }
-.ticket svg { width: 12px; height: 12px; }
-.ticket:hover { background: var(--accent-bg); }
-.tag { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; }
+.ticket svg { width: 12px; height: 12px; color: var(--muted); }
+.ticket:hover { color: var(--accent-ink); background: var(--accent-soft); }
+.tag { display: inline-flex; align-items: center; height: 22px; font: 500 12px/1 var(--mono); padding: 0 6px; background: var(--surface-2); color: var(--muted); border-radius: var(--r-tag); }
 
 .actions { flex: none; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .btn {
-  flex: none; display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 9px; border: 1px solid var(--line); border-radius: 6px;
-  background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none;
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px;
+  padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px;
+  background: var(--surface); color: var(--fg); font: 600 12px/1 var(--sans); cursor: pointer; text-decoration: none;
   white-space: nowrap;
 }
-.btn svg { width: 13px; height: 13px; }
-.btn:hover { border-color: var(--accent); color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: var(--accent-hover); color: #fff; }
-.btn.done { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
-.btn.confirm { border-color: var(--bad); color: #fff; background: var(--bad); }
+.btn svg { width: 14px; height: 14px; }
+.btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+.btn.done { border-color: transparent; color: var(--ok); background: var(--ok-soft); }
+.btn.confirm { border-color: var(--bad); color: var(--on-accent); background: var(--bad); }
 /* Batch review: row checkboxes and the selection bar */
 .pick { display: inline-flex; align-items: center; margin-bottom: 2px; cursor: pointer; }
 .pick input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
-.selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-bg); font-size: 13px; }
+.selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--r-box); background: var(--accent-bg); font-size: 13px; }
 /* AI fix */
 .answer:disabled { opacity: 0.5; cursor: not-allowed; }
 .custom-fix { display: grid; gap: 8px; }
-.custom-fix textarea { width: 100%; min-height: 64px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); resize: vertical; }
-.custom-fix textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.custom-fix textarea { width: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface-2); color: var(--fg); resize: vertical; }
+.custom-fix textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .custom-fix .row { justify-content: flex-end; }
 .local-model select { height: 30px; }
 .fix-files { display: grid; gap: 10px; }
@@ -214,7 +228,7 @@ details.file > summary { list-style: none; }
 details.file > summary::-webkit-details-marker { display: none; }
 details.file > summary .chev { transition: transform 0.15s; }
 details.file[open] > summary .chev { transform: rotate(90deg); }
-.warnbox { padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.warnbox { padding: 8px 12px; border-radius: var(--r-box); background: var(--warn-bg); color: var(--warn); font-size: 13px; }
 .another { border-top: 1px solid var(--line); padding-top: 12px; }
 .another > summary { cursor: pointer; font-weight: 500; }
 .btn:disabled { opacity: 0.6; cursor: progress; }
@@ -229,20 +243,20 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto; grid-auto-flow: column; gap: 12px; }
 .rel-grid > .span2 { grid-row: span 2; }
 @container (max-width: 640px) { .rel-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-flow: row; } .rel-grid > .span2 { grid-row: auto; } }
-.rel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.rel { background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--card-shadow); border-radius: var(--r-card); padding: 12px 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
 .rel-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-top .repo { font-weight: 600; }
 .rel-top a { color: var(--link); text-decoration: none; font-size: 13px; }
 .rel-top a:hover { text-decoration: underline; }
 .rel-sub { color: var(--muted); font-size: 12px; }
-.rel-fold { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; padding: 0; }
+.rel-fold { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-tag); background: none; color: var(--muted); cursor: pointer; padding: 0; }
 .rel-fold:hover { background: var(--neutral-bg); color: var(--fg); }
 .rel-fold svg { width: 15px; height: 15px; transition: transform .15s; }
 .rel.folded .rel-fold svg { transform: rotate(-90deg); }
 .rel.folded { gap: 8px; }
-.rel-kind { margin-left: auto; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
-.rel-kind.open { background: var(--ok); color: var(--surface); }
-.rel-kind.last { background: var(--neutral-bg); color: var(--fg); border: 1px solid var(--line); }
+.rel-kind { margin-left: auto; font: 600 12px/1 var(--sans); border-radius: var(--r-pill); padding: 5px 10px; white-space: nowrap; }
+.rel-kind.open { background: var(--ok-soft); color: var(--ok); }
+.rel-kind.last { background: var(--neutral-soft); color: var(--muted); }
 .rel-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .rel-badges a.pill { text-decoration: none; }
 .rel-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; min-height: 26px; }
@@ -251,20 +265,32 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .rel-details { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 .rel-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-mine { display: grid; gap: 6px; }
-.rel-mine .label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rel-mine .label { font: 600 12px/1.2 var(--sans); color: var(--muted); }
 .rel-pr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
 .rel-pr a { color: inherit; text-decoration: none; font-weight: 500; }
 .rel-pr a:hover { color: var(--link); text-decoration: underline; }
-.rel-pr .pkg { font-family: var(--mono); font-size: 11px; background: var(--neutral-bg); border-radius: 4px; padding: 1px 6px; color: var(--muted); }
+.rel-pr .pkg { font-family: var(--mono); font-size: 11px; background: var(--neutral-bg); border-radius: var(--r-tag); padding: 1px 6px; color: var(--muted); }
 .rel-none { color: var(--muted); font-size: 13px; }
 .rel details summary { cursor: pointer; font-size: 12px; color: var(--accent); font-weight: 500; }
 .rel details ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; display: grid; gap: 2px; }
 .rel details .pkgname { font-family: var(--mono); font-size: 12px; margin-top: 6px; display: block; }
 .rel details .mine-change { font-weight: 600; }
 .empty { padding: 20px 16px; color: var(--muted); text-align: center; }
+/* Empty lists: a small drawing over one muted line, in Home's line style. */
+.empty-state { display: grid; justify-items: center; gap: 10px; padding: 36px 16px; text-align: center; color: var(--muted); }
+.empty-state svg { width: 112px; height: 84px; overflow: visible; }
+.empty-state p { margin: 0; font-size: 13px; }
+.empty-state .tile { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.75; }
+.empty-state .line { fill: none; stroke: var(--muted); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.empty-state .line.thick { stroke-width: 3.5; }
+.empty-state .node { fill: var(--surface); stroke: var(--muted); stroke-width: 1.75; }
+.empty-state .tick { fill: none; stroke: var(--ok); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.empty-state .tick-on { fill: none; stroke: var(--on-accent); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.empty-state .spark-tile { fill: var(--accent); }
+.empty-state .spark { fill: var(--accent); opacity: .85; }
 /* Loading: placeholder shapes that match real rows, with a soft shimmer */
 .sk {
-  display: block; height: 12px; border-radius: 4px;
+  display: block; height: 12px; border-radius: var(--r-tag);
   background: linear-gradient(90deg, var(--neutral-bg) 30%, color-mix(in srgb, var(--neutral-bg) 45%, var(--surface)) 50%, var(--neutral-bg) 70%);
   background-size: 300% 100%; animation: shimmer 1.4s ease-in-out infinite;
 }
@@ -273,8 +299,8 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .skeleton .pr { cursor: default; }
 .skeleton .pr:hover { background: none; }
 .skeleton .head { display: grid; gap: 8px; }
-.sk.pillsk { display: inline-block; width: 84px; height: 18px; border-radius: 999px; }
-.chip.sk-chip { width: 120px; height: 30px; padding: 0; border-color: transparent; border-radius: 999px; cursor: default; }
+.sk.pillsk { display: inline-block; width: 84px; height: 18px; border-radius: var(--r-pill); }
+.chip.sk-chip { width: 120px; height: 30px; padding: 0; border-color: transparent; border-radius: var(--r-pill); cursor: default; }
 .chip.sk-chip::before { display: none; }
 .tabs .n.sk { display: inline-block; width: 22px; height: 16px; }
 .loadbar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 30; overflow: hidden; }
@@ -286,30 +312,27 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .loadbar::after { animation: none; left: 0; width: 100%; opacity: 0.5; } }
 .stale { color: var(--warn); }
 
-/* Details panel: right half of the screen */
-.panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 50vw; z-index: 20;
-  display: flex; flex-direction: column;
-  background: var(--surface); border-left: 1px solid var(--line);
-  box-shadow: -8px 0 24px rgba(41, 46, 63, 0.08);
-}
+/* Details panel: the card on the right */
+.panel { overflow: hidden; }
 .panel-head { padding: 16px 20px 0; display: grid; gap: 8px; border-bottom: 1px solid var(--line); }
 .panel-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
 .panel-top .id { font-family: var(--mono); font-weight: 500; color: var(--fg); }
 .panel-top .spacer { flex: 1; }
-.close { border: 0; background: none; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1; }
+.close { border: 0; background: none; width: 32px; height: 32px; border-radius: var(--r-box); cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1; }
 .close:hover { background: var(--neutral-bg); color: var(--fg); }
-.panel h2 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.panel h2 { margin: 0; font: 650 20px/1.25 var(--sans); letter-spacing: -.015em; overflow-wrap: anywhere; }
 .panel .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12px; }
 .panel .meta .branch { font-family: var(--mono); }
 .panel .pills { padding: 0; grid-column: auto; }
 .ptabs { display: flex; gap: 2px; overflow-x: auto; margin-top: 4px; }
 .ptabs button {
-  border: 0; background: none; padding: 8px 12px; cursor: pointer; color: var(--muted); font-weight: 500; white-space: nowrap;
+  border: 0; background: none; padding: 10px 12px; cursor: pointer; color: var(--muted); font: 600 14px/1 var(--sans); white-space: nowrap;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
-.ptabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
-.ptabs .n { font-size: 12px; opacity: 0.8; margin-left: 4px; }
+.ptabs button:hover { color: var(--fg); }
+.ptabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+.ptabs .n { font: 600 11px/1 var(--sans); padding: 3px 7px; border-radius: var(--r-pill); background: var(--surface-2); margin-left: 6px; }
+.ptabs button[aria-selected="true"] .n { background: var(--neutral-soft); }
 /* max-content rows: items that clip their own overflow (file boxes, check lists) must keep full height; the body scrolls. */
 /* One column that never grows past the panel: wide things (terminal, diffs, tables) scroll inside themselves. */
 .panel-body {
@@ -317,7 +340,7 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
   display: grid; gap: 18px; align-content: start; grid-auto-rows: max-content; grid-template-columns: minmax(0, 1fr);
 }
 .panel-body > * { min-width: 0; }
-.panel-body h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.panel-body h3 { margin: 0 0 6px; font: 600 13px/1.3 var(--sans); color: var(--muted); }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
@@ -329,24 +352,24 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .md h1, .md h2 { font-size: 16px; }
 .md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin: 0 0 10px; }
 .md ul, .md ol { padding-left: 22px; }
-.md code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 4px; border-radius: 4px; }
-.md pre { background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+.md code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 4px; border-radius: var(--r-tag); }
+.md pre { background: var(--code-bg); padding: 10px 12px; border-radius: var(--r-box); overflow-x: auto; }
 .md pre code { background: none; padding: 0; }
 .md table { border-collapse: collapse; display: block; overflow-x: auto; }
 .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
-.md blockquote { border-left: 3px solid var(--line); padding-left: 10px; color: var(--muted); }
+.md blockquote { margin: 0; padding: 8px 12px; border-radius: var(--r-tag); background: var(--surface-2); color: var(--muted); }
 .md img { max-width: 100%; }
 .md a { color: var(--accent); }
 .md hr { border: 0; border-top: 1px solid var(--line); }
 
 .panel-body { container-type: inline-size; }
-.state { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; background: #047857; }
-.state.draft { background: #748095; }
-.state.merged { background: #82517D; }
-.state.closed { background: #B91C1C; }
+.state { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: var(--r-pill); font: 600 12px/1 var(--sans); color: var(--ok); background: var(--ok-soft); }
+.state.draft { background: var(--neutral-soft); color: var(--muted); }
+.state.merged { background: var(--info-soft); color: var(--info); }
+.state.closed { background: var(--bad-soft); color: var(--bad); }
 .state-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--muted); font-size: 13px; }
 .state-line b { color: var(--fg); font-weight: 500; }
-.ref { font-family: var(--mono); font-size: 12px; background: var(--accent-bg); color: var(--accent); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.ref { font: 500 12px/1.4 var(--mono); background: var(--surface-2); color: var(--fg); padding: 1px 6px; border-radius: var(--r-tag); overflow-wrap: anywhere; }
 .panel h2 .n { color: var(--muted); font-weight: 400; }
 .ptabs .diffstat { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 12px; white-space: nowrap; padding: 0 4px; }
 
@@ -361,22 +384,22 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .people li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .people .who { font-weight: 500; overflow-wrap: anywhere; }
 .none { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-.label { display: inline-block; margin: 0 4px 4px 0; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--lc); background: color-mix(in srgb, var(--lc) 18%, transparent); }
-.event { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.label { display: inline-block; margin: 0 4px 4px 0; padding: 1px 8px; border-radius: var(--r-pill); font-size: 12px; border: 1px solid var(--lc); background: color-mix(in srgb, var(--lc) 18%, transparent); }
+.event { border: 1px solid var(--line); border-radius: var(--r-box); overflow: hidden; }
 .event-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; background: var(--code-bg); font-size: 12px; color: var(--muted); }
 .event-head b { color: var(--fg); font-weight: 500; }
 .event-head a { margin-left: auto; color: var(--muted); display: inline-flex; }
 .event-head a svg { width: 13px; height: 13px; }
 .event > .md { padding: 10px 12px; }
 .code-comments { border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 10px; }
-.cc { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cc { border: 1px solid var(--line); border-radius: var(--r-box); overflow: hidden; }
 .cc-path { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; background: var(--code-bg); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
 .cc-body { padding: 8px 10px; display: grid; gap: 4px; font-size: 13px; }
 .cc-body + .cc-body { border-top: 1px solid var(--line); }
 .cc-body b { font-weight: 500; }
 
 /* Commits and checks */
-.rows { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.rows { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-box); overflow: hidden; }
 .rows li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 13px; }
 .rows li:first-child { border-top: 0; }
 .rows .grow { flex: 1; min-width: 0; display: grid; gap: 2px; }
@@ -393,11 +416,11 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 /* Files changed: one box per file with its diff */
 .files-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .files-bar .spacer { flex: 1; }
-.file { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.file { border: 1px solid var(--line); border-radius: var(--r-box); overflow: hidden; }
 .file-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 0; background: var(--code-bg); }
 .file-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 0 8px 12px; border: 0; background: none; cursor: pointer; text-align: left; }
 .file-head .name { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
-.file-head .st { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.file-head .st { font: 500 12px/1 var(--sans); color: var(--muted); }
 .file-head .size { font-size: 12px; white-space: nowrap; }
 .file-head a { color: var(--muted); display: inline-flex; }
 .file-head a svg, .chev { width: 13px; height: 13px; flex: none; }
@@ -415,13 +438,13 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .diff tr.del .sign { color: var(--bad); }
 .diff-missing { padding: 12px; color: var(--muted); font-size: 13px; }
 
-.claude-box { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; }
+.claude-box { border: 0; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
 .claude-box .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .claude-box .note { color: var(--muted); font-size: 13px; }
 .progress { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .progress .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); border-top-color: transparent; }
 .answers { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
-.answer { text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; display: grid; gap: 2px; }
+.answer { text-align: left; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface); cursor: pointer; display: grid; gap: 3px; }
 .answer b { font-weight: 600; }
 .answer span { font-size: 12px; color: var(--muted); }
 .answer:hover { border-color: var(--accent); }
@@ -432,20 +455,15 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .panel-body h3 .cost { text-transform: none; letter-spacing: 0; font-weight: 400; }
 /* Terminal look for the live view in both themes: the screen is plain text from tmux. */
 .term {
-  margin: 0; max-height: 420px; overflow: auto; padding: 12px 14px; border-radius: 8px;
-  background: #1E293B; color: #E2E8F0; border: 1px solid var(--line);
+  margin: 0; max-height: 420px; overflow: auto; padding: 12px 14px; border-radius: var(--r-box);
+  background: #0B0D10; color: #D7DBE0; border: 1px solid var(--line);
   font-family: var(--mono); font-size: 12px; line-height: 1.45; white-space: pre;
 }
 /* Sub-tabs inside the Claude review tab */
-.subtabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); justify-self: start; }
-.subtabs button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; }
-.subtabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.subtabs { justify-self: start; }
 .subtabs .n { font-size: 12px; opacity: 0.8; }
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
-/* Green disappears on the blue selected tab, so it turns white with a soft ring there */
-.subtabs button[aria-selected="true"] .live-dot { background: #fff; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35); }
-.term { max-height: calc(100vh - 330px); min-height: 240px; }
-.steps { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 2px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }.term { max-height: calc(100dvh - 440px); min-height: 240px; }
+.steps { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 2px; font-size: 12.5px; border: 1px solid var(--line); border-radius: var(--r-box); }
 .steps li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
 .steps .t { color: var(--muted); font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .steps li.you { color: var(--accent); }
@@ -454,21 +472,20 @@ details.file[open] > summary .chev { transform: rotate(90deg); }
 .steps li.wait { color: var(--warn); }
 
 .panel-empty-state { margin: auto; padding: 24px; max-width: 380px; display: grid; gap: 10px; justify-items: center; text-align: center; color: var(--muted); }
-.panel-empty-state svg { width: 40px; height: 40px; color: var(--line); }
+.panel-empty-state svg { width: 112px; height: 84px; overflow: visible; }
 .panel-empty-state h2 { color: var(--fg); font-size: 17px; }
 .panel-empty-state p { margin: 0; }
 .glance { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; width: 100%; }
-.glance a { display: block; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; color: var(--fg); }
+.glance a { display: block; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-box); text-decoration: none; color: var(--fg); }
 .glance a:hover { border-color: var(--accent); color: var(--accent); }
 .glance b { font-variant-numeric: tabular-nums; }
 .keys { font-size: 12px; }
-kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; margin: 0 2px 0 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--fg); }
+kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; margin: 0 2px 0 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: var(--r-tag); color: var(--fg); }
 kbd:first-child { margin-left: 0; }
 
 @media (max-width: 900px) {
-  .panel { width: 100vw; }
+  .panel { position: fixed; inset: 8px; z-index: 20; box-shadow: 0 8px 32px rgba(41, 46, 63, 0.24); }
   .panel.empty { display: none; }
-  body.panel-open .main, body.panel-empty .main { margin-right: 0; }
   body.panel-open { overflow: hidden; }
 }
 @media (max-width: 560px) {
@@ -479,61 +496,14 @@ kbd:first-child { margin-left: 0; }
   .search .hint { display: none; }
 }
 
-/* Dropdowns: our own button + menu over a hidden native select */
-.dd-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.dd-btn {
-  display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
-  height: 36px; min-width: 120px; padding: 0 10px 0 12px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
-  color: var(--fg); font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap;
-}
-.dd-btn:hover { border-color: var(--accent); }
-.dd-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
-.dd-btn svg { width: 14px; height: 14px; flex: none; color: var(--muted); transition: transform 0.15s; }
-.dd-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
-.local-model .dd-btn { height: 32px; }
-.dd-menu {
-  position: fixed; z-index: 60; padding: 4px; max-height: 320px; overflow: auto;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(41, 46, 63, 0.18);
-}
-.dd-item {
-  display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 6px; border-radius: 6px;
-  font-size: 13px; color: var(--fg); cursor: pointer; white-space: nowrap;
-}
-.dd-search {
-  position: sticky; top: -4px; z-index: 1; width: calc(100% + 8px); margin: -4px -4px 4px; padding: 9px 12px;
-  border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; outline: none;
-}
-.dd-none { padding: 8px 10px; color: var(--muted); }
-.dd-item[hidden], .dd-none[hidden] { display: none; }
-.dd-item:hover, .dd-item:focus { background: var(--accent-bg); outline: none; }
-.dd-item[aria-selected="true"] { color: var(--accent); font-weight: 500; }
-.dd-check { width: 16px; height: 16px; flex: none; display: inline-grid; place-items: center; }
-.dd-check svg { width: 14px; height: 14px; }
-@media (prefers-reduced-motion: reduce) { .dd-btn svg { transition: none; } }
 </style>
 </head>
 <body>
 <div class="loadbar" id="loadbar" hidden></div>
-<div class="main">
-<div class="wrap">
-  <header>
-    <a class="home" href="/" title="Felix home" aria-label="Back to Felix home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
-    </a>
-    <h1>Open PRs</h1>
-    <span class="who" id="who"></span>
-    <span class="spacer"></span>
-    <span class="updated" id="updated">Loading your PRs from GitHub…</span>
-    <button class="btn bell" id="bell" type="button" hidden></button>
-    <button class="refresh" id="refresh" type="button" title="Refresh (R)" aria-label="Refresh">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
-      </svg>
-    </button>
-  </header>
-
+<div class="app main">
+<header class="topbar" id="topbar"></header>
+<div class="work">
+<div class="list-card" role="region" aria-label="Pull requests">
   <div class="tabs-row">
   <nav class="tabs" id="tabs" aria-label="Lists"></nav>
   <div class="ai-settings" id="aisettings">
@@ -553,6 +523,7 @@ kbd:first-child { margin-left: 0; }
     </div>
   </div>
   </div>
+  <div class="wrap">
   <p class="sub" id="subheading"></p>
 
   <div class="banner" id="error" hidden></div>
@@ -567,7 +538,7 @@ kbd:first-child { margin-left: 0; }
         <span class="hint" id="hint">/</span>
         <button class="clear" id="clearq" type="button" hidden>Clear</button>
       </label>
-      <div class="seg" id="repo" role="group" aria-label="Repository"></div>
+      <div class="seg segmented" id="repo" role="group" aria-label="Repository"></div>
       <label class="sort">Sort
         <select id="sort">
           <option value="attention">Needs attention first</option>
@@ -585,7 +556,7 @@ kbd:first-child { margin-left: 0; }
       <div class="filters" id="chips" role="group" aria-label="Status filters"></div>
       <button class="linkbtn" id="reset" type="button" hidden>Clear filters</button>
       <span class="spacer"></span>
-      <div class="seg" role="group" aria-label="Layout">
+      <div class="seg segmented" role="group" aria-label="Layout">
         <button type="button" id="grouped" aria-pressed="true">By repo</button>
         <button type="button" id="flat" aria-pressed="false">One list</button>
       </div>
@@ -595,13 +566,35 @@ kbd:first-child { margin-left: 0; }
   </div>
 
   <div id="repos" aria-busy="true"></div>
+  </div>
 </div>
-</div>
-
 <aside class="panel" id="panel" hidden aria-label="PR details"></aside>
+</div>
+<footer class="dock" id="dock"></footer>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
+// How the page opens and how often it reloads, from Settings (Open PRs); the last settings this browser saw, else the
+// defaults: My PRs, sorted by what needs attention, grouped by repo, every 5 minutes.
+const PAGE_PREFS = (() => {
+  const s = FelixShell.cachedSettings() || {};
+  return {
+    tab: s.prsPageTab === "review" ? "review" : "mine",
+    sort: typeof s.prsPageSort === "string" ? s.prsPageSort : "attention",
+    group: s.prsPageGroup !== false,
+    minutes: Number(s.prsPageRefresh) > 0 ? Number(s.prsPageRefresh) : 5,
+  };
+})();
+const REFRESH_MS = PAGE_PREFS.minutes * 60e3;
+FelixShell.mount({
+  title: "Open PRs",
+  afterTitle: `<span class="who" id="who"></span>`,
+  status: `<span class="updated" id="updated">Loading your PRs from GitHub…</span>`,
+  tools: `<button class="btn bell" id="bell" type="button" hidden></button>`,
+  pollMs: REFRESH_MS,
+  mode: "work",
+});
 const REPO_LABEL = { fm: "frontend-monorepo", bm: "backend-monorepo" };
 const REPO_KEY = { "purepm/frontend-monorepo": "fm", "purepm/backend-monorepo": "bm" };
 const JIRA = "https://purepm.atlassian.net/browse/";
@@ -616,6 +609,30 @@ const ICON = {
   bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>`,
   external: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>`,
 };
+
+/**
+ * Small drawings for an empty list, in Home's line style: muted strokes on a soft tile, one touch of the accent.
+ */
+const DRAWINGS = {
+  // Two branches already joined, with a tick: nothing of yours open.
+  mine: `<path d="M30 16v40" class="line"/><path d="M30 26c0 14 30 10 30 26v4" class="line"/><circle cx="30" cy="16" r="6" class="node"/>`
+    + `<circle cx="30" cy="58" r="6" class="node"/><circle cx="60" cy="58" r="6" class="node"/><circle cx="74" cy="20" r="11" class="spark-tile"/><path d="M69 20l3.5 3.5 6-7" class="tick-on"/>`,
+  // An empty tray, ticked: nobody waiting on you.
+  review: `<path d="M18 40l9-20h42l9 20v18a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6z" class="tile"/><path d="M18 40h18l4 7h16l4-7h18" class="line"/><path d="M42 26l4 4 8-9" class="tick"/>`,
+  // A magnifying glass over nothing: no match for the filters.
+  search: `<circle cx="44" cy="34" r="20" class="tile"/><path d="M58 48l14 14" class="line thick"/><path d="M36 34h16" class="line"/>`,
+  // A PR card and a pointer: pick one to see it here.
+  pick: `<rect x="14" y="14" width="60" height="44" rx="8" class="tile"/><circle cx="27" cy="28" r="4" class="node"/><path d="M37 28h26M27 42h36M27 50h22" class="line"/>`
+    + `<path d="M66 44l16 6-7 3 6 9-4 3-6-9-5 5z" class="spark"/>`,
+};
+
+/**
+ * An empty list: its drawing and one line.
+ * @param {keyof typeof DRAWINGS} kind
+ * @param {string} html The line, as markup.
+ * @returns {string}
+ */
+const emptyHtml = (kind, html) => `<div class="empty-state"><svg viewBox="0 0 96 72" aria-hidden="true">${DRAWINGS[kind]}</svg><p>${html}</p></div>`;
 
 const TABS = [
   { id: "mine", label: "My PRs", sub: "Your open PRs in frontend-monorepo and backend-monorepo.",
@@ -645,24 +662,31 @@ const details = new Map(); // "fm-12247" -> { loading, data, error }
 function readUrl() {
   const p = new URLSearchParams(location.search);
   view = {
-    tab: location.pathname.startsWith("/prs/review") ? "review" : location.pathname.startsWith("/prs/releases") ? "releases" : "mine",
+    tab: location.pathname.startsWith("/prs/review") ? "review" : location.pathname.startsWith("/prs/releases") ? "releases"
+      : location.pathname.startsWith("/prs/mine") ? "mine" : PAGE_PREFS.tab,
     q: p.get("q") || "",
     repo: ["fm", "bm"].includes(p.get("repo")) ? p.get("repo") : "all",
-    sort: SORTS[p.get("sort")] ? p.get("sort") : "attention",
+    sort: SORTS[p.get("sort")] ? p.get("sort") : defaultSort(),
     statuses: (p.get("status") || "").split(",").filter((s) => STATUSES.some((x) => x.id === s)),
-    group: p.get("view") !== "list",
+    group: p.get("view") ? p.get("view") !== "list" : PAGE_PREFS.group,
     pr: /^(fm|bm)-\d+$/.test(p.get("pr") || "") ? p.get("pr") : null,
     panel: PANEL_TABS.includes(p.get("panel")) ? p.get("panel") : "conversation",
   };
 }
 
+/**
+ * The sort the page starts with: the one set in Settings, when the page knows it.
+ * @returns {string}
+ */
+const defaultSort = () => (SORTS[PAGE_PREFS.sort] ? PAGE_PREFS.sort : "attention");
+
 function urlFor(v) {
   const p = new URLSearchParams();
   if (v.q) p.set("q", v.q);
   if (v.repo !== "all") p.set("repo", v.repo);
-  if (v.sort !== "attention") p.set("sort", v.sort);
+  if (v.sort !== defaultSort()) p.set("sort", v.sort);
   if (v.statuses.length) p.set("status", v.statuses.join(","));
-  if (!v.group) p.set("view", "list");
+  if (v.group !== PAGE_PREFS.group) p.set("view", v.group ? "group" : "list");
   if (v.pr) p.set("pr", v.pr);
   if (v.pr && v.panel !== "conversation") p.set("panel", v.panel);
   const qs = p.toString().replace(/%2C/g, ",");
@@ -922,7 +946,7 @@ function renderControls(all, toks) {
   }).join("");
 
   $("sort").value = view.sort;
-  $("sort")._ddSync?.();
+  FelixDropdown.sync($("sort"));
   $("grouped").setAttribute("aria-pressed", String(view.group));
   $("flat").setAttribute("aria-pressed", String(!view.group));
   $("clearq").hidden = !view.q;
@@ -952,8 +976,8 @@ function renderList() {
 
   if (!shown.length) {
     $("repos").innerHTML = all.length
-      ? `<div class="list"><div class="empty">No PRs match. <button class="linkbtn" type="button" data-reset>Clear filters</button></div></div>`
-      : `<div class="list"><div class="empty">${esc(currentTab().empty)}</div></div>`;
+      ? `<div class="list">${emptyHtml("search", `No PRs match. <button class="linkbtn" type="button" data-reset>Clear filters</button>`)}</div>`
+      : `<div class="list">${emptyHtml(view.tab === "review" ? "review" : "mine", esc(currentTab().empty))}</div>`;
     return;
   }
 
@@ -1188,7 +1212,7 @@ function panelClaude(p) {
     : sub === "steps" ? stepList(r)
     : (report || `<p class="none">${r.status === "failed" ? "There is no review to show." : `${aiName(r.tool)}'s review will show here when it finishes. Watch it in Live view meanwhile.`}</p>`);
   return `<div class="claude-box">${head}${body}</div>
-    <div class="subtabs" role="tablist">${subs.map(([id, label]) =>
+    <div class="subtabs segmented" role="tablist">${subs.map(([id, label]) =>
       `<button type="button" role="tab" data-csub="${id}" aria-selected="${sub === id}">${label}</button>`).join("")}</div>
     <div>${subBody}</div>`;
 }
@@ -1279,8 +1303,8 @@ function emptyPanel() {
       ${ready ? go({ tab: "review", statuses: ["claude-ready"] }, `<b>${ready}</b> AI review${ready === 1 ? " needs" : "s need"} your answer`) : ""}
       ${running ? go({ tab: "review", statuses: ["claude-running"] }, `<b>${running}</b> AI review${running === 1 ? " is" : "s are"} running`) : ""}
     </ul>` : "";
-  return `<div class="panel-empty-state">
-    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z"/></svg>
+  return `<div class="panel-empty-state empty-state">
+    <svg viewBox="0 0 96 72" aria-hidden="true">${DRAWINGS.pick}</svg>
     <h2>Select a PR</h2>
     <p>Click any PR on the left to see its conversation, commits, checks and code changes here.</p>
     ${glance}
@@ -1290,7 +1314,7 @@ function emptyPanel() {
 
 function renderPanel() {
   const panel = $("panel");
-  if (["fixreq", "localmodel", "localtool"].includes(document.activeElement?.id) || ddMenu) return;
+  if (["fixreq", "localmodel", "localtool"].includes(document.activeElement?.id) || FelixDropdown.isOpen()) return;
   panel.hidden = false;
   document.body.classList.toggle("panel-open", Boolean(view.pr));
   document.body.classList.toggle("panel-empty", !view.pr);
@@ -1351,8 +1375,8 @@ function renderPanel() {
     <div class="panel-body">${content}</div>`;
   panel.dataset.shown = `${key}:${view.panel}`;
   if (sameTab) panel.querySelector(".panel-body").scrollTop = scroll;
-  enhanceSelect($("localtool"));
-  enhanceSelect($("localmodel"));
+  FelixDropdown.enhance($("localtool"));
+  FelixDropdown.enhance($("localmodel"));
 }
 
 // First visit, before GitHub answers: the page's real layout with placeholder shapes.
@@ -1537,9 +1561,21 @@ function renderUpdated() {
   $("updated").innerHTML = loading ? `${esc(when)} · <span class="stale">refreshing…</span>` : esc(when);
 }
 
+let refreshTimer = 0;
+
+/**
+ * Starts the countdown to the next automatic reload, which the refresh button's ring shows.
+ */
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => (loading ? scheduleRefresh() : load()), REFRESH_MS);
+  FelixShell.restartRing();
+}
+
 async function load() {
   if (loading) return;
   loading = true;
+  scheduleRefresh();
   loadReleases();
   $("refresh").classList.add("spinning");
   renderUpdated();
@@ -1617,7 +1653,7 @@ function showError(text) {
 const TOOL_KEY = "open-prs:tool";
 const modelKey = (tool) => (tool === "cursor" ? "open-prs:model:cursor" : "open-prs:model");
 const TOOL_NAMES = { claude: "Claude", cursor: "Cursor" };
-const MODEL_NAMES = { "": "Default model", opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5", fable: "Fable 5.1" };
+const MODEL_NAMES = { "": "Default model", ...Object.fromEntries(window.FelixModels.CLAUDE_MODELS.map((m) => [m.id, m.name])) };
 // Cursor's models come from the server (`cursor-agent models`); empty until loaded or when Cursor isn't signed in.
 let cursorModels = [];
 let cursorModelsError = null;
@@ -1655,7 +1691,7 @@ function fillModels() {
   // A saved Cursor model shows even before the list loads, so the choice isn't lost.
   if (want && !opts.some(([v]) => v === want)) opts.push([want, want]);
   $("model").innerHTML = opts.map(([v, n]) => `<option value="${esc(v)}"${v === want ? " selected" : ""}>${esc(v === "" ? "Default" : n)}</option>`).join("");
-  $("model")._ddSync?.();
+  FelixDropdown.sync($("model"));
   aiButtonLabel();
 }
 
@@ -1665,7 +1701,7 @@ function aiButtonLabel() {
   const model = $("model").value;
   const name = model ? modelName(tool, model) : "Default";
   // Short on the button so it fits beside the tabs; the full pick is in its tooltip.
-  $("aibtn").innerHTML = `${ICON.spark}<span>${aiName(tool)}</span>${ddIcon("chevron")}`;
+  $("aibtn").innerHTML = `${ICON.spark}<span>${aiName(tool)}</span>${FelixDropdown.ICONS.chevron}`;
   $("aibtn").title = `AI settings: ${aiName(tool)}, ${name === "Default" ? "default model" : name}`;
 }
 
@@ -1681,7 +1717,7 @@ document.addEventListener("click", (e) => {
   if (!$("aipop").hidden && !e.target.closest("#aisettings, .dd-menu")) toggleAiPop(false);
 });
 $("aipop").addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !ddMenu) { e.stopPropagation(); toggleAiPop(false); $("aibtn").focus(); }
+  if (e.key === "Escape" && !FelixDropdown.isOpen()) { e.stopPropagation(); toggleAiPop(false); $("aibtn").focus(); }
 });
 
 try { $("tool").value = localStorage.getItem(TOOL_KEY) === "cursor" ? "cursor" : "claude"; } catch {}
@@ -1994,7 +2030,7 @@ function panelFix(p) {
     : (f.result ? `<div class="md">${markdown(f.result)}</div>` : `<p class="none">${aiName(f.tool)}'s summary will show here when it finishes.</p>`);
   const another = busy ? "" : `<details class="another"><summary>Ask for another fix</summary>${fixOptions(p)}</details>`;
   return `<div class="claude-box">${head}${progress}<div class="row">${open}</div></div>
-    <div class="subtabs" role="tablist">${subs.map(([id, label]) =>
+    <div class="subtabs segmented" role="tablist">${subs.map(([id, label]) =>
       `<button type="button" role="tab" data-csub="${id}" aria-selected="${sub === id}">${label}</button>`).join("")}</div>
     <div>${body}</div>${another}`;
 }
@@ -2286,8 +2322,6 @@ function notifyListChanges() {
   }
 }
 
-// Check GitHub every 5 minutes so new requests show up without a click (also while the tab is in the background).
-setInterval(() => { if (!loading) load(); }, 5 * 60e3);
 renderBell();
 
 readUrl();
@@ -2298,143 +2332,11 @@ if (cached?.lists) { data = cached; reviews = cached.reviews || {}; fromCache = 
 render();
 load();
 
-// ---------- Dropdowns ----------
-// The native <select> menu is drawn by macOS and ignores the page's look, so each select gets a button
-// and a menu in the design system's style. The select stays the source of truth: choosing an item sets
-// its value and fires "change", so every existing handler keeps working.
-var ddMenu = null, ddBtn = null, ddSel = null, ddOpenedAt = 0;
-
-function ddIcon(kind) {
-  return kind === "check"
-    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
-}
-
-function enhanceSelect(sel) {
-  if (!sel || sel.dataset.dd) return;
-  sel.dataset.dd = "1";
-  sel.classList.add("dd-native");
-  sel.tabIndex = -1;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "dd-btn";
-  btn.id = `${sel.id}-dd`;
-  btn.setAttribute("aria-haspopup", "listbox");
-  btn.setAttribute("aria-expanded", "false");
-  sel.after(btn);
-  sel._ddSync = () => { btn.innerHTML = `<span>${esc(sel.selectedOptions[0]?.textContent || "")}</span>${ddIcon("chevron")}`; };
-  sel._ddSync();
-  sel.addEventListener("change", sel._ddSync);
-  btn.addEventListener("click", (e) => { e.stopPropagation(); if (ddSel === sel) closeDd(); else openDd(sel, btn); });
-  btn.addEventListener("keydown", (e) => {
-    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) { e.preventDefault(); e.stopPropagation(); openDd(sel, btn); }
-  });
-}
-
-function openDd(sel, btn) {
-  closeDd();
-  const menu = document.createElement("div");
-  menu.className = "dd-menu";
-  menu.setAttribute("role", "listbox");
-  // Long lists (like Cursor's models) get a search box on top that filters as you type.
-  const search = sel.options.length > 12 ? document.createElement("input") : null;
-  const none = document.createElement("div");
-  if (search) {
-    search.type = "search";
-    search.className = "dd-search";
-    search.placeholder = "Search";
-    search.setAttribute("aria-label", "Search the list");
-    search.addEventListener("click", (e) => e.stopPropagation());
-    search.addEventListener("input", () => {
-      const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
-      let shown = 0;
-      for (const item of menu.querySelectorAll(".dd-item")) {
-        const text = `${item.textContent} ${item.dataset.value}`.toLowerCase();
-        item.hidden = !words.every((w) => text.includes(w));
-        if (!item.hidden) shown++;
-      }
-      none.hidden = shown > 0;
-    });
-    menu.append(search);
-    none.className = "dd-none";
-    none.textContent = "No matches";
-    none.hidden = true;
-  }
-  for (const o of sel.options) {
-    const item = document.createElement("div");
-    item.className = "dd-item";
-    item.setAttribute("role", "option");
-    item.setAttribute("aria-selected", String(o.selected));
-    item.tabIndex = -1;
-    item.dataset.value = o.value;
-    item.innerHTML = `<span class="dd-check">${o.selected ? ddIcon("check") : ""}</span><span>${esc(o.textContent)}</span>`;
-    item.addEventListener("click", (e) => { e.stopPropagation(); chooseDd(o.value); });
-    menu.append(item);
-  }
-  if (search) menu.append(none);
-  menu.addEventListener("keydown", (e) => {
-    // The menu's keys stay with the menu: Escape here must not also close the PR panel.
-    if (e.key !== "Tab") e.stopPropagation();
-    const items = [...menu.querySelectorAll(".dd-item:not([hidden])")];
-    const at = items.indexOf(document.activeElement);
-    if (e.target === search) {
-      // In the search box: typing filters, Down moves into the list, Enter picks the first match.
-      if (e.key === "ArrowDown") { e.preventDefault(); items.at(0)?.focus({ preventScroll: true }); }
-      else if (e.key === "Enter") { e.preventDefault(); if (items.length) chooseDd(items[0].dataset.value); }
-      else if (e.key === "Escape") { e.preventDefault(); const b = ddBtn; closeDd(); b?.focus(); }
-      else if (e.key === "Tab") closeDd();
-      return;
-    }
-    if (e.key === "ArrowDown") { e.preventDefault(); items.at(Math.min(at + 1, items.length - 1))?.focus({ preventScroll: true }); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); if (at <= 0 && search) search.focus(); else items.at(Math.max(at - 1, 0))?.focus({ preventScroll: true }); }
-    else if (e.key === "Home") { e.preventDefault(); items.at(0)?.focus({ preventScroll: true }); }
-    else if (e.key === "End") { e.preventDefault(); items.at(-1)?.focus({ preventScroll: true }); }
-    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (at >= 0) chooseDd(items.at(at).dataset.value); }
-    else if (e.key === "Escape") { e.preventDefault(); const b = ddBtn; closeDd(); b?.focus(); }
-    else if (e.key === "Tab") closeDd();
-  });
-  document.body.append(menu);
-  // Fixed position under the button (above it when there's no room), kept inside the window.
-  const r = btn.getBoundingClientRect();
-  menu.style.minWidth = `${Math.round(r.width)}px`;
-  if (search) menu.style.width = `${menu.offsetWidth}px`; // keeps its width while filtering
-  const below = innerHeight - r.bottom >= menu.offsetHeight + 8;
-  // Above the button, it's pinned by its bottom edge so filtering shrinks it toward the button.
-  if (below) menu.style.top = `${Math.round(r.bottom + 4)}px`;
-  else menu.style.bottom = `${Math.round(innerHeight - r.top + 4)}px`;
-  menu.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)))}px`;
-  ddMenu = menu; ddBtn = btn; ddSel = sel;
-  btn.setAttribute("aria-expanded", "true");
-  ddOpenedAt = Date.now();
-  const current = menu.querySelector('[aria-selected="true"]');
-  current?.scrollIntoView({ block: "nearest" });
-  (search || current || menu.firstElementChild)?.focus({ preventScroll: true });
-}
-
-function chooseDd(value) {
-  const sel = ddSel, btnId = ddBtn?.id;
-  closeDd();
-  if (!sel) return;
-  if (sel.value !== value) { sel.value = value; sel.dispatchEvent(new Event("change", { bubbles: true })); }
-  sel._ddSync?.();
-  document.getElementById(btnId)?.focus(); // the button may have been redrawn by the change
-}
-
-function closeDd() {
-  ddMenu?.remove();
-  ddBtn?.setAttribute("aria-expanded", "false");
-  ddMenu = ddBtn = ddSel = null;
-}
-
-document.addEventListener("click", (e) => { if (ddMenu && !ddMenu.contains(e.target)) closeDd(); });
-window.addEventListener("resize", closeDd);
-// Scrolling the page closes the menu, but not the small scroll some browsers make as it opens.
-document.addEventListener("scroll", (e) => { if (ddMenu && !ddMenu.contains(e.target) && Date.now() - ddOpenedAt > 250) closeDd(); }, true);
-enhanceSelect($("sort"));
-enhanceSelect($("tool"));
-enhanceSelect($("model"));
-enhanceSelect($("localtool"));
-enhanceSelect($("localmodel"));
+FelixDropdown.enhance($("sort"));
+FelixDropdown.enhance($("tool"));
+FelixDropdown.enhance($("model"));
+FelixDropdown.enhance($("localtool"));
+FelixDropdown.enhance($("localmodel"));
 </script>
 </body>
 </html>

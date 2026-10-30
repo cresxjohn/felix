@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Felix</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/theme.css">
+<style>
+body { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.box { max-width: 420px; text-align: center; display: grid; gap: 12px; justify-items: center; }
+.box img { width: 72px; height: 72px; }
+.box h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.box p { margin: 0; color: var(--muted); }
+.box code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--r-tag); padding: 1px 6px; }
+.box button { border: 0; border-radius: var(--r-box); padding: 8px 16px; background: var(--accent); color: #fff; font-weight: 500; cursor: pointer; }
+.box button:hover { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+<div class="box">
+  <img src="/icons/icon-192.png" alt="">
+  <h1>Felix's server isn't running</h1>
+  <p>Start it from the <code>felix</code> folder with <code>./prs start</code>, then try again.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</div>
+</body>
+</html>

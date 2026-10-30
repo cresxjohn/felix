@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Felix">
+  <!-- Felix mark, logo 2a: the buddy face with a wink. 64-unit grid. -->
+  <circle cx="32" cy="32" r="28" fill="#F1EDE0"/>
+  <rect x="21" y="20" width="6.5" height="12.5" rx="3.25" fill="#151B24"/>
+  <path d="M36 28.5q3.5-5.5 7 0" fill="none" stroke="#151B24" stroke-width="3.8" stroke-linecap="round"/>
+  <path d="M21.5 40c5.8 5.8 15.2 5.8 21 0" fill="none" stroke="#2F55D4" stroke-width="4.6" stroke-linecap="round"/>
+</svg>

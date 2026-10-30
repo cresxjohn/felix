@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Felix voice lab</title>
+<style>
+  body { margin: 0; padding: 32px; background: #f6f6f3; color: #1d1d1b; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  p { margin: 0 0 16px; color: #66665f; }
+  ol { margin: 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  h2 { margin: 20px 0 6px; font-size: 16px; }
+  button { font: inherit; padding: 8px 14px; margin: 4px 6px 4px 0; border: 1px solid #c9c9c2; border-radius: 8px; background: #fff; color: inherit; }
+  button:disabled { opacity: 0.5; }
+  label { display: inline-block; margin: 4px 14px 4px 0; }
+  .note { color: #66665f; }
+</style>
+</head>
+<body>
+<h1>Felix voice lab</h1>
+<p>Tries each way of making Felix's voice in this browser, one per page load, and tells the Mac how each went. It cleans up when it's done.</p>
+<ol id="log"></ol>
+<div id="sound" hidden>
+  <p id="facts" class="note"></p>
+  <h2>1. Make the line</h2>
+  <p>
+    <label><input type="radio" name="model" value="fp16:webgpu" checked> half-size model on the graphics chip (this device's pick)</label>
+    <label><input type="radio" name="model" value="fp32:webgpu"> full model on the graphics chip (326 MB more)</label>
+    <label><input type="radio" name="model" value="q8:wasm"> compact model on the processor (92 MB more)</label>
+  </p>
+  <button type="button" data-make="device">Make it on this device</button>
+  <button type="button" data-make="mac">Get the Mac's version</button>
+  <button type="button" id="send" disabled>Send this device's line to the Mac</button>
+  <p id="made" class="note">Nothing made yet.</p>
+  <h2>2. Play it</h2>
+  <p>
+    <label><input type="radio" name="line" value="device" checked> this device's line</label>
+    <label><input type="radio" name="line" value="mac"> the Mac's line</label>
+    <label><input type="checkbox" id="playback"> ask Safari for playback mode first</label>
+    <label><input type="checkbox" id="pcm16"> play it as 16-bit sound</label>
+  </p>
+  <button type="button" data-play="plain">Play, nothing else open</button>
+  <button type="button" data-play="ec">Play with the microphone open, echo cancelling on</button>
+  <button type="button" data-play="raw">Play with the microphone open, echo cancelling off</button>
+  <p id="played" class="note"></p>
+</div>
+<script src="/voice-device.js"></script>
+<script type="module">
+const query = new URLSearchParams(location.search);
+// "?set=sound": how Felix's voice sounds on this device, and what changes it. Makes one line here (and the Mac's
+// version of it), then plays it the ways Felix might: on its own, or with the microphone open the way listening
+// for his name and cutting in keep it. Each play tells the Mac what was playing, how, and what Safari's audio
+// session was, so what makes it quiet or robotic can be told from the reports.
+if (query.get("set") === "sound") {
+  document.getElementById("sound").hidden = false;
+  document.getElementById("log").hidden = true;
+  const dev = window.FelixVoiceDevice;
+  const $ = (id) => document.getElementById(id);
+  const TEXT = "Hi, I'm Felix. This line was made right here on this device.";
+  const lines = { device: null, mac: null };
+  const session = () => (navigator.audioSession ? { type: navigator.audioSession.type, state: navigator.audioSession.state } : null);
+  const prefs = await fetch("/api/settings").then((r) => r.json()).then((d) => d.settings || {}).catch(() => ({}));
+  let plan = await dev.detect();
+  const facts = () => {
+    const s = session();
+    $("facts").textContent = `${plan.variant} model on the ${plan.device === "webgpu" ? "graphics chip" : "processor"}; voice ${prefs.felixVoice || "am_michael"} at ${prefs.felixSpeed || 1}×. `
+      + (s ? `Audio session: ${s.type} (${s.state}).` : "This browser has no audio session API.");
+  };
+  facts();
+  navigator.audioSession?.addEventListener?.("statechange", facts);
+  // Another model size or processor than this device's pick: Kokoro is loaded again with it, in a fresh page, since
+  // the loaded voice can't be swapped in place. Its files are downloaded first when Make is tapped.
+  for (const r of document.querySelectorAll("[name=model]")) r.checked = r.value === `${plan.variant}:${plan.device}`;
+  const pickModel = () => {
+    const picked = document.querySelector("[name=model]:checked").value;
+    if (picked !== `${plan.variant}:${plan.device}`) location.replace(`/voice-lab?set=sound&model=${picked}`);
+  };
+  if (query.get("model") && query.get("model") !== `${plan.variant}:${plan.device}`) {
+    const [variant, device] = query.get("model").split(":");
+    dev.configure({ variant, device });
+    plan = await dev.detect();
+    facts();
+    for (const r of document.querySelectorAll("[name=model]")) r.checked = r.value === query.get("model");
+  }
+  for (const r of document.querySelectorAll("[name=model]")) r.onchange = pickModel;
+
+  /**
+   * The same sound as 16-bit samples, to tell whether Safari plays Kokoro's 32-bit float WAV wrongly.
+   * @param {Blob} blob
+   * @returns {Promise<Blob>}
+   */
+  async function asPcm16(blob) {
+    const buf = await blob.arrayBuffer();
+    const v = new DataView(buf);
+    if (v.getUint16(20, true) !== 3) return blob;
+    const rate = v.getUint32(24, true);
+    const samples = new Float32Array(buf, 44, (buf.byteLength - 44) / 4);
+    const out = new ArrayBuffer(44 + samples.length * 2);
+    const o = new DataView(out);
+    const tag = (at, s) => [...s].forEach((c, i) => o.setUint8(at + i, c.charCodeAt(0)));
+    tag(0, "RIFF"); o.setUint32(4, 36 + samples.length * 2, true); tag(8, "WAVE"); tag(12, "fmt "); o.setUint32(16, 16, true); o.setUint16(20, 1, true); o.setUint16(22, 1, true);
+    o.setUint32(24, rate, true); o.setUint32(28, rate * 2, true); o.setUint16(32, 2, true); o.setUint16(34, 16, true); tag(36, "data"); o.setUint32(40, samples.length * 2, true);
+    samples.forEach((x, i) => o.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x)) * 32767, true));
+    return new Blob([out], { type: "audio/wav" });
+  }
+
+  $("send").onclick = async () => {
+    if (!lines.device) return;
+    $("send").disabled = true;
+    show("made", "Sending it to the Mac…");
+    try {
+      const bytes = new Uint8Array(await lines.device.blob.arrayBuffer());
+      let text = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      const r = await fetch("/api/voice-web/sample", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: `${/iPad|Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1 ? "ipad" : "mac"}-${plan.variant}-${plan.device}`, wav: btoa(text) }) }).then((x) => x.json());
+      show("made", `Sent to the Mac as ${r.file}.`);
+    } catch (e) {
+      show("made", `Couldn't send it: ${e.message}`);
+    } finally {
+      $("send").disabled = false;
+    }
+  };
+
+  /**
+   * What's in a WAV: its format, rate, length, and how loud it gets, to tell a quiet model from quiet playback.
+   * @param {Blob} blob
+   */
+  async function wavInfo(blob) {
+    const buf = await blob.arrayBuffer();
+    const v = new DataView(buf);
+    const format = v.getUint16(20, true);
+    const rate = v.getUint32(24, true);
+    const bits = v.getUint16(34, true);
+    let at = 12;
+    while (at + 8 <= buf.byteLength && String.fromCharCode(v.getUint8(at), v.getUint8(at + 1), v.getUint8(at + 2), v.getUint8(at + 3)) !== "data") at += 8 + v.getUint32(at + 4, true);
+    const size = Math.min(v.getUint32(at + 4, true), buf.byteLength - at - 8);
+    const samples = format === 3 ? new Float32Array(buf, at + 8, size / 4) : Array.from(new Int16Array(buf, at + 8, size / 2), (x) => x / 32768);
+    let peak = 0;
+    let sum = 0;
+    for (const x of samples) { peak = Math.max(peak, Math.abs(x)); sum += x * x; }
+    return { format: format === 3 ? "float32" : `pcm${bits}`, rate, seconds: Math.round((samples.length / rate) * 100) / 100, peak: Math.round(peak * 1000) / 1000, rms: Math.round(Math.sqrt(sum / samples.length) * 1000) / 1000 };
+  }
+
+  const report = (extra) => fetch("/api/voice-web/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lab: "sound", agent: navigator.userAgent, plan, ...extra }) }).catch(() => {});
+  const show = (id, text) => { $(id).textContent = text; };
+
+  // One player, unlocked by the first tap, since an iPad only lets a player that started during a tap make sound later.
+  const audio = new Audio();
+  let unlocked = false;
+  addEventListener("pointerdown", () => {
+    if (unlocked) return;
+    const silence = new ArrayBuffer(44 + 2400);
+    const v = new DataView(silence);
+    const tag = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    tag(0, "RIFF"); v.setUint32(4, 36 + 2400, true); tag(8, "WAVE"); tag(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 24000, true); v.setUint32(28, 48000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); tag(36, "data"); v.setUint32(40, 2400, true);
+    audio.src = URL.createObjectURL(new Blob([silence], { type: "audio/wav" }));
+    audio.play().then(() => { unlocked = true; audio.pause(); }, () => {});
+  }, { capture: true });
+
+  for (const b of document.querySelectorAll("[data-make]")) {
+    b.onclick = async () => {
+      const which = b.dataset.make;
+      b.disabled = true;
+      show("made", which === "device" ? "Making it on this device…" : "Asking the Mac…");
+      const ticker = setInterval(() => {
+        const job = dev.job();
+        if (job?.running) return show("made", `Downloading ${job.file} (${job.done + 1} of ${job.count}): ${Math.round(job.got / 1e6)} MB${job.total ? ` of ${Math.round(job.total / 1e6)}` : ""}…`);
+        const at = dev.step();
+        if (at) show("made", `${at.name}… ${Math.round(at.ms / 1000)} s`);
+      }, 500);
+      try {
+        const options = { voice: prefs.felixVoice, speed: Number(prefs.felixSpeed) || 1 };
+        if (which === "device" && !(await dev.status()).ready) {
+          await dev.download();
+          if (dev.job()?.error) throw new Error(dev.job().error);
+        }
+        const t0 = performance.now();
+        const blob = which === "device"
+          ? (await dev.test(TEXT, options)).blob
+          : await fetch("/api/felix/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: TEXT }) }).then((r) => { if (!r.ok) throw new Error(`the Mac answered ${r.status}`); return r.blob(); });
+        const info = await wavInfo(blob);
+        lines[which] = { blob, info };
+        if (which === "device") $("send").disabled = false;
+        show("made", `${which === "device" ? `This device's line (${plan.variant} on the ${plan.device === "webgpu" ? "graphics chip" : "processor"}, ${((performance.now() - t0) / 1000).toFixed(1)} s to make)` : "The Mac's line"}: ${info.format} at ${info.rate} Hz, ${info.seconds} s, peak ${info.peak}, loudness ${info.rms}.`);
+        report({ made: which, wav: info });
+      } catch (e) {
+        show("made", `Couldn't: ${e.message}`);
+      } finally {
+        clearInterval(ticker);
+        b.disabled = false;
+      }
+    };
+  }
+
+  for (const b of document.querySelectorAll("[data-play]")) {
+    b.onclick = async () => {
+      const how = b.dataset.play;
+      const which = document.querySelector("[name=line]:checked").value;
+      const line = lines[which];
+      if (!line) return show("played", `Make ${which === "device" ? "this device's" : "the Mac's"} line first.`);
+      const playback = $("playback").checked;
+      const pcm16 = $("pcm16").checked;
+      document.querySelectorAll("[data-play]").forEach((x) => { x.disabled = true; });
+      let mic = null;
+      const entry = { played: which, how, playback, pcm16, model: `${plan.variant}:${plan.device}`, wav: line.info, before: session() };
+      try {
+        if (navigator.audioSession) navigator.audioSession.type = playback ? "playback" : "auto";
+        if (how !== "plain") {
+          // The microphone, the way Felix keeps it while listening for his name: a stream feeding an audio graph.
+          const on = how === "ec";
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: on, noiseSuppression: on, autoGainControl: on } });
+          const ctx = new AudioContext();
+          ctx.createMediaStreamSource(stream).connect(ctx.createAnalyser());
+          mic = { stream, ctx };
+          entry.mic = stream.getAudioTracks()[0]?.getSettings?.() || {};
+          entry.micRate = ctx.sampleRate;
+          await new Promise((r) => setTimeout(r, 400));
+        }
+        entry.during = session();
+        show("played", `Playing ${which === "device" ? "this device's" : "the Mac's"} line${how === "plain" ? "" : how === "ec" ? " with the microphone open, echo cancelling on" : " with the microphone open, echo cancelling off"}${playback ? ", in playback mode" : ""}${pcm16 ? ", as 16-bit" : ""}… session: ${entry.during ? `${entry.during.type} (${entry.during.state})` : "n/a"}`);
+        audio.volume = 1;
+        audio.src = URL.createObjectURL(pcm16 ? await asPcm16(line.blob) : line.blob);
+        await audio.play();
+        await new Promise((r) => { audio.onended = r; audio.onerror = r; });
+        entry.after = session();
+        entry.volume = audio.volume;
+        show("played", `${$("played").textContent.replace(/…[^]*$/, "")}. Done. Tell Claude how it sounded.`);
+      } catch (e) {
+        entry.error = String(e?.message || e);
+        show("played", `Couldn't play: ${entry.error}`);
+      } finally {
+        setTimeout(() => { mic?.stream.getTracks().forEach((t) => t.stop()); mic?.ctx.close().catch(() => {}); }, 300);
+        report(entry);
+        document.querySelectorAll("[data-play]").forEach((x) => { x.disabled = false; });
+      }
+    };
+  }
+} else {
+// Each setup runs in a fresh page, so one that gets stuck can't hold up the next. The runs: the full model on the
+// graphics chip, the compact one on the processor, then the half-size one on the graphics chip (the iPad's pick).
+// "?set=sounds": the model alone, given the line's sounds (phonemes) worked out on the Mac, to tell whether working
+// them out here is what gets stuck.
+const sounds = query.get("set") === "sounds";
+const RUNS = sounds ? ["fp16:webgpu", "q8:wasm"] : ["fp32:webgpu", "q8:wasm", "fp16:webgpu"];
+const PHONEMES = "həlˈoʊ, ðɪs ɪz ɐ tˈɛst lˈaɪn mˌeɪd ɪn sɐfˈɑːɹɹi, tə sˈiː hˌaʊ fˈæst ɪɾ ˈɪz.";
+const at = Number(query.get("run") || 0);
+const log = (text) => document.getElementById("log").append(Object.assign(document.createElement("li"), { textContent: text }));
+const dev = window.FelixVoiceDevice;
+
+if (at >= RUNS.length) {
+  await dev.remove();
+  dev.unstick();
+  log("Done. This browser's test copies are removed.");
+} else {
+  const [variant, device] = RUNS[at].split(":");
+  dev.configure({ variant, device });
+  log(`Run ${at + 1} of ${RUNS.length}: the ${variant} model on the ${device === "webgpu" ? "graphics chip" : "processor"}${sounds ? ", given the line's sounds" : ""}. Downloading…`);
+  try {
+    await dev.download();
+    const job = dev.job();
+    if (job?.error) throw new Error(job.error);
+    // The first line warms the graphics chip up; the second shows how fast it really is.
+    for (const which of ["First line (warming up)", "Second line"]) {
+      log(`${which}…`);
+      const r = await dev.test("Hello, this is a test line made in Safari, to see how fast it is.", sounds ? { phonemes: PHONEMES } : {});
+      log(`${which}: made in ${(r.madeMs / 1000).toFixed(1)} s, plays for ${(r.playsMs / 1000).toFixed(1)} s (loading took ${(r.firstLoadMs / 1000).toFixed(1)} s).`);
+    }
+  } catch (e) {
+    log(`Failed: ${e.message}`);
+  }
+  setTimeout(() => location.replace(`/voice-lab?${sounds ? "set=sounds&" : ""}run=${at + 1}`), 1500);
+}
+}
+</script>
+</body>
+</html>

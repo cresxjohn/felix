@@ -2,3 +2,6 @@
 data/
 # Rewritten by the server on every start, with this Mac's paths.
 hooks/settings.json
+# An empty folder of its own, and Python caches.
+Untitled/
+__pycache__/

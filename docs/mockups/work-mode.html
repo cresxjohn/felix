@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Felix, Work mode mock-up</title>
+<style>
+  :root {
+    --page: #FFFFFF; --card: #EDEDED; --edge: #D5D5D5; --fg: #1E1F24; --muted: #5F6168;
+    --blue: #2F6FDF; --blue-bg: #DCE6F4; --chip: #DADADA; --red: #D9352B; --amber: #F2AE1C;
+    --green: #2FA84F; --pink: #D9497F;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 960px; height: 869px; padding: 22px 30px; background: var(--page); color: var(--fg);
+    font: 13.5px/1.35 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; overflow: hidden; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0 0 14px; letter-spacing: -0.1px; }
+  .bar { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 12px 0 14px; background: var(--card);
+    border: 1px solid var(--edge); border-radius: 14px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--blue); background: #fff; display: grid;
+    place-items: center; font-weight: 600; font-size: 15px; flex: none; }
+  .brand { font-size: 19px; font-weight: 650; margin-right: 8px; }
+  .seg { display: flex; padding: 3px; border: 1px solid var(--edge); border-radius: 20px; background: #F4F4F4; }
+  .seg span { padding: 5px 18px; border-radius: 16px; color: var(--muted); font-size: 14px; }
+  .seg .on { background: var(--blue-bg); color: var(--fg); font-weight: 600; }
+  .date { color: var(--muted); font-size: 14px; margin-left: 8px; }
+  .grow { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border: 1px solid var(--edge);
+    border-radius: 18px; background: #F4F4F4; font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .primary { padding: 7px 22px; border: 2px solid var(--blue); border-radius: 18px; background: var(--blue-bg);
+    font-weight: 600; font-size: 14px; }
+  .icon-btn { width: 30px; height: 30px; border: 1px solid var(--edge); border-radius: 9px; background: #F4F4F4;
+    display: grid; place-items: center; }
+  svg { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: 232px 182px 182px; gap: 14px;
+    margin-top: 14px; grid-template-areas: "ic jira prs ai" "cal slack tasks tasks" "ooo slack tasks tasks"; }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 14px; padding: 13px 15px;
+    display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+  .head h2 { font-size: 15px; font-weight: 600; margin: 0; white-space: nowrap; }
+  .badge { width: 24px; height: 24px; border-radius: 6px; background: var(--blue-bg); display: grid; place-items: center; flex: none; }
+  .right { margin-left: auto; }
+  .link { color: var(--blue); font-weight: 500; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12.5px; }
+  .row { display: flex; align-items: center; gap: 7px; }
+  .between { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  hr { border: 0; border-top: 1px solid #CFCFCF; margin: 8px 0; }
+  .chip { padding: 2px 10px; border: 1px solid var(--edge); border-radius: 12px; background: #F4F4F4; font-size: 12.5px; }
+  .chip.on { border: 2px solid var(--blue); background: var(--blue-bg); font-weight: 600; }
+  .person { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
+  .meter { height: 6px; border-radius: 3px; background: #D3D3D3; overflow: hidden; margin: 3px 0 6px; }
+  .meter i { display: block; height: 100%; border-radius: 3px; background: var(--blue); }
+  .tool { font-weight: 600; font-size: 13px; margin-top: 2px; }
+  .msg { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 8px; align-items: start; padding: 4px 0; }
+  .msg b { font-weight: 600; }
+  .msg .text { grid-column: 2 / 4; color: var(--muted); font-size: 12.5px; margin-top: -1px; }
+  .section { font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); margin: 4px 0 2px; }
+  .box { width: 16px; height: 16px; border: 1.5px solid #A9A9A9; border-radius: 4px; background: #F7F7F7; flex: none; }
+  .box.done { background: var(--blue); border-color: var(--blue); }
+  .task { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #D2D2D2; }
+  .task:last-of-type { border-bottom: 0; }
+  .task .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag { padding: 2px 9px; border-radius: 10px; background: var(--chip); font-size: 12.5px; color: #3F4047; }
+  .due { width: 62px; text-align: right; font-size: 13px; }
+  .add { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border: 1px solid var(--edge); border-radius: 10px;
+    background: #F7F7F7; color: var(--muted); font-size: 13px; margin-bottom: 9px; }
+  .bottom { display: grid; grid-template-columns: 632fr 310fr; gap: 14px; margin-top: 14px; }
+  .felix { display: flex; align-items: center; gap: 12px; height: 58px; padding: 0 12px; border: 2px solid var(--blue);
+    border-radius: 30px; background: #EAF1FB; }
+  .music { display: flex; align-items: center; gap: 12px; height: 58px; padding: 0 12px 0 10px; border: 1px solid var(--edge);
+    border-radius: 30px; background: var(--card); }
+  .art { width: 40px; height: 40px; border-radius: 8px; background: #8E99A8; display: grid; place-items: center; }
+</style>
+</head>
+<body>
+<h1>Felix, Work mode: four glance cards on top, Slack and Tasks share the room, music in the bar</h1>
+
+<div class="bar">
+  <div class="avatar">F</div>
+  <span class="brand">Felix</span>
+  <div class="seg"><span>Personal</span><span class="on">Work</span></div>
+  <span class="date">Thursday, Oct 29</span>
+  <span class="grow"></span>
+  <span class="pill" style="padding: 6px 40px 6px 16px"><span class="dot" style="background: var(--green)"></span>Say “Hey Felix”</span>
+  <span class="primary">Start my day</span>
+  <span class="icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg></span>
+  <span class="icon-btn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></span>
+</div>
+
+<div class="grid">
+  <section class="card" style="grid-area: ic">
+    <div class="head"><span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg></span><h2>Incident Commander</h2></div>
+    <div class="section" style="margin-top: 0">On now</div>
+    <div style="font-size: 19px; font-weight: 600">Mark Rushton</div>
+    <div class="muted">Americas · until 9 AM</div>
+    <hr>
+    <div class="between small"><span class="muted">Next</span><span>Sonito · 8 AM</span></div>
+    <div class="between small" style="margin-top: 5px"><span class="muted">Your shift</span><span class="link">Nov 2 · 5 days</span></div>
+    <div class="foot"><span>2m ago</span><span class="chip" style="color: var(--fg)">Open channel</span></div>
+  </section>
+
+  <section class="card" style="grid-area: jira">
+    <div class="head"><span class="badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--blue)"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></svg></span><h2>My Jira Board</h2></div>
+    <div class="small muted">Sprint 21 · 6 days left</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 4px; margin-top: 5px">
+      <div class="between"><span class="row"><span class="dot" style="background: var(--green)"></span>To do</span><b>5</b></div>
+      <div class="between"><span class="row"><span class="dot" style="background: var(--blue)"></span>Doing</span><b>4</b></div>
+      <div class="between"><span class="row"><span class="dot" style="background: var(--pink)"></span>In review</span><b>3</b></div>
+      <div class="between"><span class="row"><span class="dot" style="background: var(--blue)"></span>Done</span><b>8</b></div>
+    </div>
+    <hr>
+    <div class="between"><span class="row"><span class="dot" style="background: var(--red)"></span>Blocked</span><b>1</b></div>
+    <div class="small muted" style="margin-left: 15px">PMHUB-32267</div>
+    <div class="between" style="margin-top: 5px"><span class="row"><span class="dot" style="background: var(--amber)"></span>Waiting on you</span><b>2</b></div>
+    <div class="foot"><span>Updated 4m ago</span></div>
+  </section>
+
+  <section class="card" style="grid-area: prs">
+    <div class="head"><span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="19" r="2.2"/><path d="M6 7v10M18 17V10a3 3 0 0 0-3-3h-4"/></svg></span><h2>Open PRs</h2><span class="right link">Open →</span></div>
+    <div class="row" style="align-items: baseline; gap: 5px; margin: 0 0 6px"><span style="font-size: 27px; font-weight: 600">8</span><span class="small muted">to review</span><span style="font-size: 27px; font-weight: 600; margin-left: 12px">10</span><span class="small muted">mine</span></div>
+    <div class="between" style="padding: 2px 0"><span class="row"><span class="dot" style="background: var(--amber)"></span>Need your review</span><b>5</b></div>
+    <div class="between" style="padding: 2px 0"><span class="row"><span class="dot" style="background: var(--blue)"></span>AI review waiting</span><b>1</b></div>
+    <div class="between" style="padding: 2px 0"><span class="row"><span class="dot" style="background: var(--green)"></span>Ready to merge</span><b>2</b></div>
+    <div class="between muted" style="padding: 2px 0"><span class="row"><span class="dot" style="background: var(--red)"></span>Checks failing</span><span>0</span></div>
+    <div class="foot" style="justify-content: flex-start"><span class="row" style="padding: 2px 9px; border-radius: 10px; background: #D3EEDA; color: #1B5E2E; font-weight: 600"><span class="dot" style="background: var(--green)"></span>Live</span></div>
+  </section>
+
+  <section class="card" style="grid-area: ai">
+    <div class="head"><span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-6"/></svg></span><h2>AI usage</h2><span class="right link">Open →</span></div>
+    <div class="between"><span class="tool">Claude</span><span class="small muted">Team · Max 5x</span></div>
+    <div class="between small" style="margin-top: 3px"><span>Session (5 hours)</span><span>31%</span></div>
+    <div class="meter"><i style="width: 31%"></i></div>
+    <div class="between small"><span>Weekly · all models</span><span style="color: var(--red); font-weight: 600">100%</span></div>
+    <div class="meter"><i style="width: 100%; background: var(--red)"></i></div>
+    <div class="between" style="margin-top: 2px"><span class="tool">Cursor</span><span class="small muted">Team · $40/mo</span></div>
+    <div class="between small" style="margin-top: 3px"><span>Included usage</span><span>5%</span></div>
+    <div class="meter"><i style="width: 5%"></i></div>
+    <div class="foot"><span>Claude weekly resets Fri</span><span>1m ago</span></div>
+  </section>
+
+  <section class="card" style="grid-area: cal">
+    <div class="head"><span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span><h2>Calendar</h2><span class="right link small">in 25 min</span></div>
+    <div style="display: grid; grid-template-columns: 50px 1fr; row-gap: 6px; border-left: 3px solid var(--blue); padding-left: 8px; margin-left: -2px">
+      <span class="small">10:00</span><span><b style="font-weight: 600">Daily standup</b><br><span class="chip on" style="display: inline-block; margin-top: 4px; padding: 1px 12px">Join</span></span>
+    </div>
+    <div style="display: grid; grid-template-columns: 50px 1fr; row-gap: 6px; padding-left: 11px; margin-top: 7px">
+      <span class="small">1:30</span><span>Sprint planning</span>
+      <span class="small">4:00</span><span>1:1 with Brian</span>
+    </div>
+    <div class="foot"><span>Tomorrow: 2 events</span></div>
+  </section>
+
+  <section class="card" style="grid-area: ooo">
+    <div class="head"><span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M17 5l4 4M21 5l-4 4"/></svg></span><h2>Team out of office</h2></div>
+    <div class="row" style="gap: 5px; margin-bottom: 8px"><span class="chip on">Today</span><span class="chip">Tomorrow</span><span class="chip">Later</span></div>
+    <div class="row" style="align-items: flex-start; gap: 9px"><span class="person" style="background: #CFE8D8">M</span><span><b style="font-weight: 600">Mae</b><br><span class="small muted">PTO · to Oct 31</span></span></div>
+    <div class="row" style="align-items: flex-start; gap: 9px; margin-top: 7px"><span class="person" style="background: #F3D3DF">J</span><span><b style="font-weight: 600">Joy</b><br><span class="small muted">VL · Oct 29 to 30</span></span></div>
+  </section>
+
+  <section class="card" style="grid-area: slack">
+    <div class="head"><span class="badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2.2" stroke-linecap="round"><path d="M9 3L7 21M17 3l-2 18M4 8.5h17M3 15.5h17"/></svg></span><h2>Slack</h2><span class="right" style="padding: 1px 9px; border-radius: 10px; background: #F6D2D0; color: #9B1C14; font-weight: 600; font-size: 12.5px">3 @</span></div>
+    <div class="section" style="margin-top: 0">Mentions</div>
+    <div class="msg"><span class="person" style="background: #CFE8D8">B</span><b>Brian</b><span class="small muted">9:42</span><span class="text">@Cres review fm#12247?</span></div>
+    <div class="msg"><span class="person" style="background: #F3D3DF">E</span><b>Eugene</b><span class="small muted">9:15</span><span class="text">@Cres reindex is done</span></div>
+    <div class="msg"><span class="person" style="background: #D5DAE6">#</span><b>tech-all</b><span class="small muted">8:50</span><span class="text">@here deploy at 3 PM</span></div>
+    <hr style="margin: 6px 0">
+    <div class="section">To-dos</div>
+    <div class="row" style="padding: 4px 0; align-items: flex-start; gap: 9px"><span class="box" style="margin-top: 1px"></span><span>Reply to Joy on the demo plan<br><span class="small muted">#eng-portalverse · saved</span></span></div>
+    <div class="row" style="padding: 4px 0; align-items: flex-start; gap: 9px"><span class="box" style="margin-top: 1px"></span><span>Read the Q4 roadmap thread<br><span class="small muted">#tech-leads · to-do</span></span></div>
+    <div class="foot"><span>Also in Tasks</span><span class="link">Open →</span></div>
+  </section>
+
+  <section class="card" style="grid-area: tasks">
+    <div class="head"><span class="badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round"><path d="M4 6l1.5 1.5L8 5M4 13l1.5 1.5L8 12M11 6h9M11 13h9M11 19h9M4 19h4"/></svg></span><h2>Tasks</h2><span class="right small muted">3 today · 1 overdue</span></div>
+    <div class="add"><span style="font-size: 16px; line-height: 1; color: var(--fg)">+</span>Add a task: Review fm#12247 tomorrow 3pm !high</div>
+    <div class="row" style="gap: 5px; margin-bottom: 2px"><span class="chip on">Today</span><span class="chip">Upcoming</span><span class="chip">Overdue</span><span class="chip">Someday</span><span class="chip">Done</span></div>
+    <div class="task"><span class="box"></span><span class="title">Review fm#12247 (Ledger export) <span class="dot" style="background: var(--red); margin-left: 6px"></span></span><span class="tag">#review</span><span class="due link">3:00 PM</span></div>
+    <div class="task"><span class="box"></span><span class="title">Reply to Brian on PMHUB-32267</span><span class="tag">#portalverse</span><span class="due">Today</span></div>
+    <div class="task"><span class="box"></span><span class="title">Prep sprint demo notes</span><span class="tag">#sprint</span><span class="due" style="color: var(--red); font-weight: 600">Overdue</span></div>
+    <div class="task"><span class="box"></span><span class="title">Ask Data team about the reindex</span><span class="tag">#data</span><span class="due">Tomorrow</span></div>
+    <div class="task"><span class="box done"></span><span class="title muted">Renew Datadog access token</span><span class="tag">#admin</span><span class="due muted">Done</span></div>
+    <div class="foot"><span>Drag to reorder · ⌘K to search</span></div>
+  </section>
+</div>
+
+<div class="bottom">
+  <div class="felix">
+    <div class="avatar">F</div>
+    <div class="grow"><div class="between"><b style="font-weight: 600">Felix</b><span class="small muted">Hold ⌥ to talk</span></div><div>Sonito's on at 8 tomorrow. Want a reminder for the demo notes?</div></div>
+    <span class="avatar" style="width: 38px; height: 38px; background: #F7FAFE"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+  </div>
+  <div class="music">
+    <div class="art"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E1F24" stroke-width="2"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg></div>
+    <div class="grow"><b style="font-weight: 600">Deep Focus</b><div class="small muted">Spotify · playlist</div><div class="meter" style="height: 3px; margin: 3px 0 0; width: 90%"><i style="width: 38%"></i></div></div>
+    <svg width="74" height="26" viewBox="0 0 74 26"><path d="M3 6v14M16 6L7 13l9 7z" fill="#1E1F24" stroke="#1E1F24" stroke-width="2"/><circle cx="37" cy="13" r="11" fill="#F7FAFE" stroke="var(--blue)" stroke-width="2"/><path d="M34 8.5v9M40 8.5v9" stroke="#1E1F24" stroke-width="2.2"/><path d="M58 6l9 7-9 7zM71 6v14" fill="#1E1F24" stroke="#1E1F24" stroke-width="2"/></svg>
+  </div>
+</div>
+</body>
+</html>

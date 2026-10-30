@@ -3,6 +3,11 @@
 #   ./prs install    start it now and every time you log in (macOS LaunchAgent)
 #   ./prs uninstall  stop starting it at login
 #   ./prs start | stop | restart | logs | status
+#                    Felix runs a release: a frozen copy of this folder in data/releases/, so editing here never
+#                    reaches him (or the app on your iPad) until restart, which makes a fresh release first.
+#   ./prs test       run the tests, with coverage
+#   ./prs icons      render the app icons in public/icons/ from their SVGs
+#   ./prs voice      set up talking to Felix (whisper.cpp, ffmpeg and Kokoro, all on this Mac)
 # It runs as a small background program on this Mac (no Docker), so it can start Claude Code reviews.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -26,12 +31,55 @@ stop_manual() {
   rm -f "$PID_FILE"
 }
 
+VOICE=data/felix/voice
+WHISPER_MODEL=https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+KOKORO=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
+
+# Downloads a file once, under a .part name until it's complete, so Felix never loads half a model.
+fetch_once() {
+  [ -s "$VOICE/$1" ] && { echo "  $1: already here"; return 0; }
+  echo "  $1: downloading"
+  curl -fL --progress-bar -C - -o "$VOICE/$1.part" "$2" && mv "$VOICE/$1.part" "$VOICE/$1"
+}
+
+# Sets up talking to Felix, all on this Mac: whisper.cpp and ffmpeg to hear, Kokoro (in its own Python) to speak.
+voice_setup() {
+  command -v brew >/dev/null || { echo "Needs Homebrew: https://brew.sh" >&2; exit 1; }
+  for tool in whisper-cpp ffmpeg; do brew list "$tool" >/dev/null 2>&1 || brew install "$tool"; done
+  mkdir -p "$VOICE"
+  [ -x "$VOICE/venv/bin/python" ] || python3 -m venv "$VOICE/venv"
+  "$VOICE/venv/bin/pip" install --quiet --upgrade kokoro-onnx
+  fetch_once ggml-base.en.bin "$WHISPER_MODEL"
+  fetch_once kokoro-v1.0.onnx "$KOKORO/kokoro-v1.0.onnx"
+  fetch_once voices-v1.0.bin "$KOKORO/voices-v1.0.bin"
+  echo "Talking is set up. Click the mic in Felix's chat box."
+}
+
+RELEASES=data/releases
+LIVE=data/live
+KEEP_RELEASES=5
+
+# Copies this folder's code into a new release and points data/live at it: the copy Felix serves from. His data, the
+# tools he builds and the tests stay here. Older releases are pruned, keeping the last few.
+release() {
+  local stamp dest
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  dest="$RELEASES/$stamp"
+  mkdir -p "$dest"
+  rsync -a --delete --exclude '/data/' --exclude '/test/' --exclude '/tools/' --exclude '/Untitled' --exclude '.DS_Store' ./ "$dest/"
+  ln -sfh "releases/$stamp" "$LIVE"
+  ls -1d "$RELEASES"/*/ 2>/dev/null | sort -r | tail -n +$((KEEP_RELEASES + 1)) | xargs rm -rf
+  echo "Release $stamp ready."
+}
+ensure_release() { [ -e "$LIVE/server.mjs" ] || release; }
+
 write_plist() {
   local node
   node="$(command -v node || true)"
   [ -n "$node" ] || { echo "node was not found on your PATH." >&2; exit 1; }
   mkdir -p "$(dirname "$PLIST")"
-  # PATH covers node, gh and tmux (Homebrew) and claude (~/.local/bin).
+  # PATH covers node, gh and tmux (Homebrew) and claude (~/.local/bin). Interactive stops launchd's default
+  # CPU throttling, which halved Kokoro's speed.
   cat >"$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -39,12 +87,16 @@ write_plist() {
 <dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
-  <array><string>$node</string><string>$HERE/server.mjs</string></array>
+  <array><string>$node</string><string>$HERE/$LIVE/server.mjs</string></array>
   <key>WorkingDirectory</key><string>$HERE</string>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>$(dirname "$node"):/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <dict>
+    <key>PATH</key><string>$(dirname "$node"):/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>FELIX_HOME</key><string>$HERE</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>$HERE/$LOG</string>
   <key>StandardErrorPath</key><string>$HERE/$LOG</string>
 </dict>
@@ -56,6 +108,7 @@ case "${1:-start}" in
   install)
     stop_manual
     loaded && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    ensure_release
     write_plist
     launchctl bootstrap "$DOMAIN" "$PLIST"
     wait_up || { echo "The server did not start. See $LOG" >&2; exit 1; }
@@ -68,12 +121,13 @@ case "${1:-start}" in
     echo "Removed. It won't start at login anymore."
     ;;
   start)
+    ensure_release
     if installed; then
       loaded || launchctl bootstrap "$DOMAIN" "$PLIST"
     elif ! manual_running; then
       NODE="$(command -v node || true)"
       [ -n "$NODE" ] || { echo "node was not found on your PATH." >&2; exit 1; }
-      nohup "$NODE" server.mjs >>"$LOG" 2>&1 &
+      FELIX_HOME="$HERE" nohup "$NODE" "$LIVE/server.mjs" >>"$LOG" 2>&1 &
       echo $! >"$PID_FILE"
     fi
     wait_up || { echo "The server did not start. See $LOG" >&2; exit 1; }
@@ -87,6 +141,7 @@ case "${1:-start}" in
     else echo "Not running."; fi
     ;;
   restart)
+    release
     if loaded; then launchctl kickstart -k "$DOMAIN/$LABEL"; wait_up && echo "Restarted."
     else "$0" stop && "$0" start; fi
     ;;
@@ -96,6 +151,18 @@ case "${1:-start}" in
     else echo "Not running."; fi
     installed && echo "Start at login: on" || echo "Start at login: off (./prs install to turn on)"
     ;;
+  release) release ;;
   logs) tail -f "$LOG" ;;
-  *) echo "Usage: ./prs install | uninstall | start | stop | restart | status | logs" >&2; exit 1 ;;
+  icons)
+    command -v rsvg-convert >/dev/null || { echo "Needs rsvg-convert: brew install librsvg" >&2; exit 1; }
+    for s in 192 512; do
+      rsvg-convert -w "$s" -h "$s" public/icons/icon.svg -o "public/icons/icon-$s.png"
+      rsvg-convert -w "$s" -h "$s" public/icons/maskable.svg -o "public/icons/maskable-$s.png"
+    done
+    rsvg-convert -w 180 -h 180 public/icons/maskable.svg -o public/icons/apple-touch-icon.png
+    echo "Icons written to public/icons/."
+    ;;
+  voice) voice_setup ;;
+  test) node --test --experimental-test-coverage --test-coverage-include='*.mjs' --test-coverage-include='public/*.mjs' --test-coverage-exclude='test/**' 'test/*.test.mjs' ;;
+  *) echo "Usage: ./prs install | uninstall | start | stop | restart | release | status | logs | test | icons | voice" >&2; exit 1 ;;
 esac

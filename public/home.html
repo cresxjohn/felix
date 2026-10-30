@@ -4,58 +4,105 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Felix</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='7' height='7' rx='1.5'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1.5'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1.5'/%3E%3Crect x='14' y='14' width='7' height='7' rx='1.5'/%3E%3C/svg%3E">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Felix">
+<meta name="application-name" content="Felix">
+<meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1113" media="(prefers-color-scheme: dark)">
+<script src="/app.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/theme.css">
 <script src="/pr-status.js"></script>
+<script src="/layout.js"></script>
+<link rel="stylesheet" href="/shell.css">
+<script src="/shell.js"></script>
+<script src="/dropdown.js"></script>
+<script src="/pickers.js"></script>
+<script src="/cards.js"></script>
+<script src="/music.js"></script>
+<script src="/voice-device.js"></script>
+<script src="/felix-voice.js"></script>
+<script src="/felix.js"></script>
 <style>
-/* Home: a grid of cards, two columns on a wide screen, one on a narrow one. Colors and type come from /theme.css. */
-.main { padding: 16px 16px 64px; }
-.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 20px; }
-
-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-header h1 { margin: 0; font-size: 22px; font-weight: 600; }
-header .today { color: var(--muted); font-size: 14px; }
-header .spacer { flex: 1; }
-.refresh {
-  display: inline-grid; place-items: center;
-  width: 36px; height: 36px; border: 0; border-radius: 6px;
-  background: var(--accent); color: #fff; cursor: pointer;
+/* Home: a 12-column grid of cards inside Felix's shell (/shell.css). Each card's spot comes from /layout.js.
+   Wide windows place each card at its spot. Medium ones flow cards in reading order at twice their width (so two
+   share a row), and narrow ones stack them. Rows grow to fit their tallest card, unless Fit to screen is on. */
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: minmax(200px, auto); gap: 16px; }
+.grid > .card { grid-column: var(--x) / span var(--w); grid-row: var(--y) / span var(--h); }
+@media (max-width: 1199px) {
+  .grid { grid-auto-flow: row dense; }
+  .grid > .card { grid-column: span var(--wm); grid-row: span var(--h); }
 }
-.refresh:hover { background: var(--accent-hover); }
-.refresh svg { width: 18px; height: 18px; }
-.refresh.spinning svg { animation: spin 0.9s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 699px) { .grid > .card { grid-column: 1 / -1; grid-row: auto; } }
 
-/* Cards in a row share its height; each card's "Updated" line sits at the bottom. */
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+/* Fit to screen: on a wide window the page is exactly the window's height and the rows share it. A card whose
+   content is longer than its space scrolls inside. */
+@media (min-width: 1200px) {
+  html.fit, html.fit body { height: 100dvh; overflow: hidden; }
+  html.fit .app { height: 100dvh; min-height: 0; }
+  html.fit .grid { flex: 1; min-height: 0; grid-auto-rows: unset; grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); }
+  html.fit .card { min-height: 0; }
+  html.fit .card-body { min-height: 0; overflow: auto; scrollbar-width: thin; }
+  html.fit .dock { position: static; margin-top: 0; padding-top: 0; background: none; }
+}
+html[data-mode="personal"] #refresh { display: none; }
+
+/* Extra details for when rows grow to fit their cards: .roomy shows unless Fit to screen is on, .fit-only the
+   other way round. .narrow-only hides on a wide card, where a fuller view takes its place. */
+.card .fit-only { display: none; }
+@media (min-width: 1200px) {
+  html.fit .card .roomy { display: none; }
+  html.fit .card .fit-only { display: revert; }
+}
+.list { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
+.list .item b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .item.mine b { color: var(--accent); }
 
 .card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  background: var(--surface); border: 1px solid var(--card-border); border-radius: var(--r-card); box-shadow: var(--card-shadow);
+  padding: var(--pad); display: flex; flex-direction: column; gap: 12px; min-width: 0; container: card / inline-size;
 }
-.card-body, .stack { flex: 1; display: flex; flex-direction: column; gap: 14px; }
-.card-head { display: flex; align-items: center; gap: 8px; }
-.card-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
-.card-head .icon { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: var(--accent-bg); color: var(--accent); }
+.card-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.card-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.card-head h2 { margin: 0; font: 600 16px/1.3 var(--sans); letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A card's icon is a plain muted glyph, not an icon in a tinted square. */
+.card-head .icon { display: inline-grid; place-items: center; flex: none; width: 20px; height: 28px; color: var(--muted); }
 .card-head .icon svg { width: 16px; height: 16px; }
+.card-head .icon:has(.mark) { width: 24px; }
+.card-head .icon svg.mark { width: 24px; height: 24px; }
 .card-head .spacer { flex: 1; }
-.card-head a.more { color: var(--link); font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.card-head a.more { color: var(--link); font: 600 13px/1 var(--sans); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .card-head a.more:hover { text-decoration: underline; }
 .card-head a.more svg { width: 13px; height: 13px; }
-.card-foot { margin-top: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.card .error { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+/* Settings that apply to every card (Home and layout). */
+html.no-card-icons .card-head .icon { display: none; }
+html.no-card-links .card-head a.more { display: none; }
+html.no-card-updated .card-foot .when { display: none; }
+.card-foot { margin-top: auto; padding-top: 4px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.card .error { background: var(--bad-bg); color: var(--bad); border-radius: var(--r-box); padding: 10px 12px; font-size: 13px; }
 .card .error code { font-family: var(--mono); font-size: 12px; }
-.label { color: var(--muted); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+.card hr { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
+.label { color: var(--muted); font: 600 12px/1.2 var(--sans); }
+.sub { display: block; color: var(--muted); font-size: 12.5px; }
+.accent { color: var(--accent); }
+.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
+.kv > span:first-child { color: var(--muted); white-space: nowrap; }
+.kv > b { font-weight: 500; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv.accent > b { color: var(--accent); }
+.kv.warn > b { color: var(--alert); }
+.kv.bad > b { color: var(--bad); font-weight: 600; }
+.chip { font: 500 12px/1.4 var(--sans); color: var(--muted); background: none; border: 1px solid var(--line-strong); border-radius: var(--r-pill); padding: 2px 10px; white-space: nowrap; }
+.chip.on { color: var(--fg); background: var(--neutral-soft); border-color: var(--fg); }
 
 /* Incident Commander */
 .now { display: grid; gap: 2px; }
-.now .who { font-size: 20px; font-weight: 600; }
+.now .who { font: 600 18px/1.3 var(--sans); letter-spacing: -.01em; }
 .now .who.none { color: var(--muted); font-weight: 500; }
-.now .sub, .next-up { color: var(--muted); font-size: 13px; }
-.next-up strong { color: var(--fg); font-weight: 500; }
+.wide-only { display: none; }
+@container card (min-width: 560px) { .wide-only { display: block; } .narrow-only { display: none; } }
 .shifts { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
 .shifts th { text-align: left; font-weight: 500; color: var(--muted); padding: 0 8px 6px 0; font-size: 12px; }
 .shifts th:first-child { width: 84px; }
@@ -64,157 +111,472 @@ header .spacer { flex: 1; }
 .shifts td .time { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .shifts td .empty { color: var(--muted); }
 .shifts .me .name { color: var(--accent); }
-.mine { display: flex; align-items: center; gap: 10px; border-radius: 6px; padding: 10px 12px; background: var(--accent-bg); font-size: 13px; }
-.mine.on { background: var(--warn-bg); }
-.mine .when { font-weight: 600; }
-.mine .in { margin-left: auto; color: var(--accent); font-weight: 600; white-space: nowrap; }
-.mine.on .in { color: var(--warn); }
 
 /* Open PRs */
-.pr-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 420px) { .pr-groups { grid-template-columns: minmax(0, 1fr); } }
-.pr-group { display: grid; gap: 4px; align-content: start; }
-.pr-group > a.total { display: flex; align-items: baseline; gap: 8px; text-decoration: none; padding: 2px 0 6px; }
-.pr-group > a.total .n { font-size: 28px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.pr-group > a.total .t { color: var(--muted); font-size: 13px; }
-.pr-group > a.total:hover .t { color: var(--fg); text-decoration: underline; }
-.count {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0 -8px;
-  border-radius: 6px; text-decoration: none; font-size: 13px;
-}
-.count:hover { background: var(--neutral-bg); }
-/* Release rows inside the Open PRs card */
-.rels { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
-.rels .head { display: flex; align-items: center; gap: 8px; }
-.rels .head a { margin-left: auto; color: var(--link); font-size: 12px; text-decoration: none; }
-.rels .head a:hover { text-decoration: underline; }
-.relrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding: 4px 0; }
-.relrepo { display: flex; gap: 10px; align-items: flex-start; padding: 2px 0; }
-.relrepo > .rk { font-weight: 600; min-width: 20px; padding-top: 6px; }
-.relrepo .lines { flex: 1; min-width: 0; display: grid; }
-.relrow .tag { width: 32px; flex: none; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.relrow a.pill { text-decoration: none; }
-.relrow > a.num { color: var(--link); text-decoration: none; }
-.relrow > a.num:hover { text-decoration: underline; }
-.relrow .yours { color: var(--muted); font-size: 12px; }
-.relrow .acts { margin-left: auto; display: flex; gap: 6px; }
-.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 2px 8px; background: var(--neutral-bg); color: var(--muted); white-space: nowrap; }
-.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.pill.ok { background: var(--ok-bg); color: var(--ok); }
-.pill.warn { background: var(--warn-bg); color: var(--warn); }
-.pill.alert { background: var(--alert-bg); color: var(--alert); }
-.pill.bad { background: var(--bad-bg); color: var(--bad); }
-.pill.run { background: var(--accent-bg); color: var(--accent); }
-.mini { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 500; cursor: pointer; }
-.mini:hover { border-color: var(--accent); color: var(--accent); }
-.mini.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.mini.primary:hover { background: var(--accent-hover); color: #fff; }
-.mini.confirm { background: var(--bad); border-color: var(--bad); color: #fff; }
-.mini:disabled { opacity: .6; cursor: default; }
+.totals { display: flex; align-items: baseline; gap: 16px; padding-bottom: 2px; }
+.totals a { display: inline-flex; align-items: baseline; gap: 6px; text-decoration: none; }
+.totals .n { font: 650 28px/1 var(--sans); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.totals .t { color: var(--muted); font-size: 13px; }
+.totals a:hover .t { color: var(--fg); text-decoration: underline; }
+.count { display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin: 0 -8px; border-radius: var(--r-tag); text-decoration: none; font-size: 13px; }
+a.count:hover { background: var(--neutral-bg); }
 .count .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .count .n { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
 .count.zero { color: var(--muted); }
 .count.zero .dot { opacity: 0.35; }
 .count.zero .n { font-weight: 400; }
+.rels { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+.rels .head { display: flex; align-items: center; gap: 8px; }
+.rels .head a { margin-left: auto; color: var(--link); font-size: 12px; text-decoration: none; }
+.rels .head a:hover { text-decoration: underline; }
+.relrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding: 2px 0; }
+.relrow .rk { font-weight: 600; min-width: 22px; }
+.relrow > a.num { color: var(--link); text-decoration: none; }
+.relrow > a.num:hover { text-decoration: underline; }
+.relrow .yours { color: var(--muted); font-size: 12px; }
+.relrow .acts { margin-left: auto; display: flex; gap: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; font: 600 12px/1 var(--sans); border-radius: var(--r-pill); padding: 0 9px; background: var(--neutral-bg); color: var(--muted); white-space: nowrap; text-decoration: none; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.alert { background: var(--alert-bg); color: var(--alert); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.run { background: var(--info-soft); color: var(--info); }
+.mini { display: inline-flex; align-items: center; height: 26px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 8px; padding: 0 10px; font: 600 12px/1 var(--sans); cursor: pointer; }
+.mini:hover { border-color: var(--accent); color: var(--accent-ink); }
+.mini.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.mini.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+.mini.confirm { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
+.mini:disabled { opacity: .6; cursor: default; }
 
-/* Placeholders */
-.card.soon { background: transparent; border-style: dashed; }
-.card.soon .icon { background: var(--neutral-bg); color: var(--muted); }
-.card.soon p { margin: 0; color: var(--muted); font-size: 13px; }
-.chip { font-size: 11px; font-weight: 500; color: var(--muted); background: var(--neutral-bg); border-radius: 999px; padding: 2px 8px; }
+/* AI usage: an overview of every tool (its most pressing limit large, a small bar per limit), and a tool's details
+   in a panel beside it on hover, focus or tap. */
+.ai-rows { display: grid; gap: 4px; }
+.ai-row { display: grid; gap: 8px; padding: 10px; margin: 0 -10px; border-radius: var(--r-box); cursor: default; outline: none; transition: background .15s; }
+.ai-row + .ai-row { position: relative; }
+.ai-row + .ai-row::before { content: ""; position: absolute; left: 10px; right: 10px; top: -2px; height: 1px; background: var(--line); }
+.ai-row:hover, .ai-row.open, .ai-row:focus-visible { background: var(--surface-2); }
+.ai-row:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.ai-row-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ai-row-top b { font: 600 14px/1.2 var(--sans); }
+.ai-row-top span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-row-top .chev { width: 14px; height: 14px; margin-left: auto; align-self: center; flex: none; fill: none; stroke: var(--faint); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s, stroke .2s; }
+.ai-row:hover .chev, .ai-row.open .chev { stroke: var(--fg); transform: translateX(2px); }
+.ai-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ai-lead .pct { font: 650 26px/1 var(--sans); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ai-lead .what { display: grid; gap: 2px; min-width: 0; }
+.ai-lead .what b { font: 500 13px/1.3 var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-lead .what span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ai-lead.warning .pct { color: var(--alert); }
+.ai-lead.critical .pct { color: var(--bad); }
+.ai-minis { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+.ai-mini { display: grid; gap: 4px; min-width: 0; }
+.ai-mini .kvm { display: flex; justify-content: space-between; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.ai-mini .kvm span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-mini .kvm b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ai-mini .bar { height: 4px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+.ai-row:hover .ai-mini .bar, .ai-row.open .ai-mini .bar { background: var(--line); }
+.ai-mini .bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s; }
+.ai-mini.warning .bar span { background: var(--alert); } .ai-mini.warning .kvm b { color: var(--alert); }
+.ai-mini.critical .bar span { background: var(--bad); } .ai-mini.critical .kvm b { color: var(--bad); }
 
-.skel { background: var(--neutral-bg); border-radius: 4px; height: 12px; animation: pulse 1.4s ease-in-out infinite; }
+.ai-pop {
+  position: fixed; z-index: 80; width: 300px; display: grid; gap: 12px; padding: 14px;
+  background: var(--raised); border-radius: var(--r-box); box-shadow: var(--pop-shadow);
+  opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .15s ease, transform .2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ai-pop.on { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .ai-pop { transition: opacity .1s; transform: none; } }
+.ai-pop-h { display: flex; align-items: baseline; gap: 8px; }
+.ai-pop-h b { font: 600 15px/1.2 var(--sans); }
+.ai-pop-h > span { color: var(--muted); font-size: 12px; }
+.ai-open { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--link); font: 600 12px/1 var(--sans); text-decoration: none; white-space: nowrap; }
+.ai-open:hover { text-decoration: underline; }
+.ai-open svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ai-pop-b { display: grid; gap: 12px; }
+.meter { display: grid; gap: 5px; font-size: 13px; }
+.meter-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.meter-top .pct { font: 650 16px/1 var(--sans); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.meter-reset { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.meter .bar { height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+.meter .bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s; }
+.meter.warning .bar span { background: var(--alert); }
+.meter.warning .pct { color: var(--alert); }
+.meter.critical .bar span { background: var(--bad); }
+.meter.critical .pct { color: var(--bad); }
+.ai-note { color: var(--muted); font-size: 12px; }
+.ai-note code, .ai-alert code { font-family: var(--mono); font-size: 12px; }
+.ai-alert { background: var(--bad-bg); color: var(--bad); border-radius: var(--r-box); padding: 8px 10px; font-size: 12.5px; line-height: 1.4; }
+
+/* A card's Set up form, in place of its content until its service is connected. */
+.setup { display: grid; gap: 12px; align-content: start; }
+.setup-head { display: grid; gap: 3px; }
+.setup-head b { font: 600 15px/1.3 var(--sans); }
+.setup-head span { color: var(--muted); font-size: 13px; }
+.setup-steps { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: 13px; }
+.setup-steps a { color: var(--link); }
+.setup-steps code { font: 12px var(--mono); padding: 1px 5px; border-radius: var(--r-tag); background: var(--surface-2); color: var(--fg); }
+.setup-fields { display: grid; gap: 8px; }
+.setup-field { display: grid; gap: 4px; font: 600 12px/1.2 var(--sans); color: var(--muted); }
+/* Inputs use the shared .field look (shell.css). */
+.setup-field small { font-weight: 400; color: var(--faint); }
+.setup-error { margin: 0; padding: 8px 10px; border-radius: var(--r-box); background: var(--bad-soft); color: var(--bad); font-size: 12.5px; }
+.setup-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.setup-foot span { color: var(--muted); font-size: 12px; }
+.setup-go {
+  height: 34px; padding: 0 14px; border: 0; border-radius: var(--r-box); background: var(--accent); color: var(--on-accent);
+  font: 600 13px var(--sans); cursor: pointer;
+}
+.setup-go:hover { background: var(--accent-hover); }
+.setup-go:disabled { opacity: .6; cursor: progress; }
+
+/* A card that needs setup: itself with sample data, faded and fading out downwards, under a panel the colour of the
+   card that rises out of it, with what the card is for and Set up. */
+.gate { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 240px; }
+.gate-preview { flex: 1; display: flex; flex-direction: column; gap: 8px; opacity: .5; filter: saturate(.6); pointer-events: none; user-select: none; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, rgba(0, 0, 0, .35) 70%, transparent 96%); mask-image: linear-gradient(to bottom, #000 30%, rgba(0, 0, 0, .35) 70%, transparent 96%); }
+.gate-panel {
+  position: absolute; left: -2px; right: -2px; bottom: -2px; display: flex; align-items: center; gap: 14px; padding: 14px 14px 14px 16px;
+  border-radius: 14px; background: var(--surface);
+  box-shadow: 0 -22px 30px 2px var(--surface), 0 0 0 1px var(--line), 0 10px 28px rgba(17, 24, 39, .09);
+}
+.gate-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.gate-text b { font: 600 14px/1.3 var(--sans); }
+.gate-text > span { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.gate-text .gate-problem { color: var(--bad); }
+.gate-panel .setup-go { flex: none; }
+.gate-back { align-self: flex-start; margin-bottom: 2px; border: 0; background: none; padding: 0; color: var(--link); font: 600 12.5px var(--sans); cursor: pointer; }
+.gate-back:hover { text-decoration: underline; }
+
+/* Felix's own loader: his face with the thinking eyes drifting side to side, what he's doing, and three dots that
+   pulse in turn. The form behind it fades and stops taking clicks, so the card reads as busy, not frozen. */
+.setup-go.loading, .setup-go.loading:disabled { opacity: 1; cursor: progress; }
+.felix-load { display: inline-flex; align-items: center; gap: 8px; }
+.felix-load .mark { width: 18px; height: 18px; }
+.felix-load .dots { display: inline-flex; gap: 2px; margin-left: -4px; }
+.felix-load .dots i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .25; animation: felix-dot 1.2s ease-in-out infinite; }
+.felix-load .dots i:nth-child(2) { animation-delay: .2s; }
+.felix-load .dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes felix-dot { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+.setup.busy .setup-steps, .setup.busy .setup-fields, .setup.busy .setup-foot > span { opacity: .45; pointer-events: none; transition: opacity .25s ease; }
+@media (prefers-reduced-motion: reduce) { .felix-load .dots i { animation: none; opacity: .7; } }
+
+.google-route { margin-top: 10px; }
+.copy-text { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--fg); padding: 8px; font: 12px/1.45 var(--mono); resize: vertical; }
+.cal-reply { display: inline-flex; gap: 4px; flex: none; }
+/* Slack: message rows that open in Slack, a count beside each section's name, and the watched channels. */
+.label .n { margin-left: 4px; color: var(--muted); font-weight: 500; }
+.slack-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.slack-msg { display: flex; gap: 10px; padding: 7px 8px; margin: 0 -8px; border-radius: 10px; color: var(--fg); text-decoration: none; }
+.slack-msg:hover { background: var(--surface-2); }
+.slack-msg .face { display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-bg); font-size: 11px; font-weight: 600; }
+.slack-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.slack-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; }
+.slack-top b { font-weight: 600; white-space: nowrap; }
+.slack-top .sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.slack-body { color: var(--muted); font-size: 12.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.slack-more { color: var(--link); font-size: 12px; text-decoration: none; }
+.slack-more:hover { text-decoration: underline; }
+.slack-kv { color: var(--fg); text-decoration: none; padding: 3px 0; }
+.slack-kv:hover span { color: var(--link); }
+.slack-kv.quiet b { color: var(--muted); font-weight: 500; }
+/* An invite's Yes, Maybe and No sit on their own line under the title, so the row never outgrows the card. */
+.cal-row.ask { flex-wrap: wrap; row-gap: 4px; }
+.cal-row.ask .cal-reply { order: 3; flex-basis: 100%; padding-left: 56px; flex-wrap: wrap; row-gap: 6px; }
+.cal-reply .mini.quiet { border-color: transparent; background: none; color: var(--muted); }
+.cal-reply .mini.quiet[aria-expanded="true"] { color: var(--fg); background: var(--surface-2); }
+.cal-note { flex-basis: 100%; height: 32px; }
+.cal-reply .mini { height: 24px; padding: 0 8px; }
+.setup .linkbtn, .card-foot .linkbtn, .ooo-new .linkbtn, .google-route { border: 0; background: none; padding: 0; color: var(--link); font: 600 13px/1 var(--sans); cursor: pointer; }
+.setup .linkbtn:hover, .card-foot .linkbtn:hover, .ooo-new .linkbtn:hover, .google-route:hover { text-decoration: underline; }
+.card-foot .linkbtn { font-size: 12px; }
+
+/* Team out of office: when (Today, Tomorrow, Upcoming, Pick dates) and who (My team, Everyone), then the people out. */
+.ooo-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.ooo-pick { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+.ooo-pick .dd-btn { height: 32px; min-width: 0; width: auto; background: var(--surface-2); }
+.ooo-list { display: grid; gap: 10px; }
+.ooo-list .person > span:last-child { display: grid; gap: 2px; }
+.ooo-new { margin-top: 12px; padding: 8px 10px; border-radius: var(--r-box); background: var(--neutral-soft); font-size: 12px; color: var(--muted); }
+
+.team-dlg { width: min(560px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 64px)); padding: 0; border: 1px solid var(--line-strong); border-radius: var(--r-card, 16px); background: var(--surface); color: var(--fg); box-shadow: 0 24px 60px rgba(0, 0, 0, .3); }
+.team-dlg::backdrop { background: rgba(0, 0, 0, .35); }
+.team-dlg form { display: grid; grid-template-rows: auto 1fr auto auto; max-height: inherit; }
+.team-head { display: grid; gap: 4px; padding: 18px 20px 12px; border-bottom: 1px solid var(--line); }
+.team-head .sub { font-size: 12px; }
+.team-list { overflow: auto; padding: 10px 20px; display: grid; gap: 6px; align-content: start; }
+.team-search { margin-top: 8px; }
+.team-list { gap: 0; }
+.team-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 6px; border-radius: 10px; }
+.team-row[hidden] { display: none; }
+.team-pick { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 8px; border-radius: 10px; cursor: pointer; }
+.team-pick:hover { background: var(--surface-2); }
+
+.team-pick .face { display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-bg); font-size: 11px; font-weight: 600; }
+.team-pick .who { display: grid; gap: 1px; min-width: 0; font-size: 13px; }
+.team-pick .who b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-pick .who .sub { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-pick:has(input:checked) .face { background: var(--accent); color: var(--on-accent); }
+.team-edit { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; opacity: 0; }
+.team-row:hover .team-edit, .team-edit:focus-visible, .team-edit.on { opacity: 1; }
+.team-edit:hover, .team-edit.on { background: var(--surface-2); color: var(--fg); }
+.team-edit svg { width: 16px; height: 16px; }
+.team-fields { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; padding: 4px 8px 12px 44px; }
+.team-fields[hidden] { display: none; }
+.team-fields .field { min-width: 0; }
+.team-count { font-size: 12px; color: var(--muted); align-self: center; }
+.ooo-holiday { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; }
+.ooo-holiday .flag { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--neutral-soft); color: var(--muted); }
+.ooo-holiday .flag svg { width: 14px; height: 14px; }
+.ooo-holiday > span:last-child { display: grid; gap: 2px; }
+.team-dlg .setup-error { margin: 0 20px; }
+.team-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); }
+
+/* Calendar: today's events, the one on now or next highlighted with Join as the main button. */
+.cal-next { color: var(--accent-ink); font: 600 13px/1 var(--sans); white-space: nowrap; }
+.cal-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.cal-row { display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 6px 10px; margin: 0 -10px; border-radius: var(--r-box); font-size: 13px; }
+.cal-row.lead { background: var(--accent-soft); }
+.cal-row.past { opacity: .5; }
+.cal-time { width: 44px; flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-title { flex: 1; min-width: 0; color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-row.lead .cal-title { font-weight: 600; }
+.cal-title:hover { text-decoration: underline; }
+.cal-row .mini { text-decoration: none; }
+
+/* My Jira Board */
+.jira-counts { row-gap: 8px; }
+.jira-col { display: inline-flex; align-items: center; gap: 8px; color: var(--fg); }
+.jira-col .dot { width: 8px; height: 8px; border-radius: 50%; }
+.jira-counts .kv.zero { opacity: .55; }
+.jira-progress { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.jira-progress .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.jira-progress .bar i { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+.jira-plate-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 12px 0 4px; }
+.jira-plate { display: grid; grid-template-columns: minmax(0, 1fr); }
+.jira-ticket { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 8px; margin: 0 -8px; border-radius: 8px; color: var(--fg); text-decoration: none; font-size: 13px; }
+.jira-ticket:hover { background: var(--surface-2); }
+.jira-ticket .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.jira-ticket .key { font: 500 12px var(--mono); color: var(--muted); flex: none; }
+.jira-ticket .sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jira-ticket .col { flex: none; color: var(--muted); font-size: 12px; }
+.jira-more { color: var(--link); font-size: 12px; text-decoration: none; white-space: nowrap; }
+.jira-more:hover { text-decoration: underline; }
+
+/* Cards still to come: an example of how they will look, dimmed, with a note at the foot. */
+.card.soon { border-style: dashed; }
+.card.soon .icon { color: var(--faint); }
+.card.soon .icon b { font-size: 14px; }
+.preview { display: flex; flex-direction: column; gap: 8px; opacity: .62; user-select: none; }
+.soon-foot { flex-wrap: nowrap; justify-content: flex-start; align-items: center; }
+.soon-foot .chip { border-style: dashed; border-color: var(--line-strong); }
+.soon-foot > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+.indent { padding-left: 16px; margin-top: -4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip.warm { align-self: flex-start; background: var(--warn-bg); color: var(--warn); }
+.times { display: grid; grid-template-columns: 44px 1fr; gap: 6px 8px; font-size: 13px; }
+.times > span:nth-child(odd) { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* A meeting with an action: its name on the left, the Join button at the row's right end. */
+.times .ev { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.person { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; }
+.person .face { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-bg); font-size: 11px; font-weight: 600; }
+.person b, .item b { font-weight: 600; }
+.item { display: grid; font-size: 13px; }
+.item.soon .sub { color: var(--accent); }
+.check { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.box { width: 16px; height: 16px; flex: none; border: 1.5px solid var(--muted); border-radius: 4px; opacity: .7; }
+.done > .box { background: var(--accent); border-color: var(--accent); opacity: 1; }
+.box { border-color: var(--line-strong); opacity: 1; }
+.add { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border: 1px solid var(--line); border-radius: var(--r-box); color: var(--muted); font-size: 13px; }
+.task { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 19px; }
+.task:last-of-type { border-bottom: 0; }
+/* A long name wraps onto as many lines as it needs; the box, labels and due day line up with its first line. */
+.task .title { flex: 1; min-width: 0; line-height: 19px; overflow-wrap: anywhere; }
+.task > :not(.title) { margin-top: 1px; }
+.task > .box { margin-top: 2px; }
+.task.high .title::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 8px; border-radius: 50%; background: var(--bad); vertical-align: middle; }
+.task .tag { padding: 2px 8px; border-radius: var(--r-tag); background: var(--surface-2); color: var(--muted); font: 500 12px/1.3 var(--sans); }
+.task .due { width: 64px; text-align: right; }
+.task.late .due { color: var(--bad); font-weight: 600; }
+.task.done .title, .task.done .due { color: var(--muted); }
+
+/* The live Tasks card: quick add, views, rows you tick, open and drag. */
+.task-add { display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-box); color: var(--muted); font-size: 13px; }
+.task-add:focus-within { border-color: var(--accent); }
+.task-add input { flex: 1; min-width: 0; height: 34px; border: 0; background: none; color: var(--fg); font: 500 13px var(--sans); outline: none; }
+.task-add input::placeholder { color: var(--muted); }
+.task-tools { margin: 10px 0 4px; }
+.task-tools .chip { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.task-tools .chip .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.task-tools .chip .n.bad { color: var(--bad); font-weight: 600; }
+/* One column no wider than the card: a long title cuts off with "…" instead of widening the list. */
+.task-list { display: grid; grid-template-columns: minmax(0, 1fr); }
+.task-list .task { border-bottom: 1px solid var(--line); }
+.task-list .task:last-child { border-bottom: 0; }
+.task-list .task[draggable] { cursor: grab; }
+.task-list .task.dragging { opacity: .4; }
+.task .box { padding: 0; background: none; cursor: pointer; }
+.task.done .box { background: var(--accent); border-color: var(--accent); }
+.task .title { border: 0; background: none; padding: 0; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.task .title:hover { color: var(--link); }
+.task.done .title { text-decoration: line-through; }
+.task button.tag { border: 0; cursor: pointer; }
+.task-tags { display: inline-flex; gap: 3px; flex: none; }
+.task .tag.more { font-variant-numeric: tabular-nums; }
+.task-project { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 120px; padding: 0; border: 0; background: none; color: var(--muted); font: 500 12px/1.3 var(--sans); cursor: pointer; }
+.task-project span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-project svg { width: 13px; height: 13px; flex: none; }
+.task-project:hover { color: var(--fg); }
+.tag-pop { min-width: 150px; }
+.tag-pop-head { padding: 6px 10px 4px; color: var(--muted); font: 600 11px/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.tag-pop .dd-item { width: 100%; border: 0; background: none; text-align: left; }
+.task button.tag:hover { color: var(--fg); }
+.task-link { font: 500 12px var(--mono); color: var(--muted); text-decoration: none; white-space: nowrap; }
+.task-link:hover { color: var(--link); text-decoration: underline; }
+.task-subs, .task-repeat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.task-foot { margin-top: auto; }
+.task-list:has(> .empty-state) { flex: 1; align-content: center; }
+
+/* Empty states: a small drawing over one muted line, centred in the card's free space. */
+.empty-state { display: grid; justify-items: center; gap: 10px; padding: 18px 0; text-align: center; animation: felix-in .35s cubic-bezier(0.22, 1, 0.36, 1); }
+.empty-state svg { width: 112px; height: 84px; overflow: visible; }
+.empty-state p { margin: 0; color: var(--muted); font-size: 13px; }
+.empty-state .tile { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.75; }
+.empty-state .clip { fill: var(--raised); stroke: var(--line-strong); stroke-width: 1.75; }
+.empty-state .line { fill: none; stroke: var(--muted); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.empty-state .line.thick { stroke-width: 3.5; }
+.empty-state .tick { fill: none; stroke: var(--ok); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.empty-state .tick-on { fill: none; stroke: var(--on-accent); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.empty-state .spark-tile { fill: var(--accent); }
+.empty-state .spark { fill: var(--accent); opacity: .85; }
+.empty-state .dot { fill: var(--line-strong); }
+.empty-state .moon { fill: var(--raised); stroke: var(--line-strong); stroke-width: 1.75; }
+.ooo-list:has(> .empty-state) { align-content: center; flex: 1; }
+.task-foot .card-foot { margin-top: 8px; }
+/* The task's name wraps onto as many lines as it needs, and the box grows with it. */
+.task-dlg .task-name { display: block; width: 100%; padding: 0; border: 0; background: none; color: var(--fg); font: 600 16px/1.35 var(--sans); outline: none; resize: none; overflow: hidden; }
+.task-fields { gap: 12px; }
+.task-fields .setup-field { font-weight: 600; }
+.link-chip { display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 0 4px 0 10px; border-radius: var(--r-pill); background: var(--surface-2); font: 500 12.5px var(--sans); }
+.link-chip a { color: var(--link); text-decoration: none; }
+.link-chip a:hover { text-decoration: underline; }
+.link-chip button { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.link-chip button:hover { background: var(--line); color: var(--fg); }
+.task-links:empty { display: none; }
+.task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check-line { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.check-line { cursor: pointer; }
+.task-links { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; }
+.task-links a { color: var(--link); }
+.task-subtasks { display: grid; gap: 6px; }
+.team-foot .spacer { flex: 1; }
+.mini.danger { color: var(--bad); }
+.mini.danger:hover { border-color: var(--bad); color: var(--bad); }
+.weather { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.weather .temp, .big { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.weather .temp { font-size: 30px; }
+.bubble { padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--r-box); background: var(--accent-bg); font-size: 13px; }
+.bubble.plain { border-color: var(--line); background: none; }
+/* The Felix card: a check-in on something you told him, with its day and your words, or a quiet note. */
+.checkin { display: grid; gap: 8px; }
+.checkin .acts { display: flex; gap: 8px; }
+.checkin .acts button { height: 30px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface); color: var(--fg); font: 600 12px var(--sans); cursor: pointer; }
+.checkin .acts .yes { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.mood { display: flex; gap: 6px; }
+.mood i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line); }
+.mood i.ok { background: var(--ok); border-color: var(--ok); }
+.mood i.warn { background: var(--warn); border-color: var(--warn); }
+.mood i.accent { background: var(--accent); border-color: var(--accent); }
+.habit { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.habit .days { display: flex; gap: 4px; }
+.habit .days i { width: 11px; height: 11px; border-radius: 3px; background: var(--neutral-bg); }
+.habit .days i.on { background: var(--accent); }
+
+.skel { background: var(--neutral-bg); border-radius: var(--r-tag); height: 12px; animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.5; } }
-@media (prefers-reduced-motion: reduce) { .skel, .refresh.spinning svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 </style>
 </head>
 <body>
-<div class="main">
-<div class="wrap">
-  <header>
-    <h1>Felix</h1>
-    <span class="today" id="today"></span>
-    <span class="spacer"></span>
-    <button class="refresh" id="refresh" type="button" title="Refresh (R)" aria-label="Refresh">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
-      </svg>
-    </button>
-  </header>
-
-  <div class="grid">
-    <section class="card" id="ic" aria-labelledby="ic-title">
-      <div class="card-head">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
-        <h2 id="ic-title">Incident Commander</h2>
-        <span class="spacer"></span>
-        <a class="more" href="https://us5.datadoghq.com/on-call/schedules" target="_blank" rel="noopener">Datadog <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
-      </div>
-      <div class="card-body" id="ic-body"></div>
-    </section>
-
-    <section class="card" id="prs" aria-labelledby="prs-title">
-      <div class="card-head">
-        <span class="icon"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5 3.25a2.25 2.25 0 1 1-3 2.12v5.26a2.25 2.25 0 1 1 1.5 0V5.37A2.25 2.25 0 0 1 5 3.25Zm6.5 7.38V6.5A1.5 1.5 0 0 0 10 5H8.56l1.22 1.22-1.06 1.06L5.69 4.25l3.03-3.03 1.06 1.06L8.56 3.5H10a3 3 0 0 1 3 3v4.13a2.25 2.25 0 1 1-1.5 0Z"/></svg></span>
-        <h2 id="prs-title">Open PRs</h2>
-        <span class="spacer"></span>
-        <a class="more" href="/prs">Open page →</a>
-      </div>
-      <div class="card-body" id="prs-body"></div>
-    </section>
-
-    <section class="card soon" aria-labelledby="cal-title">
-      <div class="card-head">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span>
-        <h2 id="cal-title">Calendar</h2>
-        <span class="spacer"></span>
-        <span class="chip">Coming soon</span>
-      </div>
-      <p>Today's meetings and the next few days, with Join buttons and a countdown to your next meeting.</p>
-      <p>Needs: one Google sign-in (read-only calendar).</p>
-    </section>
-
-    <section class="card soon" aria-labelledby="tasks-title">
-      <div class="card-head">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/></svg></span>
-        <h2 id="tasks-title">Tasks</h2>
-        <span class="spacer"></span>
-        <span class="chip">Coming soon</span>
-      </div>
-      <p>Today's and overdue tasks, quick add in plain words, and links to PRs, tickets and meetings.</p>
-      <p>Saved on this Mac. Nothing to set up.</p>
-    </section>
-
-    <section class="card soon" aria-labelledby="ooo-title">
-      <div class="card-head">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.4 3.4-5.5 6.5-5.5s5.7 2.1 6.5 5.5"/><path d="m16 4 5 5M21 4l-5 5"/></svg></span>
-        <h2 id="ooo-title">Team out of office</h2>
-        <span class="spacer"></span>
-        <span class="chip">Coming soon</span>
-      </div>
-      <p>Who on your team is out today, tomorrow or on dates you pick, from the Tech Team Vacation Tracker.</p>
-      <p>Needs: the same Google sign-in as Calendar.</p>
-    </section>
-
-    <section class="card soon" aria-labelledby="jira-title">
-      <div class="card-head">
-        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></svg></span>
-        <h2 id="jira-title">My Jira Board</h2>
-        <span class="spacer"></span>
-        <a class="more" href="https://purepm.atlassian.net/jira/your-work" target="_blank" rel="noopener">Open Jira <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
-      </div>
-      <p>A placeholder until you decide what it shows: your sprint tickets by status, what's waiting on you, or blocked tickets.</p>
-      <p>Needs: a Jira API token.</p>
-    </section>
-  </div>
+<div class="app">
+  <header class="topbar" id="topbar"></header>
+  <main class="grid" id="grid"></main>
+  <footer class="dock" id="dock"></footer>
 </div>
-</div>
+<script type="module">
+import { cleanSettings } from "/settings-schema.mjs";
 
-<script>
 const $ = (id) => document.getElementById(id);
+const { LAYOUTS, placementStyle, rowCount } = FelixLayout;
+const { CARDS, strokeIcon } = FelixCards;
 
+/**
+ * Escapes text for HTML.
+ * @param {unknown} s
+ * @returns {string}
+ */
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+let settings = cleanSettings(FelixShell.cachedSettings());
+
+FelixShell.mount({ install: true, mode: settings.mode, onMode: switchMode });
+
+// ---------- Cards ----------
+const EXTERNAL_ICON = strokeIcon(`<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>`);
+
+/**
+ * A card's header link: a page in Felix, or an outside site that opens in a new tab.
+ * @param {{ href: string, label: string, external?: boolean } | undefined} link
+ * @returns {string}
+ */
+function cardLinkHtml(link) {
+  if (!link) return "";
+  const outside = link.external ? ` target="_blank" rel="noopener"` : "";
+  return `<a class="more" href="${esc(link.href)}"${outside}>${esc(link.label)}${link.external ? ` ${EXTERNAL_ICON}` : ""}</a>`;
+}
+
+/**
+ * A card still to come: its example, dimmed and out of the tab order, then what it needs, which stays in view
+ * when the example scrolls.
+ * @param {{ needs: string, preview: string }} soon
+ * @returns {string}
+ */
+const soonBodyHtml = (soon) => `<div class="card-body"><div class="preview" inert aria-hidden="true">${soon.preview}</div></div>`
+  + `<div class="card-foot soon-foot"><span class="chip">Coming soon · example</span><span title="${esc(soon.needs)}">${esc(soon.needs)}</span></div>`;
+
+/**
+ * One card at its grid spot: the header, then a body that its loader fills, or a placeholder's example.
+ * @param {{ id: string, x: number, y: number, w: number, h: number }} spot
+ * @returns {string}
+ */
+function cardHtml(spot) {
+  const c = CARDS[spot.id];
+  const about = c.soon ? ` title="${esc(c.soon.about)}"` : "";
+  return `<section class="card${c.soon ? " soon" : ""}" id="${spot.id}" aria-labelledby="${spot.id}-title" style="${placementStyle(spot)}"${about}>`
+    + `<div class="card-head"><span class="icon">${c.icon}</span><h2 id="${spot.id}-title">${esc(c.title)}</h2><span class="spacer"></span>`
+    + `<span class="head-tools" id="${spot.id}-tools"></span>${cardLinkHtml(c.link)}</div>`
+    + `${c.soon ? soonBodyHtml(c.soon) : `<div class="card-body" id="${spot.id}-body"></div>`}</section>`;
+}
+
+/**
+ * Draws the cards of the current mode, the live ones from their last data.
+ */
+function drawGrid() {
+  const layout = LAYOUTS[settings.mode];
+  $("grid").style.setProperty("--rows", rowCount(layout));
+  $("grid").innerHTML = layout.map(cardHtml).join("");
+  renderCards();
+}
+
+/**
+ * Draws the mode's live cards again from their last data, as after a settings change.
+ */
+function renderCards() {
+  if (settings.mode === "work") { renderIc(); renderJira(); renderPrs(); renderAi(); renderCal(); renderSlack(); renderOoo(); renderTasks("tasks"); }
+  else renderTasks("ptasks");
 }
 
 // Times show in this Mac's time zone (Manila), like the Datadog page.
@@ -223,12 +585,21 @@ const fmtDay = (t) => new Date(t).toLocaleDateString([], { weekday: "short", mon
 const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const DAY = 86400e3;
 
-// "today", "tomorrow" or "in 5 days", by calendar day.
+/**
+ * "today", "tomorrow" or "in 5 days", by calendar day.
+ * @param {string | number} t
+ * @returns {string}
+ */
 function daysAway(t) {
   const n = Math.round((startOfDay(t) - startOfDay(Date.now())) / DAY);
   return n <= 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`;
 }
 
+/**
+ * "in 25m", "in 3h 10m", or the day for anything a day or more away.
+ * @param {string} t
+ * @returns {string}
+ */
 function inTime(t) {
   const m = Math.max(0, Math.round((Date.parse(t) - Date.now()) / 60e3));
   if (m < 60) return `in ${m}m`;
@@ -236,19 +607,201 @@ function inTime(t) {
   return h < 24 ? `in ${h}h${m % 60 ? ` ${m % 60}m` : ""}` : daysAway(t);
 }
 
+/**
+ * "just now", "4m ago", "2h ago" or "3d ago".
+ * @param {string} iso
+ * @returns {string}
+ */
 function ago(iso) {
   const m = Math.floor((Date.now() - Date.parse(iso)) / 60e3);
-  return m < 1 ? "just now" : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  return m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
 }
 
+/**
+ * A time as "11:59 PM" today, or "Fri, Oct 30, 11:59 PM" on another day.
+ * @param {string} iso
+ * @returns {string}
+ */
+const fmtWhen = (iso) => startOfDay(iso) === startOfDay(Date.now()) ? fmtTime(iso) : `${fmtDay(iso)}, ${fmtTime(iso)}`;
+
+/**
+ * Reads a card's last data from the browser.
+ * @param {string} key
+ * @returns {object | null}
+ */
 function readCache(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
 }
+
+/**
+ * Keeps a card's data in the browser, so the card draws at once next time.
+ * @param {string} key
+ * @param {object} value
+ */
 function saveCache(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
 const skeleton = (rows) => `<div style="display:grid;gap:10px">${Array.from({ length: rows }, (_, i) => `<div class="skel" style="width:${[60, 85, 70, 45][i % 4]}%"></div>`).join("")}</div>`;
+
+/**
+ * GETs JSON from the local server.
+ * @param {string} path
+ * @returns {Promise<object>}
+ * @throws {Error & { code?: string }} when the server is down or answers with an error.
+ */
+async function fetchJson(path) {
+  let res;
+  try { res = await fetch(path, { cache: "no-store" }); }
+  catch { throw new Error("Can't reach the local server. Start it with ./prs start."); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(body.error || `The server answered ${res.status}.`), { code: body.code });
+  return body;
+}
+
+/**
+ * The foot of a live card: an optional note on the left, and when its data was fetched on the right.
+ * @param {string} iso When the data was fetched.
+ * @param {boolean} loading Whether a refresh is under way.
+ * @param {string} [note] Markup for the left side.
+ * @returns {string}
+ */
+const footHtml = (iso, loading, note = "") => `<div class="card-foot"><span>${note}</span>`
+  + `<span class="when" title="${esc(new Date(iso).toLocaleString())}">${esc(`Updated ${ago(iso)}${loading ? " · refreshing…" : ""}`)}</span></div>`;
+
+/**
+ * A label and its value on one line.
+ * @param {string} label
+ * @param {string} value Markup.
+ * @param {string} [cls]
+ * @param {string} [title]
+ * @returns {string}
+ */
+const kvHtml = (label, value, cls = "", title = "") => `<div class="kv ${cls}"${title ? ` title="${esc(title)}"` : ""}><span>${esc(label)}</span><b>${value}</b></div>`;
+
+/**
+ * Draws a live card's body, or nothing when the card isn't on the page (personal mode).
+ * @param {string} id
+ * @param {string} html
+ */
+function fillCard(id, html) {
+  const body = $(`${id}-body`);
+  if (body) body.innerHTML = html;
+}
+
+// ---------- Cards that need setup ----------
+// Until a card's service is connected, the card shows itself drawn with sample data, faded, under a panel that
+// says what it's for, with Set up. The guide opens only on Set up, with Back to the sample.
+const guideOpen = new Set();
+const GATES = {
+  ic: { title: "Connect Datadog", text: "See who's Incident Commander now and next, and your next shift." },
+  jira: { title: "Connect Jira", text: "See your sprint, column by column, and what's on your plate." },
+  cal: { title: "Connect Google Calendar", text: "See today's meetings with Join, and answer invites." },
+  ooo: { title: "Connect Google Calendar", text: "See who on your team is out today and coming up, from the vacation tracker." },
+  slack: { title: "Connect Slack", text: "See who mentioned you, what you saved for later, and the channels you watch." },
+};
+
+/**
+ * Draws a card that needs setup: its sample under the Set up panel, or the guide once Set up was clicked.
+ * @param {keyof typeof GATES} id
+ * @param {string} guide The setup guide's markup.
+ * @param {string} problem Why the saved connection stopped working, if it did.
+ * @param {() => void} drawSample Draws the card with sample data into its body.
+ */
+function gateCard(id, guide, problem, drawSample) {
+  const tools = $(`${id}-tools`);
+  if (guideOpen.has(id)) {
+    if (tools) tools.textContent = "";
+    return fillCard(id, `<button type="button" class="gate-back" data-gate-back="${id}">← Back</button>${guide}`);
+  }
+  drawSample();
+  const body = $(`${id}-body`);
+  if (!body) return;
+  if (tools) tools.textContent = "";
+  const g = GATES[id];
+  body.innerHTML = `<div class="gate"><div class="gate-preview" inert aria-hidden="true">${body.innerHTML}</div>`
+    + `<div class="gate-panel" role="group" aria-label="${esc(g.title)}"><span class="gate-text"><b>${esc(g.title)}</b><span>${esc(g.text)}</span>`
+    + `${problem ? `<span class="gate-problem">${esc(problem)}</span>` : ""}</span>`
+    + `<button class="setup-go" type="button" data-gate-open="${id}">${problem ? "Fix it" : "Set up"}</button></div></div>`;
+}
+
+/**
+ * Draws a card once with sample data in place of its real data, then puts the real data back.
+ * @param {() => any[]} get The card's state, as [data, error, loading].
+ * @param {(state: any[]) => void} set Puts state back.
+ * @param {any} sample
+ * @param {() => void} render
+ */
+function withSample(get, set, sample, render) {
+  const keep = get();
+  set([sample, null, false]);
+  try { render(); } finally { set(keep); }
+}
+
+/** Sample data for each card that needs setup: believable, never real. */
+const SAMPLES = {
+  ic: () => {
+    const now = Date.now();
+    const at = (h) => new Date(now + h * 3600e3).toISOString();
+    return {
+      fetchedAt: new Date(now).toISOString(), days: 2, myLookahead: 45,
+      myNext: { start: at(52), end: at(64) },
+      schedules: [{ name: "Philippines", shifts: [{ user: { name: "Marco Reyes" }, start: at(-3), end: at(5) }, { user: { name: "Ana Lim" }, start: at(5), end: at(17) }] }],
+    };
+  },
+  jira: () => ({
+    fetchedAt: new Date().toISOString(), site: "example.atlassian.net", board: { id: 1, name: "Your board" },
+    sprint: { id: 1, name: "Sprint 21", endDate: new Date(Date.now() + 6 * 86400e3).toISOString(), goal: "" },
+    columns: [{ name: "To Do", count: 4, tone: "todo" }, { name: "In Progress", count: 2, tone: "doing" }, { name: "Code Review", count: 1, tone: "review" }, { name: "Done", count: 5, tone: "done" }],
+    total: 12, done: 5,
+    active: [
+      { key: "PROJ-142", summary: "Show declined signature packets", url: "#", column: "In Progress", tone: "doing" },
+      { key: "PROJ-138", summary: "Keep move-in roommates on save", url: "#", column: "In Progress", tone: "doing" },
+      { key: "PROJ-151", summary: "Add the fee settings page", url: "#", column: "To Do", tone: "todo" },
+    ],
+  }),
+  cal: () => {
+    const at = (h) => { const d = new Date(); d.setMinutes(0, 0, 0); return new Date(d.getTime() + h * 3600e3).toISOString(); };
+    const ev = (title, h, len, extra = {}) => ({ id: title, title, start: at(h), end: at(h + len), allDay: false, join: "#", link: "#", response: "accepted", location: "", ...extra });
+    return { fetchedAt: new Date().toISOString(), canReply: false, events: [ev("Daily standup", 1, 0.25), ev("Sprint planning", 3, 1, { response: "tentative" }), ev("1:1 with Sam", 5, 0.5), ev("Design review", 26, 1)] };
+  },
+  ooo: () => {
+    const day = (n) => ymd(Date.now() + n * 86400e3);
+    return {
+      fetchedAt: new Date().toISOString(), from: day(0), to: day(0), teamSize: 6, unknown: [],
+      out: [
+        { name: "Riley Santos", kind: "PTO", note: "", from: day(0), to: day(1), person: "a", onTeam: true, holiday: false, whole: true },
+        { name: "Jordan Cruz", kind: "VL", note: "", from: day(-1), to: day(0), person: "b", onTeam: true, holiday: false, whole: true },
+      ],
+    };
+  },
+  slack: () => {
+    const t = (m) => new Date(Date.now() - m * 60e3).toISOString();
+    return {
+      fetchedAt: new Date().toISOString(), me: { name: "you", team: "", url: "" }, missing: [], problems: {},
+      mentions: [
+        { who: "Sam", where: "#team", text: "@you can you review the roommate fix today?", at: t(25), link: "#" },
+        { who: "Alex", where: "a direct message", text: "The reindex is done on dev.", at: t(80), link: "#" },
+        { who: "Mae", where: "#releases", text: "@here the release goes out at 3 PM", at: t(60 * 20), link: "#" },
+      ],
+      saved: [{ who: "Angel", where: "#incidents", text: "Notes from yesterday's incident review", at: t(60 * 26), link: "#" }],
+      unread: [{ channel: "releases", count: 3, link: "#" }, { channel: "incidents", count: 0, link: "#" }],
+    };
+  },
+};
+const GATE_RENDERS = { ic: () => renderIc(), jira: () => renderJira(), cal: () => renderCal(), ooo: () => renderOoo(), slack: () => renderSlack() };
+
+$("grid").addEventListener("click", (e) => {
+  const open = e.target.closest("[data-gate-open]")?.dataset.gateOpen;
+  const back = e.target.closest("[data-gate-back]")?.dataset.gateBack;
+  if (!open && !back) return;
+  if (open) guideOpen.add(open);
+  else guideOpen.delete(back);
+  GATE_RENDERS[open || back]?.();
+  if (open) $(`${open}-body`)?.querySelector("input, button.setup-go")?.focus();
+});
 
 // ---------- Incident Commander ----------
 const IC_CACHE = "cmd-center:ic";
@@ -256,67 +809,144 @@ let ic = readCache(IC_CACHE);
 let icError = null;
 let icLoading = false;
 
+/**
+ * A time on the Incident Commander card, with the time zone after it when Settings asks for it: "10:00 PM GMT+8".
+ * @param {string | number} t
+ * @returns {string}
+ */
+const icTime = (t) => (settings.icZone ? new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : fmtTime(t));
+
+/**
+ * A shift's times, "8:00 AM – 10:00 PM", the time zone (when shown) only once, at the end.
+ * @param {{ start: string, end: string }} x
+ * @returns {string}
+ */
+const icRange = (x) => `${fmtTime(x.start)} – ${icTime(x.end)}`;
+
+/**
+ * Who is on a schedule in one cell of the shifts table.
+ * @param {Array<{ user: { name: string }, mine: boolean, start: string, end: string }>} list
+ * @returns {string}
+ */
 function shiftCell(list) {
   if (!list.length) return `<span class="empty">No one</span>`;
   return list.map((s) => `<span class="${s.mine ? "me" : ""}"><span class="name" title="${esc(s.user.name)}">${esc(s.user.name)}${s.mine ? " (you)" : ""}</span>`
-    + `<span class="time">${fmtTime(s.start)} – ${fmtTime(s.end)}</span></span>`).join("");
+    + `<span class="time">${icRange(s)}</span></span>`).join("");
 }
 
+/**
+ * Who is on now, big, with their schedule and when the shift ends.
+ * @param {Array<{ user: { name: string }, mine: boolean, schedule: string, end: string }>} onNow
+ * @param {number} now
+ * @returns {string}
+ */
+function onNowHtml(onNow, now) {
+  if (!onNow.length) return `<div class="now"><span class="label">On now</span><span class="who none">Nobody on shift</span></div>`;
+  return onNow.map((x) => `<div class="now"><span class="label">On now</span><span class="who">${esc(x.user.name)}${x.mine ? " (you)" : ""}</span>`
+    + `<span class="sub">${esc(x.schedule)} · until ${icTime(x.end)}${startOfDay(x.end) !== startOfDay(now) ? ` ${fmtDay(x.end)}` : ""}</span></div>`).join("");
+}
+
+/**
+ * The Next line: who takes over and when.
+ * @param {{ user: { name: string }, schedule: string, start: string } | undefined} next
+ * @param {number} now
+ * @returns {string}
+ */
+function nextHtml(next, now) {
+  if (!next) return "";
+  const day = startOfDay(next.start) === startOfDay(now) ? "" : `${fmtDay(next.start)}, `;
+  return kvHtml("Next", `${esc(next.user.name)} · ${day}${icTime(next.start)}`, "", `${next.schedule}, ${inTime(next.start)}`);
+}
+
+/**
+ * The Your shift line: on now, the next one, or none coming.
+ * @param {{ start: string, end: string } | null} m
+ * @param {number} lookahead Days the server looked ahead.
+ * @param {number} now
+ * @returns {string}
+ */
+function myShiftHtml(m, lookahead, now) {
+  if (!m) return kvHtml("Your shift", `None in ${lookahead} days`);
+  if (Date.parse(m.start) <= now) return kvHtml("Your shift", `On now · until ${icTime(m.end)}`, "warn");
+  return kvHtml("Your shift", `${fmtDay(m.start)} · ${daysAway(m.start)}`, "accent", icRange(m));
+}
+
+/**
+ * The shifts after the next one (two unless Settings says otherwise, from the very next when Who's next is off), for
+ * a narrow card with room to spare: who, which schedule, and when.
+ * @param {Array<{ user: { name: string }, mine: boolean, schedule: string, start: string, end: string }>} upcoming
+ *   Every shift still to start, soonest first.
+ * @param {number} now
+ * @returns {string}
+ */
+function comingUpHtml(upcoming, now) {
+  const from = settings.icNext ? 1 : 0;
+  const later = upcoming.slice(from, from + settings.icComingUp);
+  if (!later.length) return "";
+  const day = (t) => (startOfDay(t) === startOfDay(now) ? "" : `${fmtDay(t)}, `);
+  const row = (x) => `<div class="item${x.mine ? " mine" : ""}"><b>${esc(x.user.name)}${x.mine ? " (you)" : ""}</b>`
+    + `<span class="sub">${esc(x.schedule)} · ${day(x.start)}${icRange(x)}</span></div>`;
+  return `<div class="list roomy narrow-only"><span class="label">Coming up</span>${later.map(row).join("")}</div>`;
+}
+
+/**
+ * Each day's shifts for every schedule (today and tomorrow, or the days the server read), shown when the card is wide
+ * enough.
+ * @param {Array<{ name: string, shifts: Array<{ start: string }> }>} schedules
+ * @param {number} count How many days.
+ * @param {number} now
+ * @returns {string}
+ */
+function shiftsTableHtml(schedules, count, now) {
+  const today = startOfDay(now);
+  const days = Array.from({ length: count }, (_, i) => {
+    const d = startOfDay(today + (i * 24 + 12) * 3600e3);
+    return [i === 0 ? "Today" : i === 1 ? "Tomorrow" : fmtDay(d), d];
+  });
+  const byStartDay = (s, d) => s.shifts.filter((x) => startOfDay(x.start) === d);
+  return `<div class="wide-only"><table class="shifts"><thead><tr><th></th>${schedules.map((s) => `<th>${esc(s.name)}</th>`).join("")}</tr></thead><tbody>`
+    + days.map(([label, d]) => `<tr><td class="label">${label}</td>${schedules.map((s) => `<td>${shiftCell(byStartDay(s, d))}</td>`).join("")}</tr>`).join("")
+    + `</tbody></table></div>`;
+}
+
+/**
+ * Draws the Incident Commander card: who is on now, who is next and your shift, then the shifts coming up (on a
+ * narrow card with room) or the shifts table (on a wide card).
+ */
 function renderIc() {
-  const body = $("ic-body");
-  if (!ic) {
-    body.innerHTML = icError ? icErrorHtml() : skeleton(4);
-    return;
+  if (icError?.code === "no-token" || icError?.code === "auth") {
+    return gateCard("ic", icErrorHtml(), icError.code === "auth" ? icError.message : "",
+      () => withSample(() => [ic, icError, icLoading], ([a, b, c]) => { ic = a; icError = b; icLoading = c; }, SAMPLES.ic(), renderIc));
   }
+  if (!ic) return fillCard("ic", icError ? icErrorHtml() : skeleton(4));
   const now = Date.now();
   const all = ic.schedules.flatMap((s) => s.shifts.map((x) => ({ ...x, schedule: s.name })));
   const onNow = all.filter((x) => Date.parse(x.start) <= now && now < Date.parse(x.end));
-  // Compare as times: the schedules use different UTC offsets, so the strings don't sort.
   const upcoming = all.filter((x) => Date.parse(x.start) > now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  const next = upcoming[0];
-
-  const nowHtml = onNow.length
-    ? onNow.map((x) => `<div class="now"><span class="label">On now</span><span class="who">${esc(x.user.name)}${x.mine ? " (you)" : ""}</span>`
-      + `<span class="sub">${esc(x.schedule)} · until ${fmtTime(x.end)}${startOfDay(x.end) !== startOfDay(now) ? ` ${fmtDay(x.end)}` : ""}</span></div>`).join("")
-    : `<div class="now"><span class="label">On now</span><span class="who none">Nobody on shift</span></div>`;
-  const nextHtml = next
-    ? `<div class="next-up">Next: <strong>${esc(next.user.name)}</strong> · ${esc(next.schedule)} · ${startOfDay(next.start) === startOfDay(now) ? "" : `${fmtDay(next.start)}, `}${fmtTime(next.start)} (${inTime(next.start)})</div>`
-    : "";
-
-  const today = startOfDay(now);
-  const days = [["Today", today], ["Tomorrow", startOfDay(today + 36 * 3600e3)]];
-  const byStartDay = (s, d) => s.shifts.filter((x) => startOfDay(x.start) === d);
-  const table = `<table class="shifts"><thead><tr><th></th>${ic.schedules.map((s) => `<th>${esc(s.name)}</th>`).join("")}</tr></thead><tbody>`
-    + days.map(([label, d]) => `<tr><td class="label">${label}</td>${ic.schedules.map((s) => `<td>${shiftCell(byStartDay(s, d))}</td>`).join("")}</tr>`).join("")
-    + `</tbody></table>`;
-
-  const m = ic.myNext;
-  let mine;
-  if (!m) mine = `<div class="mine">No shift for you in the next ${ic.myLookahead} days.</div>`;
-  else if (Date.parse(m.start) <= now) mine = `<div class="mine on"><span>You're on now</span><span class="in">until ${fmtTime(m.end)}</span></div>`;
-  else mine = `<div class="mine"><span>Your next shift: <span class="when">${fmtDay(m.start)}, ${fmtTime(m.start)} – ${fmtTime(m.end)}</span></span><span class="in">${daysAway(m.start)}</span></div>`;
-
-  const updated = `Updated ${ago(ic.fetchedAt)} · ${fmtTime(ic.fetchedAt)}${icLoading ? " · refreshing…" : ""}`;
-  body.innerHTML = `${icError ? icErrorHtml() : ""}<div class="stack">${nowHtml}${nextHtml}${table}${mine}<div class="card-foot">${esc(updated)}</div></div>`;
+  const lines = `${settings.icNext ? nextHtml(upcoming[0], now) : ""}${settings.icMine ? myShiftHtml(ic.myNext, ic.myLookahead, now) : ""}`;
+  const table = settings.icTable ? shiftsTableHtml(ic.schedules, ic.days || 2, now) : "";
+  fillCard("ic", `${icError ? icErrorHtml() : ""}${onNowHtml(onNow, now)}${lines ? `<hr>${lines}` : ""}`
+    + `${comingUpHtml(upcoming, now)}${table}${footHtml(ic.fetchedAt, icLoading)}`);
 }
 
+/**
+ * Why the on-call schedule didn't load. A missing or refused Datadog token shows the Set up form instead.
+ * @returns {string}
+ */
 function icErrorHtml() {
-  const how = icError.code === "auth" || icError.code === "no-token"
-    ? ` Make a new token in Datadog (Organization Settings → Access Tokens, scope <code>on_call_read</code>) and save it with <code>security add-generic-password -U -s cmd-center-datadog-app -a datadog -w</code>.`
-    : "";
-  return `<div class="error">${esc(icError.message)}${how}${ic ? " Showing the last data." : ""}</div>`;
+  if (icError.code === "auth" || icError.code === "no-token") return setupHtml("datadog", icError.code === "auth" ? icError.message : "");
+  return `<div class="error">${esc(icError.message)}${ic ? " Showing the last data." : ""}</div>`;
 }
 
+/**
+ * Loads the on-call schedule.
+ * @param {boolean} [fresh] Skip the server's hour-long cache.
+ */
 async function loadIc(fresh = false) {
   icLoading = true;
   renderIc();
   try {
-    let res;
-    try { res = await fetch(`/api/incident-commander${fresh ? "?fresh=1" : ""}`, { cache: "no-store" }); }
-    catch { throw { message: "Can't reach the local server. Start it with ./prs start." }; }
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw { message: body.error || `The server answered ${res.status}.`, code: body.code };
-    ic = body;
+    ic = await fetchJson(`/api/incident-commander${fresh ? "?fresh=1" : ""}`);
     icError = null;
     saveCache(IC_CACHE, ic);
   } catch (e) {
@@ -327,81 +957,1429 @@ async function loadIc(fresh = false) {
   }
 }
 
+// ---------- Setting up a card's service ----------
+// A card whose service isn't connected shows its Set up form in place of its content: why it needs it, where to
+// get the token, and the boxes. Felix tries the token first and saves only a working one, to the Keychain.
+
+/**
+ * @typedef {{ name: string, label: string, type?: string, value?: string | (() => string), help?: string, autocomplete?: string }} SetupField
+ * @typedef {{ title: string, why: string, steps: string[], fields: SetupField[], button: string, service?: string, load: () => Promise<void> }} Setup
+ *   `service` is the connect route's name when it differs from the setup's.
+ */
+
+/** @type {Record<string, Setup>} */
+const SETUPS = {
+  jira: {
+    title: "Set up Jira",
+    name: "Jira",
+    why: "Shows your sprint and how many of your tickets sit in each column of your board.",
+    steps: [
+      `Open <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">Atlassian API tokens</a> and choose <b>Create API token</b>. Name it Felix.`,
+      "Paste it below with the email you sign in to Jira with.",
+    ],
+    fields: [
+      { name: "email", label: "Jira email", type: "email", autocomplete: "username" },
+      { name: "token", label: "API token", type: "password", autocomplete: "off" },
+      { name: "board", label: "Board", type: "number", value: () => settings.jiraBoard, help: "The number after /boards/ in your board's address." },
+    ],
+    button: "Connect Jira",
+    load: () => loadJira(true),
+  },
+  google: {
+    title: "Set up Google",
+    name: "Google",
+    why: "Calendar and Team out of office read your work calendar and the vacation tracker through a Google app you make once.",
+    steps: [
+      `In Google Cloud, <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">make a project of your own</a> (shared company projects usually won't let you turn APIs on), then turn on the <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Google Calendar API</a> in it.`,
+      `On <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Credentials</a>, choose Create credentials → OAuth client ID → <b>Desktop app</b>. If it asks for a consent screen first, make it Internal.`,
+      "Paste its client ID and secret below, then sign in.",
+    ],
+    fields: [
+      { name: "clientId", label: "Client ID", autocomplete: "off" },
+      { name: "clientSecret", label: "Client secret", type: "password", autocomplete: "off" },
+    ],
+    button: "Save Google app",
+    service: "google-work",
+    load: () => loadCal(true),
+  },
+  bridge: {
+    title: "Connect Google Calendar",
+    name: "your bridge",
+    why: "Calendar and Team out of office read your work calendar and the vacation tracker, and you can answer invites, through a small script in your own Google account. No Google Cloud project needed.",
+    steps: [
+      `Open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">a new Apps Script project</a> and name it Felix.`,
+      `In <b>Project Settings</b> (the gear), tick <b>Show "appsscript.json" manifest file in editor</b>.`,
+      `Back in the <b>Editor</b>, replace all of <b>appsscript.json</b> with <button class="linkbtn" type="button" data-bridge-copy="manifest">Copy settings</button>, and all of <b>Code.gs</b> with <button class="linkbtn" type="button" data-bridge-copy="code">Copy script</button>. Save.`,
+      `Choose <b>Deploy → New deployment</b>, type <b>Web app</b>. Execute as <b>Me</b>, Who has access <b>Anyone</b>, then Deploy and allow access. It only answers calls that carry Felix's key, which is already in the script.`,
+      "Paste the Web app URL below.",
+    ],
+    fields: [{ name: "url", label: "Web app URL", type: "url", autocomplete: "off", help: "Felix tries it before saving." }],
+    button: "Connect",
+    service: "google-bridge",
+    load: () => Promise.all([loadCal(true), loadOoo(true)]),
+  },
+  slack: {
+    title: "Connect Slack",
+    name: "Slack",
+    why: "Shows where people mention you, what you saved for later, and the channels you watch. The same connection lets Start my day post for you.",
+    steps: [
+      `Open <a href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener">Create New App</a>, choose <b>From a manifest</b>, and pick the PURE PM workspace.`,
+      `Paste Felix's manifest (<button class="linkbtn" type="button" data-slack-manifest>Copy manifest</button>), then <b>Create</b>.`,
+      `Choose <b>Install to Workspace</b> and allow it. If Slack asks for an admin's approval, request it and come back once it's approved.`,
+      `On <b>OAuth &amp; Permissions</b>, copy the <b>User OAuth Token</b> (it starts with xoxp-) and paste it below.`,
+    ],
+    fields: [{ name: "token", label: "User OAuth Token", type: "password", autocomplete: "off" }],
+    button: "Connect Slack",
+    load: () => loadSlack(true),
+  },
+  datadog: {
+    title: "Set up Datadog",
+    name: "Datadog",
+    why: "Shows who's Incident Commander now, who's next, and your next shift.",
+    steps: [
+      `In Datadog, open <a href="https://us5.datadoghq.com/personal-settings/access-tokens" target="_blank" rel="noopener">Personal Settings → Access Tokens</a> and create one with only the <code>on_call_read</code> scope.`,
+      "Paste it below.",
+    ],
+    fields: [{ name: "token", label: "Access token", type: "password", autocomplete: "off" }],
+    button: "Connect Datadog",
+    load: () => loadIc(true),
+  },
+};
+
+/**
+ * A card's Set up form.
+ * @param {keyof typeof SETUPS} id
+ * @param {string} [problem] Why the last try failed, such as a refused token.
+ * @returns {string}
+ */
+function setupHtml(id, problem = "") {
+  const s = SETUPS[id];
+  const field = (f) => `<label class="setup-field"><span>${esc(f.label)}</span>`
+    + `<input class="field" name="${f.name}" type="${f.type || "text"}" value="${esc((typeof f.value === "function" ? f.value() : f.value) || "")}" autocomplete="${f.autocomplete || "off"}" spellcheck="false" required>`
+    + `${f.help ? `<small>${esc(f.help)}</small>` : ""}</label>`;
+  return `<form class="setup" data-setup="${id}"><div class="setup-head"><b>${esc(s.title)}</b><span>${esc(s.why)}</span></div>`
+    + `<ol class="setup-steps">${s.steps.map((t) => `<li>${t}</li>`).join("")}</ol>`
+    + `<div class="setup-fields">${s.fields.map(field).join("")}</div>`
+    + `<p class="setup-error" role="alert"${problem ? "" : " hidden"}>${esc(problem)}</p>`
+    + `<div class="setup-foot"><button class="setup-go" type="submit">${esc(s.button)}</button><span>Checked first, then saved in your Mac's Keychain.</span></div></form>`;
+}
+
+/**
+ * Felix's loader: his face thinking, what he's doing, and pulsing dots.
+ * @param {string} label Like "Checking with Jira".
+ * @returns {string}
+ */
+const loaderHtml = (label) => `<span class="felix-load" role="status">${window.FelixShell.mark("").replace('class="mark"', 'class="mark thinking"')}`
+  + `<span>${esc(label)}</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></span>`;
+
+$("grid").addEventListener("submit", async (e) => {
+  const form = e.target.closest("form[data-setup]");
+  if (!form) return;
+  e.preventDefault();
+  const id = form.dataset.setup;
+  const go = form.querySelector(".setup-go");
+  const err = form.querySelector(".setup-error");
+  go.disabled = true;
+  go.classList.add("loading");
+  go.style.minWidth = `${go.offsetWidth}px`;
+  go.innerHTML = loaderHtml(`Checking with ${SETUPS[id].name || "the service"}`);
+  form.classList.add("busy");
+  err.hidden = true;
+  try {
+    await window.FelixShell.request(`/api/connect/${SETUPS[id].service || id}`, { fields: Object.fromEntries(new FormData(form)) });
+    guideOpen.clear();
+    await SETUPS[id].load();
+  } catch (problem) {
+    err.textContent = problem.message;
+    err.hidden = false;
+    form.classList.remove("busy");
+    go.classList.remove("loading");
+    go.disabled = false;
+    go.textContent = SETUPS[id].button;
+  }
+});
+
+// ---------- My Jira Board ----------
+const JIRA_CACHE = "felix:jira";
+let jira = readCache(JIRA_CACHE);
+let jiraError = null;
+let jiraLoading = false;
+
+/** Each column's dot, by the kind of statuses it holds. */
+const JIRA_TONES = { todo: "var(--faint)", doing: "var(--info)", review: "var(--warn)", blocked: "var(--bad)", done: "var(--ok)" };
+
+/**
+ * The sprint's name and how long it has left, or its end date, or the name alone, as Settings says.
+ * @param {{ name: string, endDate: string | null }} sprint
+ * @returns {string}
+ */
+function sprintLine(sprint) {
+  if (!sprint.endDate || settings.jiraSprint === "name") return esc(sprint.name);
+  if (settings.jiraSprint === "end") return `${esc(sprint.name)} · ends ${esc(fmtDay(sprint.endDate))}`;
+  const days = Math.ceil((Date.parse(sprint.endDate) - Date.now()) / 86400e3);
+  const left = days > 1 ? `${days} days left` : days === 1 ? "ends tomorrow" : days === 0 ? "ends today" : "past its end date";
+  return `${esc(sprint.name)} · ${left}`;
+}
+
+/**
+ * Draws My Jira Board: the Set up form until Jira is connected, else the open sprint and how many of your tickets sit
+ * in each of the board's columns, in Jira's own order and names.
+ */
+function renderJira() {
+  if (jiraError?.code === "no-token" || jiraError?.code === "auth") {
+    return gateCard("jira", setupHtml("jira", jiraError.code === "auth" ? jiraError.message : ""), jiraError.code === "auth" ? jiraError.message : "",
+      () => withSample(() => [jira, jiraError, jiraLoading], ([a, b, c]) => { jira = a; jiraError = b; jiraLoading = c; }, SAMPLES.jira(), renderJira));
+  }
+  // A copy saved before the card read the board's columns has none: wait for the fresh one.
+  if (!jira?.columns) return fillCard("jira", jiraError ? `<div class="error">${esc(jiraError.message)}</div>` : skeleton(4));
+  const err = jiraError ? `<div class="error">${esc(jiraError.message)} Showing the last data.</div>` : "";
+  if (!jira.sprint) {
+    return fillCard("jira", `${err}<div class="sub">No open sprint on ${esc(jira.board.name)}.</div>${footHtml(jira.fetchedAt, jiraLoading)}`);
+  }
+  // Columns named in Settings stay off the card, and so do empty ones when Settings hides them.
+  const hidden = new Set(settings.jiraHide.split("\n").map((n) => n.trim().toLowerCase()).filter(Boolean));
+  const columns = jira.columns.filter((c) => !hidden.has(c.name.toLowerCase()) && (settings.jiraEmpty || c.count));
+  const counts = columns.map((c) => `<div class="kv${c.count ? "" : " zero"}"><span class="jira-col"><span class="dot" style="background:${JIRA_TONES[c.tone] || JIRA_TONES.doing}"></span>${esc(c.name)}</span><b>${c.count}</b></div>`).join("");
+  // How far your part of the sprint is, and your open tickets: in progress, then to do, then code review.
+  const pct = jira.total ? Math.round((jira.done / jira.total) * 100) : 0;
+  const progress = jira.total && settings.jiraProgress ? `<div class="jira-progress" title="${jira.done} of ${jira.whose === "all" ? "the" : "your"} ${jira.total} tickets in this sprint are done"><div class="bar"><i style="width:${pct}%"></i></div><span>${jira.done} of ${jira.total} done</span></div>` : "";
+  const active = jira.active || [];
+  const shown = active.slice(0, settings.jiraPlate);
+  const jql = encodeURIComponent("assignee = currentUser() AND sprint in openSprints() AND statusCategory != Done ORDER BY status");
+  const more = active.length > shown.length ? `<a class="jira-more" href="https://${esc(jira.site)}/issues/?jql=${jql}" target="_blank" rel="noopener">${active.length - shown.length} more in Jira →</a>` : "";
+  const plate = active.length && settings.jiraPlate
+    ? `<div class="jira-plate-head"><span class="label">On your plate</span>${more}</div><div class="jira-plate">${shown.map((t) => `<a class="jira-ticket" href="${esc(t.url)}" target="_blank" rel="noopener" title="${esc(`${t.key} · ${t.summary} · ${t.column}`)}">`
+      + `<span class="dot" style="background:${JIRA_TONES[t.tone] || JIRA_TONES.doing}"></span><span class="key">${esc(t.key)}</span><span class="sum">${esc(t.summary)}</span><span class="col">${esc(t.column)}</span></a>`).join("")}</div>`
+    : "";
+  const sprint = settings.jiraSprint === "none" ? "" : `<div class="sub">${sprintLine(jira.sprint)}</div>`;
+  fillCard("jira", `${err}${sprint}<div class="two jira-counts">${counts}</div>${progress}${plate}`
+    + footHtml(jira.fetchedAt, jiraLoading, esc(jira.board.name)));
+}
+
+/**
+ * Loads My Jira Board, keeping a copy in the browser so the card draws at once next time.
+ * @param {boolean} [fresh] Skip the server's cache (a minute, unless Settings says otherwise).
+ */
+async function loadJira(fresh = false) {
+  jiraLoading = true;
+  renderJira();
+  try {
+    jira = await fetchJson(`/api/jira${fresh ? "?fresh=1" : ""}`);
+    jiraError = null;
+    saveCache(JIRA_CACHE, jira);
+  } catch (e) {
+    jiraError = { message: e.message || String(e), code: e.code };
+    if (e.code === "no-token") jira = null;
+  } finally {
+    jiraLoading = false;
+    renderJira();
+  }
+}
+
+// ---------- Google sign-in, for Calendar and Team out of office ----------
+
+/**
+ * The step after the Google app is saved: sign in, in a small window. Felix asks only to read and answer your
+ * calendar events.
+ * @param {string} [problem] Why the last sign-in failed.
+ * @returns {string}
+ */
+function googleSignInHtml(problem = "") {
+  return `<div class="setup"><div class="setup-head"><b>Sign in with Google</b><span>Use your work account. Felix asks to see your calendar events and answer invites.</span></div>`
+    + `<p class="setup-error" role="alert"${problem ? "" : " hidden"}>${esc(problem)}</p>`
+    + `<div class="setup-foot"><button class="setup-go" type="button" data-google-signin>Sign in with Google</button>`
+    + `<button class="linkbtn" type="button" data-google-app>Use a different Google app</button></div></div>`;
+}
+
+const GOOGLE_ROUTE_KEY = "felix:google-route";
+
+/**
+ * Why a working Google connection stopped, for the Set up panel; nothing when it was just never set up.
+ * @param {{ code?: string, message: string } | null} error
+ * @returns {string}
+ */
+function googleProblem(error) {
+  return ["expired", "bridge-access", "bridge-key"].includes(error?.code) ? error.message : "";
+}
+
+/**
+ * What a Google card shows when it can't read, as a guide: set up the bridge or a Google app, or sign in.
+ * @param {{ code?: string, message: string } | null} error
+ * @returns {string | null} The guide, or null when the problem is something else.
+ */
+function googleStepHtml(error) {
+  // Two ways in: the Apps Script bridge (the default, as PURE accounts can't make Cloud projects) or your own Google app.
+  const app = readCache(GOOGLE_ROUTE_KEY) === "app";
+  const other = (route, label) => `<button class="linkbtn google-route" type="button" data-google-route="${route}">${label}</button>`;
+  if (error?.code === "bridge-access" || error?.code === "bridge-key") return setupHtml("bridge", error.message) + other("app", "Use a Google Cloud app instead");
+  if (error?.code === "no-client") return app ? setupHtml("google") + other("bridge", "Use the Apps Script bridge instead") : setupHtml("bridge") + other("app", "Use a Google Cloud app instead");
+  if (error?.code === "not-connected") return googleSignInHtml();
+  if (error?.code === "expired") return googleSignInHtml(error.message);
+  return null;
+}
+
+let bridgeScript = null;
+
+/**
+ * A file's text, selected in a dialog, for when the clipboard can't be written.
+ * @param {string} name
+ * @param {string} text
+ */
+function showCopyDialog(name, text) {
+  const dlg = document.createElement("dialog");
+  dlg.className = "team-dlg";
+  dlg.innerHTML = `<form method="dialog"><div class="team-head"><b>${esc(name)}</b><span class="sub">Press ⌘C to copy it, then paste it into Apps Script.</span></div>`
+    + `<div class="team-list"><textarea class="copy-text" readonly rows="14"></textarea></div><div class="team-foot"><button class="mini primary" value="done">Done</button></div></form>`;
+  dlg.querySelector("textarea").value = text;
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.showModal();
+  dlg.querySelector("textarea").select();
+}
+
+$("grid").addEventListener("click", async (e) => {
+  const route = e.target.closest("[data-google-route]")?.dataset.googleRoute;
+  if (route) {
+    saveCache(GOOGLE_ROUTE_KEY, route);
+    renderCal();
+    renderOoo();
+    return;
+  }
+  const copy = e.target.closest("[data-bridge-copy]");
+  if (copy) {
+    // The script carries Felix's key, so it's fetched from this Mac, not kept in the page.
+    const label = copy.textContent;
+    try {
+      bridgeScript ??= await window.FelixShell.request("/api/google-bridge/script", {});
+      await navigator.clipboard.writeText(bridgeScript[copy.dataset.bridgeCopy]);
+      copy.textContent = "Copied";
+    } catch {
+      // The clipboard said no: show the text selected, to copy by hand.
+      if (bridgeScript) showCopyDialog(copy.dataset.bridgeCopy === "code" ? "Code.gs" : "appsscript.json", bridgeScript[copy.dataset.bridgeCopy]);
+      else copy.textContent = "Couldn't copy";
+    }
+    setTimeout(() => { copy.textContent = label; }, 2500);
+    return;
+  }
+  if (e.target.closest("[data-google-signin]")) {
+    window.open("/api/google/connect/work", "felix-google", "popup,width=520,height=720");
+  } else if (e.target.closest("[data-google-app]")) {
+    calError = { code: "no-client", message: "" };
+    oooError = { code: "no-client", message: "" };
+    renderCal();
+    renderOoo();
+  }
+});
+$("grid").addEventListener("click", async (e) => {
+  // Note opens a short text box under the buttons; whatever's in it goes with Yes, Maybe or No.
+  const noteBtn = e.target.closest("[data-rsvp-note]");
+  if (noteBtn) {
+    const box = noteBtn.parentElement.querySelector(".cal-note");
+    box.hidden = !box.hidden;
+    noteBtn.setAttribute("aria-expanded", String(!box.hidden));
+    if (!box.hidden) box.focus();
+    return;
+  }
+  const b = e.target.closest("[data-rsvp]");
+  if (!b) return;
+  const group = b.closest(".cal-reply");
+  const note = group.querySelector(".cal-note")?.value.trim() || "";
+  group.querySelectorAll("button, input").forEach((x) => { x.disabled = true; });
+  b.textContent = "Sending…";
+  try {
+    await window.FelixShell.request("/api/calendar/rsvp", { id: b.dataset.ev, response: b.dataset.rsvp, ...(note ? { note } : {}) });
+    await loadCal(true);
+  } catch (err) {
+    calError = { message: err.message, code: err.code };
+    renderCal();
+  }
+});
+
+// The sign-in window says when it's done; the Google cards reload.
+addEventListener("message", (e) => {
+  if (e.data?.felix !== "google-signed-in") return;
+  if (e.data.ok) { loadCal(true); loadOoo(true); }
+  else { calError = { code: "expired", message: e.data.text }; renderCal(); }
+});
+
+// ---------- Calendar ----------
+const CAL_CACHE = "felix:calendar";
+let cal = readCache(CAL_CACHE);
+let calError = null;
+let calLoading = false;
+
+/**
+ * How long until a time, said simply: "in 20 min", "in 1 h 5 min".
+ * @param {number} ms
+ * @returns {string}
+ */
+function untilText(ms) {
+  const min = Math.max(1, Math.round(ms / 60e3));
+  if (min < 60) return `in ${min} min`;
+  const h = Math.floor(min / 60);
+  return `in ${h} h${min % 60 ? ` ${min % 60} min` : ""}`;
+}
+
+/** The answer pills: only the ones that need a look. */
+const RESPONSE = { tentative: ["Maybe", ""], needsAction: ["Invited", "warn"], declined: ["Declined", ""] };
+const REPLIES = [["accepted", "Yes"], ["tentative", "Maybe"], ["declined", "No"]];
+
+/**
+ * Whether the leading event's Join is the main button: always for the next meeting, from some minutes before it
+ * starts, or never, as Settings says.
+ * @param {{ start: string }} ev
+ * @param {number} now
+ * @returns {boolean}
+ */
+function joinStandsOut(ev, now) {
+  if (settings.calJoin === "next") return true;
+  return settings.calJoin !== "never" && Date.parse(ev.start) - now <= settings.calJoin * 60e3;
+}
+
+/**
+ * One event row: its time, title (opening it in Google Calendar), its answer if it needs a look, and Join when it
+ * has a meeting link. The one on now or next is highlighted, with Join as the main button (when Settings says so).
+ * @param {{ title: string, start: string, end: string, allDay: boolean, join: string | null, link: string, response: string | null }} ev
+ * @param {boolean} lead
+ * @param {number} now
+ * @returns {string}
+ */
+function calRowHtml(ev, lead, now) {
+  const past = !ev.allDay && Date.parse(ev.end) <= now;
+  const when = ev.allDay ? "All day" : fmtTime(ev.start).replace(/\s?[AP]M$/i, "");
+  // An invite you haven't answered gets Yes, Maybe and No when the bridge can send replies.
+  const reply = cal?.canReply && settings.calReplies && ev.response === "needsAction" && !past
+    ? `<span class="cal-reply" role="group" aria-label="Reply to ${esc(ev.title)}">${REPLIES.map(([r, label]) => `<button type="button" class="mini" data-rsvp="${r}" data-ev="${esc(ev.id)}">${label}</button>`).join("")}`
+      + `<button type="button" class="mini quiet" data-rsvp-note aria-expanded="false" title="Add a short note to your reply">Note</button>`
+      + `<input class="field cal-note" type="text" maxlength="500" placeholder="A note for the organizer (optional)" aria-label="Note with your reply" hidden></span>` : "";
+  const pill = reply || (RESPONSE[ev.response] ? `<span class="pill plain ${RESPONSE[ev.response][1]}">${RESPONSE[ev.response][0]}</span>` : "");
+  const join = ev.join && !past ? `<a class="${lead && joinStandsOut(ev, now) ? "mini primary" : "mini"}" href="${esc(ev.join)}" target="_blank" rel="noopener">Join</a>` : "";
+  return `<div class="cal-row${lead ? " lead" : ""}${past ? " past" : ""}${reply ? " ask" : ""}"><span class="cal-time">${esc(when)}</span>`
+    + `<a class="cal-title" href="${esc(ev.link)}" target="_blank" rel="noopener" title="Open in Google Calendar">${esc(ev.title)}</a>${pill}${join}</div>`;
+}
+
+/**
+ * Draws the Calendar card: the Google setup step until it can read, else today's events with the next one leading,
+ * a countdown in the header, and the days after (tomorrow, unless Settings says otherwise) under them when there's
+ * room. Settings also leaves out past meetings, all-day events and the ones you declined.
+ */
+function renderCal() {
+  const tools = $("cal-tools");
+  const step = googleStepHtml(calError);
+  if (step) {
+    return gateCard("cal", step, googleProblem(calError),
+      () => withSample(() => [cal, calError, calLoading], ([a, b, c]) => { cal = a; calError = b; calLoading = c; }, SAMPLES.cal(), renderCal));
+  }
+  if (!cal) return fillCard("cal", calError ? `<div class="error">${esc(calError.message)}</div>` : skeleton(4));
+  const now = Date.now();
+  const tomorrow = startOfDay(now) + 86400e3;
+  const shown = cal.events.filter((e) => (settings.calAllDay || !e.allDay) && (settings.calDeclined || e.response !== "declined")
+    && (settings.calPast || e.allDay || Date.parse(e.end) > now));
+  const today = shown.filter((e) => Date.parse(e.start) < tomorrow);
+  const dayStart = (i) => startOfDay(tomorrow + (i - 1) * 86400e3 + 12 * 3600e3);
+  const onDay = (i) => shown.filter((e) => Date.parse(e.start) >= dayStart(i) && Date.parse(e.start) < dayStart(i + 1));
+  const nextDay = onDay(1);
+  const lead = today.find((e) => !e.allDay && e.response !== "declined" && Date.parse(e.end) > now);
+  if (tools && !settings.calCountdown) tools.textContent = "";
+  else if (tools) {
+    const on = lead && Date.parse(lead.start) <= now;
+    tools.innerHTML = lead ? `<span class="cal-next">${on ? "On now" : `Next ${untilText(Date.parse(lead.start) - now)}`}</span>` : "";
+  }
+  const err = calError ? `<div class="error">${esc(calError.message)} Showing the last events.</div>` : "";
+  const list = today.length ? today.map((e) => calRowHtml(e, e === lead, now)).join("") : `<p class="sub">Nothing on your calendar today.</p>`;
+  const later = Array.from({ length: settings.calDays - 1 }, (_, i) => {
+    const events = onDay(i + 1);
+    return events.length
+      ? `<div class="list roomy"><span class="label">${i ? esc(fmtDay(dayStart(i + 1))) : "Tomorrow"}</span>${events.map((e) => calRowHtml(e, false, now)).join("")}</div>` : "";
+  }).join("");
+  const note = settings.calDays < 2 ? "" : `Tomorrow: ${nextDay.length ? `${nextDay.length} event${nextDay.length === 1 ? "" : "s"}` : "nothing yet"}`;
+  fillCard("cal", `${err}<div class="cal-rows">${list}</div>${later}${footHtml(cal.fetchedAt, calLoading, esc(note))}`);
+}
+
+/**
+ * Loads the calendar, keeping a copy in the browser so the card draws at once next time.
+ * @param {boolean} [fresh] Skip the server's cache (5 minutes, unless Settings says otherwise).
+ */
+async function loadCal(fresh = false) {
+  calLoading = true;
+  renderCal();
+  try {
+    cal = await fetchJson(`/api/calendar${fresh ? "?fresh=1" : ""}`);
+    calError = null;
+    saveCache(CAL_CACHE, cal);
+  } catch (e) {
+    calError = { message: e.message || String(e), code: e.code };
+    if (["no-client", "not-connected"].includes(e.code)) cal = null;
+  } finally {
+    calLoading = false;
+    renderCal();
+  }
+}
+// The countdown and the highlighted event move on with the clock.
+setInterval(() => { if (cal && settings.mode === "work") renderCal(); }, 60e3);
+
+// ---------- Empty states ----------
+// Small drawings for a card with nothing to show, in the app's line style: muted strokes on a soft tile, one touch
+// of the accent, and Felix himself on Today's.
+const FACE = (x, y, r) => `<g transform="translate(${x - r} ${y - r}) scale(${(r * 2) / 64})"><circle cx="32" cy="32" r="28" fill="var(--mark-face)" stroke="var(--line-strong)" stroke-width="2"/>`
+  + `<rect x="21" y="20" width="6.5" height="12.5" rx="3.25" fill="var(--mark-eye)"/><path d="M36 28.5q3.5-5.5 7 0" fill="none" stroke="var(--mark-eye)" stroke-width="3.8" stroke-linecap="round"/>`
+  + `<path d="M21.5 40c5.8 5.8 15.2 5.8 21 0" fill="none" stroke="var(--mark-smile)" stroke-width="4.6" stroke-linecap="round"/></g>`;
+const ILLUSTRATIONS = {
+  // A clipboard, every line ticked, and Felix beside it.
+  today: `<rect x="22" y="12" width="44" height="54" rx="7" class="tile"/><rect x="34" y="7" width="20" height="10" rx="4" class="clip"/>`
+    + `<path d="M31 30l3 3 5-6M31 43l3 3 5-6M31 56l3 3 5-6" class="tick"/><path d="M45 30h12M45 43h12M45 56h8" class="line"/>${FACE(76, 52, 13)}`,
+  // A calendar page with nothing on it yet.
+  upcoming: `<rect x="20" y="14" width="56" height="50" rx="8" class="tile"/><path d="M20 28h56" class="line"/><path d="M33 9v10M63 9v10" class="line"/>`
+    + `<circle cx="34" cy="40" r="2.5" class="dot"/><circle cx="48" cy="40" r="2.5" class="dot"/><circle cx="62" cy="40" r="2.5" class="dot"/>`
+    + `<circle cx="34" cy="52" r="2.5" class="dot"/><circle cx="48" cy="52" r="3.5" class="spark"/><circle cx="62" cy="52" r="2.5" class="dot"/>`,
+  // A clock with a tick: nothing late.
+  overdue: `<circle cx="48" cy="38" r="26" class="tile"/><path d="M48 24v14l9 6" class="line"/><circle cx="68" cy="58" r="11" class="spark-tile"/><path d="M63 58l3.5 3.5 6-7" class="tick-on"/>`,
+  // A moon and stars, for one day.
+  someday: `<circle cx="48" cy="38" r="26" class="tile"/><path d="M54 22a17 17 0 1 0 8 26 14 14 0 0 1-8-26z" class="moon"/>`
+    + `<path d="M24 20l1.5 3.5L29 25l-3.5 1.5L24 30l-1.5-3.5L19 25l3.5-1.5zM74 50l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z" class="spark"/>`,
+  // An empty tray, waiting for the first tick.
+  done: `<path d="M18 40l9-20h42l9 20v18a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6z" class="tile"/><path d="M18 40h18l4 7h16l4-7h18" class="line"/><path d="M42 26l4 4 8-9" class="tick"/>`,
+  // A magnifying glass over nothing.
+  search: `<circle cx="44" cy="34" r="20" class="tile"/><path d="M58 48l14 14" class="line thick"/><path d="M36 34h16" class="line"/>`,
+  // A speech bubble with nobody's name in it: no one's after you.
+  mentions: `<path d="M18 16h48a8 8 0 0 1 8 8v24a8 8 0 0 1-8 8H38l-12 10v-10h-8a8 8 0 0 1-8-8V24a8 8 0 0 1 8-8z" class="tile"/><path d="M28 32h28M28 42h18" class="line"/><circle cx="76" cy="18" r="9" class="spark-tile"/><path d="M72 18l3 3 5-6" class="tick-on"/>`,
+  // A beach umbrella: everyone's in.
+  ooo: `<path d="M20 36a28 22 0 0 1 56 0z" class="tile"/><path d="M48 14v50M34 64h28" class="line"/><path d="M34 36a14 22 0 0 1 14-22 14 22 0 0 1 14 22" class="line"/><circle cx="74" cy="16" r="6" class="spark"/>`,
+};
+
+/**
+ * A card's empty state: its drawing and one short line.
+ * @param {keyof typeof ILLUSTRATIONS} kind
+ * @param {string} text Markup.
+ * @returns {string}
+ */
+const emptyHtml = (kind, text) => `<div class="empty-state"><svg viewBox="0 0 96 72" aria-hidden="true">${ILLUSTRATIONS[kind] || ILLUSTRATIONS.search}</svg><p>${text}</p></div>`;
+
+// ---------- Slack ----------
+const SLACK_CACHE = "felix:slack";
+let slack = readCache(SLACK_CACHE);
+let slackError = null;
+let slackLoading = false;
+
+/**
+ * When a message was sent, short: "9:42 AM" today, else "Wed 9:42 AM".
+ * @param {string} iso
+ * @returns {string}
+ */
+const slackWhen = (iso) => startOfDay(iso) === startOfDay(Date.now()) ? fmtTime(iso) : `${new Date(iso).toLocaleDateString([], { weekday: "short" })} ${fmtTime(iso)}`;
+
+/**
+ * One message row: who, where and when on top, the words under, the whole row opening it in Slack.
+ * @param {{ who: string, where: string, text: string, at: string, link: string }} m
+ * @returns {string}
+ */
+const slackRowHtml = (m) => `<a class="slack-msg" href="${esc(m.link || slack?.me?.url || "https://app.slack.com/client")}" target="_blank" rel="noopener" title="Open in Slack">`
+  + `<span class="face">${esc((m.who || "?").charAt(0).toUpperCase())}</span><span class="slack-text"><span class="slack-top"><b>${esc(m.who || "Someone")}</b>`
+  + `<span class="sub">in ${esc(m.where)} · ${esc(slackWhen(m.at))}</span></span><span class="slack-body">${esc(m.text)}</span></span></a>`;
+
+/**
+ * Draws the Slack card: Connect Slack until a token works, else your mentions, saved for later, and the channels you
+ * watch with their unread counts.
+ */
+function renderSlack() {
+  if (["no-token", "auth", "scope"].includes(slackError?.code)) {
+    const problem = slackError.code === "no-token" ? "" : slackError.message;
+    return gateCard("slack", setupHtml("slack", problem), problem,
+      () => withSample(() => [slack, slackError, slackLoading], ([a, b, c]) => { slack = a; slackError = b; slackLoading = c; }, SAMPLES.slack(), renderSlack));
+  }
+  if (!slack?.mentions) return fillCard("slack", slackError ? `<div class="error">${esc(slackError.message)}</div>` : skeleton(5));
+  const err = slackError ? `<div class="error">${esc(slackError.message)} Showing the last messages.</div>` : "";
+  const days = settings.slackDays || 3;
+  const mentions = slack.mentions.length
+    ? `<div class="slack-list">${slack.mentions.slice(0, 5).map(slackRowHtml).join("")}</div>`
+      + (slack.mentions.length > 5 ? `<a class="slack-more" href="${esc(slack.me.url || "https://app.slack.com/client")}activity" target="_blank" rel="noopener">${slack.mentions.length - 5} more in Slack →</a>` : "")
+    : emptyHtml("mentions", `Nobody mentioned you in the last ${days === 1 ? "day" : `${days} days`}.`);
+  const saved = slack.saved === null ? ""
+    : `<hr><span class="label">Saved for later${slack.saved.length ? ` <span class="n">${slack.saved.length}</span>` : ""}</span>`
+      + (slack.problems?.saved ? `<p class="sub">${esc(slack.problems.saved)}</p>` : slack.saved.length ? `<div class="slack-list">${slack.saved.slice(0, 3).map(slackRowHtml).join("")}</div>` : `<p class="sub">Nothing saved.</p>`);
+  const watching = slack.unread.length || slack.missing.length || slack.problems?.unread;
+  const unread = watching
+    ? `<hr><span class="label">Channels you watch</span>${slack.problems?.unread ? `<p class="sub">${esc(slack.problems.unread)}</p>` : ""}`
+      + slack.unread.map((u) => `<a class="kv slack-kv${u.count ? "" : " quiet"}" href="${esc(u.link)}" target="_blank" rel="noopener"><span>#${esc(u.channel)}</span><b>${u.count ? `${u.count >= 100 ? "100+" : u.count} new` : "All read"}</b></a>`).join("")
+      + (slack.missing.length ? `<p class="sub">You're not in ${slack.missing.map((c) => `#${esc(c)}`).join(", ")}.</p>` : "")
+    : `<hr><a class="slack-more" href="/settings#slack">Pick channels to watch →</a>`;
+  fillCard("slack", `${err}<span class="label">Mentions${slack.mentions.length ? ` <span class="n">${slack.mentions.length}</span>` : ""}</span>${mentions}${saved}${unread}`
+    + footHtml(slack.fetchedAt, slackLoading, esc(slack.me.team || "")));
+}
+
+/**
+ * Loads the Slack card, keeping a copy in the browser so it draws at once next time.
+ * @param {boolean} [fresh] Skip the server's cache.
+ */
+async function loadSlack(fresh = false) {
+  slackLoading = true;
+  renderSlack();
+  try {
+    slack = await fetchJson(`/api/slack${fresh ? "?fresh=1" : ""}`);
+    slackError = null;
+    saveCache(SLACK_CACHE, slack);
+  } catch (e) {
+    slackError = { message: e.message || String(e), code: e.code };
+    if (["no-token", "auth", "scope"].includes(e.code)) slack = null;
+  } finally {
+    slackLoading = false;
+    renderSlack();
+  }
+}
+
+// The manifest to make Felix's Slack app from, copied for the setup's second step.
+$("grid").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-slack-manifest]");
+  if (!b) return;
+  const label = b.textContent;
+  let text = "";
+  try {
+    text = await (await fetch("/api/slack/manifest", { cache: "no-store" })).text();
+    await navigator.clipboard.writeText(text);
+    b.textContent = "Copied";
+  } catch {
+    if (text) showCopyDialog("Felix's Slack app manifest", text);
+    else b.textContent = "Couldn't copy";
+  }
+  setTimeout(() => { b.textContent = label; }, 2500);
+});
+
+// ---------- Team out of office ----------
+const HOLIDAY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>`;
+const OOO_CACHE = "felix:ooo";
+const OOO_VIEW_KEY = "felix:ooo-view";
+const OOO_WHO_KEY = "felix:ooo-who";
+let ooo = readCache(OOO_CACHE);
+let oooError = null;
+let oooLoading = false;
+// The view and who the card opens on: as Settings says, or the ones picked last.
+let oooView = settings.oooView === "last" ? readCache(OOO_VIEW_KEY) || "today" : settings.oooView;
+let oooWho = settings.oooWho === "last" ? readCache(OOO_WHO_KEY) || "team" : settings.oooWho;
+let oooPick = null; // { from, to } for Pick dates
+
+/**
+ * A day as YYYY-MM-DD in this Mac's time zone.
+ * @param {number} t
+ * @returns {string}
+ */
+const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
+/**
+ * The days a view covers.
+ * @param {string} view "today", "tomorrow", "upcoming" (two months from tomorrow, unless Settings says otherwise) or "pick".
+ * @returns {{ from: string, to: string }}
+ */
+function oooRange(view) {
+  const today = startOfDay(Date.now());
+  if (view === "tomorrow") return { from: ymd(today + 86400e3), to: ymd(today + 86400e3) };
+  if (view === "upcoming") return { from: ymd(today + 86400e3), to: ymd(today + (1 + settings.oooAhead) * 86400e3) };
+  if (view === "pick" && oooPick) return oooPick;
+  return { from: ymd(today), to: ymd(today) };
+}
+
+/**
+ * A day said simply: "Oct 31".
+ * @param {string} day YYYY-MM-DD
+ * @returns {string}
+ */
+const dayText = (day) => new Date(`${day}T12:00:00`).toLocaleDateString([], { month: "short", day: "numeric" });
+
+/**
+ * When a leave runs, said for the view: "until Oct 31" for a single day's view, else its dates.
+ * @param {{ from: string, to: string }} l
+ * @param {boolean} single
+ * @returns {string}
+ */
+function leaveDates(l, single) {
+  if (l.from === l.to) return single ? "today" : dayText(l.from);
+  if (single) return `until ${dayText(l.to)}`;
+  return `${dayText(l.from)} to ${dayText(l.to)}`;
+}
+
+/**
+ * The line under a name: the kind of leave and its note (each unless Settings hides it), the dates, and whether
+ * they're out the whole time.
+ * @param {{ kind: string, note: string, from: string, to: string, whole: boolean }} l
+ * @param {boolean} single Whether the view is one day.
+ * @returns {string}
+ */
+function oooLeaveLine(l, single) {
+  const kind = [settings.oooKind ? l.kind : "", settings.oooNote && l.note ? `(${l.note})` : ""].filter(Boolean).join(" ");
+  return esc([kind, leaveDates(l, single), !single && l.whole && settings.oooWhole ? "the whole time" : ""].filter(Boolean).join(" · "));
+}
+
+/**
+ * Draws Team out of office: the Google setup step until it can read, else the view switch, who's out, and how many
+ * of your team that is, with Manage team.
+ */
+function renderOoo() {
+  const step = googleStepHtml(oooError);
+  if (step) {
+    return gateCard("ooo", step, googleProblem(oooError),
+      () => withSample(() => [ooo, oooError, oooLoading], ([a, b, c]) => { ooo = a; oooError = b; oooLoading = c; }, SAMPLES.ooo(), renderOoo));
+  }
+  if (!ooo) return fillCard("ooo", oooError ? `<div class="error">${esc(oooError.message)}</div>` : skeleton(3));
+  const views = [["today", "Today"], ["tomorrow", "Tomorrow"], ["upcoming", "Upcoming"], ["pick", "Pick dates"]];
+  const seg = `<div class="segmented small" role="group" aria-label="When">${views.map(([v, label]) => `<button type="button" data-ooo-view="${v}" aria-pressed="${oooView === v}">${label}</button>`).join("")}</div>`;
+  const range = oooRange(oooView);
+  const pick = oooView === "pick"
+    ? `<div class="ooo-pick"><input type="date" data-ooo-from value="${range.from}" aria-label="From"><span>to</span><input type="date" data-ooo-to value="${range.to}" aria-label="To"></div>` : "";
+  const hasTeam = ooo.teamSize > 0;
+  const who = hasTeam
+    ? `<div class="segmented small" role="group" aria-label="Who">${[["team", "My team"], ["all", "Everyone"]].map(([v, label]) => `<button type="button" data-ooo-who="${v}" aria-pressed="${oooWho === v}">${label}</button>`).join("")}</div>` : "";
+  const single = range.from === range.to;
+  // Holidays are a country's or office's ("PH", "US PURE"), so they show for everyone, on their own line.
+  const holidays = ooo.out.filter((l) => l.holiday);
+  const hol = holidays.length
+    ? `<div class="ooo-holiday"><span class="flag" aria-hidden="true">${HOLIDAY_ICON}</span><span><b>Holiday</b><span class="sub">${esc([...new Set(holidays.map((h) => h.name))].join(", "))}${single ? "" : ` · ${esc(leaveDates(holidays[0], single))}`}</span></span></div>` : "";
+  const rows = ooo.out.filter((l) => !l.holiday && (!hasTeam || oooWho === "all" || l.onTeam))
+    .sort((a, b) => a.from.localeCompare(b.from) || a.name.localeCompare(b.name));
+  const list = hol + (rows.length
+    ? rows.map((l) => `<div class="person"><span class="face">${esc(l.name.charAt(0).toUpperCase())}</span><span><b>${esc(l.name)}</b>`
+      + `<span class="sub">${oooLeaveLine(l, single)}</span></span></div>`).join("")
+    : emptyHtml("ooo", hasTeam && oooWho === "team" ? "Nobody on your team is out." : "Nobody is out."));
+  const fresh = settings.oooNew && hasTeam && ooo.unknown.length
+    ? `<div class="ooo-new">New in the tracker: ${esc(ooo.unknown.slice(0, 3).join(", "))}${ooo.unknown.length > 3 ? ` and ${ooo.unknown.length - 3} more` : ""}. <button class="linkbtn" type="button" data-ooo-manage>Add to your team?</button></div>` : "";
+  const teamOut = new Set(ooo.out.filter((l) => l.onTeam).map((l) => l.person)).size;
+  const note = hasTeam ? `${teamOut} of ${ooo.teamSize} out` : `<button class="linkbtn" type="button" data-ooo-manage>Pick your team</button>`;
+  const err = oooError ? `<div class="error">${esc(oooError.message)} Showing the last list.</div>` : "";
+  fillCard("ooo", `${err}<div class="ooo-tools">${seg}${who}</div>${pick}<div class="ooo-list">${list}</div>${fresh}`
+    + footHtml(ooo.fetchedAt, oooLoading, `${note}${hasTeam ? ` · <button class="linkbtn" type="button" data-ooo-manage>Manage team</button>` : ""}`));
+  $("ooo-body")?.querySelectorAll('input[type="date"]').forEach((el) => window.FelixPickers?.enhance(el));
+}
+
+/**
+ * Loads who's out for the view on screen.
+ * @param {boolean} [fresh] Skip the server's cache (5 minutes, unless Settings says otherwise).
+ */
+async function loadOoo(fresh = false) {
+  oooLoading = true;
+  renderOoo();
+  const { from, to } = oooRange(oooView);
+  try {
+    ooo = await fetchJson(`/api/ooo?${new URLSearchParams({ from, to, ...(fresh ? { fresh: "1" } : {}) })}`);
+    oooError = null;
+    saveCache(OOO_CACHE, ooo);
+  } catch (e) {
+    oooError = { message: e.message || String(e), code: e.code };
+    if (["no-client", "not-connected"].includes(e.code)) ooo = null;
+  } finally {
+    oooLoading = false;
+    renderOoo();
+  }
+}
+
+$("grid").addEventListener("click", (e) => {
+  const view = e.target.closest("[data-ooo-view]")?.dataset.oooView;
+  if (view) {
+    oooView = view;
+    saveCache(OOO_VIEW_KEY, view);
+    if (view === "pick" && !oooPick) oooPick = oooRange("today");
+    return loadOoo();
+  }
+  const who = e.target.closest("[data-ooo-who]")?.dataset.oooWho;
+  if (who) {
+    oooWho = who;
+    saveCache(OOO_WHO_KEY, who);
+    return renderOoo();
+  }
+  if (e.target.closest("[data-ooo-manage]")) openTeamDialog();
+});
+$("grid").addEventListener("change", (e) => {
+  if (!e.target.matches("[data-ooo-from], [data-ooo-to]")) return;
+  const from = $("grid").querySelector("[data-ooo-from]")?.value;
+  const to = $("grid").querySelector("[data-ooo-to]")?.value;
+  if (from && to) {
+    oooPick = from <= to ? { from, to } : { from: to, to: from };
+    loadOoo();
+  }
+});
+
+/**
+ * Manage team: a checklist of everyone the tracker has named in the past year. Tick who's on your team; search to
+ * find someone; Edit a person to rename them or add the other ways the tracker writes their name.
+ */
+async function openTeamDialog() {
+  const dlg = document.createElement("dialog");
+  dlg.className = "team-dlg";
+  dlg.innerHTML = `<form method="dialog"><div class="team-head"><b>Your team</b>`
+    + `<span class="sub">Tick the people on your team. Team out of office shows them first and counts who's out.</span>`
+    + `<input class="field team-search" type="search" placeholder="Search people" aria-label="Search people" autocomplete="off"></div>`
+    + `<div class="team-list">${skeleton(5)}</div><p class="setup-error" role="alert" hidden></p>`
+    + `<div class="team-foot"><span class="team-count"></span><span class="spacer"></span><button class="mini" value="cancel" formnovalidate>Cancel</button><button class="mini primary" value="save" data-team-save>Save</button></div></form>`;
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.showModal();
+  const listEl = dlg.querySelector(".team-list");
+  const count = () => { dlg.querySelector(".team-count").textContent = `${people.filter((p) => p.onTeam).length} on your team`; };
+  let people = [];
+  try {
+    people = (await fetchJson("/api/team/roster")).people;
+  } catch (e) {
+    listEl.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    return;
+  }
+  const others = (p) => p.nicknames.filter((k) => k.toLowerCase() !== p.name.toLowerCase());
+  const rowHtml = (p, i) => `<div class="team-row" data-i="${i}" data-find="${esc([p.name, ...p.nicknames].join(" ").toLowerCase())}">`
+    + `<label class="team-pick"><input class="fx-check" type="checkbox" data-k="onTeam"${p.onTeam ? " checked" : ""}><span class="face">${esc(p.name.charAt(0).toUpperCase())}</span>`
+    + `<span class="who"><b>${esc(p.name)}</b>${others(p).length ? `<span class="sub">Also ${esc(others(p).join(", "))}</span>` : ""}</span></label>`
+    + `<button type="button" class="team-edit" data-team-edit aria-label="Edit ${esc(p.name)}" title="Rename, or add other ways the tracker writes this name">`
+    + `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>`
+    + `<div class="team-fields" hidden><label class="setup-field"><span>Name</span><input class="field" type="text" data-k="name" value="${esc(p.name)}"></label>`
+    + `<label class="setup-field"><span>Also written as</span><input class="field" type="text" data-k="nicknames" value="${esc(others(p).join(", "))}" placeholder="Separate with commas"></label></div></div>`;
+  listEl.innerHTML = people.map(rowHtml).join("") || `<p class="sub">The tracker has no names from the past year.</p>`;
+  count();
+  listEl.addEventListener("change", (e) => {
+    const p = people[Number(e.target.closest("[data-i]")?.dataset.i)];
+    if (p && e.target.dataset.k === "onTeam") { p.onTeam = e.target.checked; count(); }
+  });
+  listEl.addEventListener("click", (e) => {
+    const edit = e.target.closest("[data-team-edit]");
+    if (!edit) return;
+    const fields = edit.parentElement.querySelector(".team-fields");
+    fields.hidden = !fields.hidden;
+    edit.classList.toggle("on", !fields.hidden);
+    if (!fields.hidden) fields.querySelector("input").focus();
+  });
+  dlg.querySelector(".team-search").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    for (const row of listEl.querySelectorAll(".team-row")) {
+      row.hidden = Boolean(q) && !row.dataset.find.includes(q);
+      if (!row.hidden) shown += 1;
+    }
+    listEl.querySelector(".team-none")?.remove();
+    if (!shown) listEl.insertAdjacentHTML("beforeend", `<p class="sub team-none">Nobody called "${esc(e.target.value.trim())}".</p>`);
+  });
+  dlg.querySelector("[data-team-save]").addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    for (const row of listEl.querySelectorAll(".team-row")) {
+      const p = people[Number(row.dataset.i)];
+      const name = row.querySelector('[data-k="name"]').value.trim();
+      const more = row.querySelector('[data-k="nicknames"]').value.split(",").map((k) => k.trim()).filter(Boolean);
+      // The tracker's own spelling of the old name stays, so renaming someone doesn't lose their leave.
+      p.nicknames = [...new Set([...(name && name !== p.name ? [p.name] : []), ...p.nicknames.filter((k) => k.toLowerCase() === p.name.toLowerCase()), ...more])];
+      if (name) p.name = name;
+    }
+    try {
+      await window.FelixShell.request("/api/team", { people });
+      dlg.close();
+      loadOoo(true);
+    } catch (e) {
+      const err = dlg.querySelector(".setup-error");
+      err.textContent = e.message;
+      err.hidden = false;
+    }
+  });
+}
+
+// ---------- Tasks ----------
+// One task manager for both modes: the Work card holds work tasks, the Personal card personal ones (kept apart by
+// scope in data/tasks.db).
+const TASK_CARDS = {
+  tasks: { scope: "work", setting: "tasksView", hints: [
+    "Add a task: Review fm#12247 tomorrow 3pm !high #review",
+    "Add a task: Reply to Brian about PMHUB-32049 today",
+    "Add a task: Prep the sprint demo Thursday 10am #sprint",
+    "Add a task: Update the on-call notes every Monday",
+  ] },
+  ptasks: { scope: "personal", setting: "ptasksView", hints: [
+    "Add a task: Buy a gift for Mom Saturday !high #family",
+    "Add a task: Pay the electricity bill Nov 5 #bills",
+    "Add a task: Call Lola tonight #family",
+    "Add a task: Book the dentist next week #health",
+    "Add a task: Water the plants every day #home",
+  ] },
+};
+
+/**
+ * The views a Tasks card offers: Today always, the others as Settings says (Overdue on the Work card only, at first).
+ * @param {string} id "tasks" or "ptasks"
+ * @returns {string[]}
+ */
+function taskViews(id) {
+  const overdue = settings.tasksOverdue === "both" || (settings.tasksOverdue === "work" && id === "tasks");
+  return ["today", settings.tasksUpcoming && "upcoming", overdue && "overdue", settings.tasksSomeday && "someday", settings.tasksDone && "done"].filter(Boolean);
+}
+
+/**
+ * The view a Tasks card opens on: the one Settings names, or the one picked last; Today when that view is turned off.
+ * @param {string} id
+ * @returns {string}
+ */
+function openingView(id) {
+  const set = settings[TASK_CARDS[id].setting];
+  const view = set === "last" ? readCache(`felix:tasks-view:${TASK_CARDS[id].scope}`) || "today" : set;
+  return taskViews(id).includes(view) ? view : "today";
+}
+const VIEW_LABELS = { today: "Today", upcoming: "Upcoming", overdue: "Overdue", someday: "Someday", done: "Done" };
+const PRIORITY_NAMES = ["None", "Low", "Medium", "High"];
+const REPEATS = ["", "every day", "every weekday", "every week", "every sprint", "every month"];
+/** @type {Record<string, { data: any, view: string, tag: string, project?: string, error: string, loading: boolean }>} */
+const taskState = Object.fromEntries(Object.entries(TASK_CARDS).map(([id, c]) => [id, {
+  data: readCache(`felix:tasks:${c.scope}`), view: openingView(id), tag: "", error: "", loading: false,
+}]));
+
+/**
+ * When a task is due, said the short way: its time today, "Overdue", "Tomorrow", a weekday this week, else a date.
+ * @param {{ dueDate: string | null, dueTime: string | null, someday: boolean, doneAt: string | null }} t
+ * @param {string} today YYYY-MM-DD
+ * @returns {{ text: string, late: boolean }}
+ */
+function dueText(t, today) {
+  if (t.doneAt) return { text: "Done", late: false };
+  if (t.someday) return { text: "Someday", late: false };
+  if (!t.dueDate) return { text: "", late: false };
+  const at = new Date(`${t.dueDate}T${t.dueTime || "12:00"}:00`);
+  const time = t.dueTime ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  if (t.dueDate < today) return { text: "Overdue", late: true };
+  if (t.dueDate === today) return { text: time || "Today", late: Boolean(t.dueTime) && at.getTime() < Date.now() };
+  const days = Math.round((Date.parse(`${t.dueDate}T12:00:00`) - Date.parse(`${today}T12:00:00`)) / 86400e3);
+  if (days === 1) return { text: "Tomorrow", late: false };
+  if (days < 7) return { text: at.toLocaleDateString([], { weekday: "short" }), late: false };
+  if (days < 14 && at.getDay() === 1) return { text: "Next week", late: false };
+  return { text: at.toLocaleDateString([], { month: "short", day: "numeric" }), late: false };
+}
+
+/**
+ * One task row: tick box, name (a red dot when high priority), its links, the first label, and when it's due.
+ * @param {any} t
+ * @param {string} today
+ * @param {boolean} draggable
+ * @returns {string}
+ */
+function taskRowHtml(t, today, draggable) {
+  const due = dueText(t, today);
+  const cls = [t.doneAt ? "done" : "", t.priority === 3 && !t.doneAt ? "high" : "", due.late ? "late" : ""].filter(Boolean).join(" ");
+  const subs = settings.tasksSubs && t.subtasks?.length ? `<span class="task-subs" title="Subtasks done">${t.subtasks.filter((s) => s.doneAt).length}/${t.subtasks.length}</span>` : "";
+  const links = (t.links || []).slice(0, settings.tasksLinks).map((l) => `<a class="task-link" href="${esc(l.url)}" target="_blank" rel="noopener" title="Open ${esc(l.label)}">${esc(l.label)}</a>`).join("");
+  // The first label, and "+N" for the rest: hovering shows them all, and any one of them filters the list.
+  const more = t.tags?.length > 1;
+  const tag = settings.tasksLabels && t.tags?.length
+    ? `<span class="task-tags"${more ? ` data-many data-tags="${esc(t.tags.join(","))}"` : ""}><button type="button" class="tag" data-task-tag="${esc(t.tags[0])}" title="Show only #${esc(t.tags[0])}">#${esc(t.tags[0])}</button>`
+      + `${more ? `<button type="button" class="tag more" data-tag-more aria-haspopup="menu" aria-label="All labels: ${esc(t.tags.map((x) => `#${x}`).join(", "))}">+${t.tags.length - 1}</button>` : ""}</span>` : "";
+  const project = t.project ? `<button type="button" class="task-project" data-task-project="${esc(t.project)}" title="Show only ${esc(t.project)}">${FOLDER_ICON}<span>${esc(t.project)}</span></button>` : "";
+  const repeat = settings.tasksRepeat && t.repeat ? `<span class="task-repeat" title="Repeats ${esc(t.repeat)}">↻</span>` : "";
+  return `<div class="task ${cls}" data-task="${esc(t.id)}"${draggable && settings.tasksDrag && !t.doneAt ? ` draggable="true"` : ""}>`
+    + `<button type="button" class="box" role="checkbox" aria-checked="${Boolean(t.doneAt)}" aria-label="${t.doneAt ? "Mark not done" : "Mark done"}: ${esc(t.title)}" data-task-done></button>`
+    + `<button type="button" class="title" data-task-open title="${esc(t.notes ? `${t.title}\n\n${t.notes}` : t.title)}">${esc(t.title)}</button>`
+    + `${repeat}${subs}${links}${project}${tag}<span class="due">${esc(due.text)}</span></div>`;
+}
+
+const FOLDER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>`;
+
+// The label popover: every label of a task, shown while you hover its labels (or click "+N"). It lives outside the
+// card so the card's edge never cuts it off.
+let tagPop = null;
+let tagPopTimer = 0;
+
+/**
+ * Shows a task's labels under its label chips.
+ * @param {HTMLElement} group The row's .task-tags.
+ */
+function showTagPop(group) {
+  clearTimeout(tagPopTimer);
+  if (tagPop?.group === group) return;
+  hideTagPop();
+  const id = taskCardOf(group);
+  const active = taskState[id]?.tag;
+  const pop = document.createElement("div");
+  pop.className = "dd-menu tag-pop";
+  pop.setAttribute("role", "menu");
+  pop.innerHTML = `<div class="tag-pop-head">Show only</div>${group.dataset.tags.split(",").map((t) => `<button type="button" class="dd-item" role="menuitem" data-pop-tag="${esc(t)}"${t === active ? ' aria-selected="true"' : ""}>`
+    + `<span class="dd-check">${t === active ? window.FelixDropdown?.ICONS.check || "" : ""}</span>#${esc(t)}</button>`).join("")}`;
+  document.body.append(pop);
+  const r = group.getBoundingClientRect();
+  pop.style.top = `${Math.round(innerHeight - r.bottom > pop.offsetHeight + 8 ? r.bottom + 4 : r.top - pop.offsetHeight - 4)}px`;
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.right - pop.offsetWidth, innerWidth - pop.offsetWidth - 8)))}px`;
+  pop.addEventListener("mouseenter", () => clearTimeout(tagPopTimer));
+  pop.addEventListener("mouseleave", () => { tagPopTimer = setTimeout(hideTagPop, 180); });
+  pop.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pop-tag]");
+    if (!b || !taskState[id]) return;
+    taskState[id].tag = b.dataset.popTag;
+    hideTagPop();
+    loadTasks(id);
+  });
+  tagPop = { pop, group };
+}
+
+/** Hides the label popover. */
+function hideTagPop() {
+  clearTimeout(tagPopTimer);
+  tagPop?.pop.remove();
+  tagPop = null;
+}
+
+$("grid").addEventListener("mouseover", (e) => {
+  const group = e.target.closest?.(".task-tags[data-many]");
+  if (group) showTagPop(group);
+});
+$("grid").addEventListener("mouseout", (e) => {
+  const group = e.target.closest?.(".task-tags[data-many]");
+  if (group && !group.contains(e.relatedTarget) && !tagPop?.pop.contains(e.relatedTarget)) tagPopTimer = setTimeout(hideTagPop, 180);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTagPop(); });
+addEventListener("scroll", hideTagPop, true);
+
+/**
+ * Draws a Tasks card. The add box is drawn once and kept, so typing isn't lost when the list redraws.
+ * @param {string} id "tasks" or "ptasks"
+ */
+function renderTasks(id) {
+  const body = $(`${id}-body`);
+  if (!body) return;
+  const card = TASK_CARDS[id];
+  const st = taskState[id];
+  if (!body.querySelector(".task-add")) {
+    body.innerHTML = `<form class="task-add" data-task-add autocomplete="off"><span aria-hidden="true">+</span>`
+      + `<input name="text" maxlength="500" placeholder="${esc(card.hints[0])}" aria-label="Add a task. Words like tomorrow 3pm, !high and #label are read."></form>`
+      + `<div class="task-tools"></div><div class="task-list"></div><div class="task-foot"></div>`;
+  }
+  const d = st.data;
+  const views = taskViews(id).map((v) => {
+    const n = d?.counts?.[v];
+    const count = n ? `<span class="n${v === "overdue" ? " bad" : ""}">${n}</span>` : "";
+    return `<button type="button" class="chip${st.view === v ? " on" : ""}" data-task-view="${v}" aria-pressed="${st.view === v}">${VIEW_LABELS[v]}${count}</button>`;
+  }).join("");
+  const filter = (st.tag ? `<button type="button" class="chip on tagged" data-task-tag="" title="Show every label">#${esc(st.tag)} ×</button>` : "")
+    + (st.project ? `<button type="button" class="chip on tagged" data-task-project="" title="Show every project">${esc(st.project)} ×</button>` : "");
+  body.querySelector(".task-tools").innerHTML = `<div class="chips">${views}${filter}</div>`;
+  const list = body.querySelector(".task-list");
+  if (!d) list.innerHTML = st.error ? `<div class="error">${esc(st.error)}</div>` : skeleton(4);
+  else {
+    const empty = { today: "Nothing due today. Add one above.", upcoming: "Nothing coming up.", overdue: "Nothing overdue.", someday: "Nothing set for someday.", done: "Nothing done yet." }[st.view];
+    list.innerHTML = (st.error ? `<div class="error">${esc(st.error)}</div>` : "")
+      + (d.tasks.length ? d.tasks.map((t) => taskRowHtml(t, d.today, st.view === "today" && !st.tag && !st.project)).join("")
+        : emptyHtml(st.tag || st.project ? "search" : st.view, st.tag || st.project ? `No ${st.tag ? `#${esc(st.tag)} ` : ""}tasks${st.project ? ` in ${esc(st.project)}` : ""} here.` : empty));
+  }
+  // Tasks live on this Mac and don't sync, so the foot just says where they're kept, on the right; no "Updated".
+  body.querySelector(".task-foot").innerHTML = d ? `<div class="card-foot"><span></span><span>${card.scope === "personal" ? "Kept apart from work tasks" : "Saved on this Mac"}</span></div>` : "";
+}
+
+/**
+ * Loads a Tasks card's view.
+ * @param {string} id
+ */
+async function loadTasks(id) {
+  const st = taskState[id];
+  const { scope } = TASK_CARDS[id];
+  st.loading = true;
+  renderTasks(id);
+  try {
+    st.data = await fetchJson(`/api/tasks?${new URLSearchParams({ scope, view: st.view, ...(st.tag ? { tag: st.tag } : {}), ...(st.project ? { project: st.project } : {}) })}`);
+    st.error = "";
+    if (!st.tag && !st.project) saveCache(`felix:tasks:${scope}`, st.data);
+  } catch (e) {
+    st.error = e.message;
+  } finally {
+    st.loading = false;
+    renderTasks(id);
+  }
+}
+
+// ---------- Felix (Personal) ----------
+
+/**
+ * Draws the Felix card: the first check-in waiting (a dated thing you told him about whose day has passed), or why
+ * there's none right now.
+ * @param {{ checkins?: Array<{ id: string, followUp: string, saidAt: string, quote: string }>, quiet?: boolean, off?: boolean, error?: string }} d
+ */
+function renderBuddy(d) {
+  const body = $("buddy-body");
+  if (!body) return;
+  const [first] = d.checkins || [];
+  if (first) {
+    const day = new Date(first.saidAt).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+    const more = d.checkins.length > 1 ? ` · ${d.checkins.length - 1} more after this` : "";
+    body.innerHTML = `<div class="checkin"><div class="bubble">${esc(first.followUp)}</div>`
+      + `<div class="sub">You told me on ${esc(day)}: “${esc(first.quote)}”${esc(more)}</div>`
+      + `<div class="acts"><button class="yes" type="button" data-checkin="${esc(first.id)}" data-text="${esc(first.followUp)}">Tell Felix</button>`
+      + `<button type="button" data-checkin-skip="${esc(first.id)}">Not now</button></div></div>`;
+    return;
+  }
+  const why = d.error ? `Couldn't check: ${d.error}` : d.off ? "Friend mode is off in Settings." : d.quiet ? "Quiet hours. Felix won't bring things up until they end."
+    : "Nothing to check in on. When you tell Felix about something coming up, he asks how it went once it's passed.";
+  body.innerHTML = `<p class="sub">${esc(why)}</p>`;
+}
+
+/** The Felix card's next look, on the hour. @type {ReturnType<typeof setTimeout> | undefined} */
+let buddyTimer;
+
+/**
+ * Loads the Felix card's check-ins.
+ * @returns {Promise<void>}
+ */
+async function loadBuddy() {
+  try {
+    renderBuddy(await fetchJson("/api/felix/checkins"));
+  } catch (e) {
+    renderBuddy({ error: e.message });
+  }
+  // Quiet hours start and end on the hour: the card looks again then, so it follows the clock.
+  clearTimeout(buddyTimer);
+  const next = new Date();
+  next.setHours(next.getHours() + 1, 0, 1, 0);
+  buddyTimer = setTimeout(() => { if (settings.mode !== "work") loadBuddy(); }, next - Date.now());
+}
+
+$("grid").addEventListener("click", async (e) => {
+  const go = e.target.closest("[data-checkin]");
+  const skip = e.target.closest("[data-checkin-skip]");
+  if (go) {
+    await window.FelixBuddy?.checkIn({ id: go.dataset.checkin, text: go.dataset.text });
+    loadBuddy();
+  }
+  if (skip) {
+    await FelixShell.request("/api/felix/checkins/done", { id: skip.dataset.checkinSkip }).catch(() => {});
+    loadBuddy();
+  }
+});
+
+// Felix added or ticked off a task from the chat: load the Tasks card that's showing.
+new BroadcastChannel("felix-tasks").addEventListener("message", () => loadTasks(settings.mode === "personal" ? "ptasks" : "tasks"));
+
+// The add box's example changes every few seconds while it's empty and you're not typing in it.
+let hintAt = 0;
+setInterval(() => {
+  hintAt += 1;
+  for (const [id, card] of Object.entries(TASK_CARDS)) {
+    const input = $(`${id}-body`)?.querySelector(".task-add input");
+    if (input && !input.value && document.activeElement !== input) input.placeholder = card.hints[hintAt % card.hints.length];
+  }
+}, 6000);
+
+/** The Tasks card a click or key landed in. */
+const taskCardOf = (el) => el.closest("#tasks, #ptasks")?.id;
+
+$("grid").addEventListener("submit", async (e) => {
+  const form = e.target.closest("[data-task-add]");
+  if (!form) return;
+  e.preventDefault();
+  const id = taskCardOf(form);
+  const input = form.elements.text;
+  const text = input.value.trim();
+  if (!text) return;
+  input.disabled = true;
+  try {
+    await window.FelixShell.request("/api/tasks", { text, scope: TASK_CARDS[id].scope });
+    input.value = "";
+    await loadTasks(id);
+  } catch (err) {
+    taskState[id].error = err.message;
+    renderTasks(id);
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+});
+
+$("grid").addEventListener("click", async (e) => {
+  const id = taskCardOf(e.target);
+  if (!id) return;
+  const st = taskState[id];
+  const view = e.target.closest("[data-task-view]")?.dataset.taskView;
+  if (view) {
+    st.view = view;
+    saveCache(`felix:tasks-view:${TASK_CARDS[id].scope}`, view);
+    return loadTasks(id);
+  }
+  const tagBtn = e.target.closest("[data-task-tag]");
+  if (tagBtn) {
+    st.tag = tagBtn.dataset.taskTag;
+    hideTagPop();
+    return loadTasks(id);
+  }
+  const more = e.target.closest("[data-tag-more]");
+  if (more) return tagPop?.group === more.parentElement ? hideTagPop() : showTagPop(more.parentElement);
+  const projectBtn = e.target.closest("[data-task-project]");
+  if (projectBtn) {
+    st.project = projectBtn.dataset.taskProject;
+    return loadTasks(id);
+  }
+  const row = e.target.closest("[data-task]");
+  if (!row) return;
+  const task = st.data?.tasks.find((t) => t.id === row.dataset.task);
+  if (e.target.closest("[data-task-done]") && task) {
+    row.classList.toggle("done", !task.doneAt);
+    try {
+      await window.FelixShell.request(`/api/tasks/${encodeURIComponent(task.id)}`, { patch: { done: !task.doneAt } });
+    } catch (err) {
+      st.error = err.message;
+    }
+    return loadTasks(id);
+  }
+  if (e.target.closest("[data-task-open]") && task) openTaskDialog(id, task.id);
+});
+
+// Drag to reorder, in Today.
+let draggingTask = null;
+$("grid").addEventListener("dragstart", (e) => {
+  const row = e.target.closest?.("[data-task][draggable]");
+  if (!row) return;
+  draggingTask = row;
+  row.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+});
+$("grid").addEventListener("dragover", (e) => {
+  const row = e.target.closest?.("[data-task]");
+  if (!draggingTask || !row || row === draggingTask || row.parentElement !== draggingTask.parentElement) return;
+  e.preventDefault();
+  const r = row.getBoundingClientRect();
+  row.parentElement.insertBefore(draggingTask, e.clientY < r.top + r.height / 2 ? row : row.nextSibling);
+});
+$("grid").addEventListener("dragend", async () => {
+  if (!draggingTask) return;
+  const list = draggingTask.parentElement;
+  const id = taskCardOf(list);
+  draggingTask.classList.remove("dragging");
+  draggingTask = null;
+  const ids = [...list.querySelectorAll("[data-task]")].map((r) => r.dataset.task);
+  try { await window.FelixShell.request("/api/tasks/reorder", { ids }); } catch {}
+  loadTasks(id);
+});
+
+/**
+ * What you typed for a task's link: a web link, a PR like fm#123 or bm#45, or a Jira ticket like PMHUB-123.
+ * @param {string} text
+ * @returns {{ kind: string, url: string, label: string } | null}
+ */
+function linkFor(text) {
+  const t = String(text || "").trim();
+  const pr = /^(fm|bm)\s*#\s*(\d{1,7})$/i.exec(t);
+  if (pr) return { kind: "pr", url: `https://github.com/purepm/${pr[1].toLowerCase() === "fm" ? "frontend" : "backend"}-monorepo/pull/${pr[2]}`, label: `${pr[1].toLowerCase()}#${pr[2]}` };
+  const ticket = /^([A-Z][A-Z0-9]{1,9}-\d{1,7})$/i.exec(t);
+  if (ticket) return { kind: "jira", url: `https://purepm.atlassian.net/browse/${ticket[1].toUpperCase()}`, label: ticket[1].toUpperCase() };
+  try {
+    const u = new URL(t);
+    return /^https?:$/.test(u.protocol) ? { kind: "url", url: u.href, label: u.hostname.replace(/^www\./, "") } : null;
+  } catch { return null; }
+}
+
+/**
+ * A task's details: name, notes, due day and time, priority, repeat, labels, project, links and subtasks; Save,
+ * Delete, or Esc to close.
+ * @param {string} cardId
+ * @param {string} taskId
+ */
+function openTaskDialog(cardId, taskId) {
+  const task = taskState[cardId].data.tasks.find((t) => t.id === taskId);
+  const dlg = document.createElement("dialog");
+  dlg.className = "team-dlg task-dlg";
+  const opt = (list, value, label = (v) => v) => list.map((v, i) => `<option value="${esc(String(typeof v === "number" ? i : v))}"${String(value) === String(typeof v === "number" ? i : v) ? " selected" : ""}>${esc(label(v, i))}</option>`).join("");
+  const repeats = REPEATS.includes(task.repeat || "") ? REPEATS : [...REPEATS, task.repeat];
+  dlg.innerHTML = `<form method="dialog" class="form">`
+    + `<div class="team-head"><textarea class="task-name" name="title" rows="1" maxlength="500" aria-label="Task name" required>${esc(task.title)}</textarea></div>`
+    + `<div class="team-list task-fields">`
+    + `<label class="setup-field"><span>Notes</span><textarea class="field" name="notes" rows="3" placeholder="Anything to remember about it">${esc(task.notes)}</textarea></label>`
+    + `<div class="task-grid"><div class="setup-field"><span>Due</span><input type="date" name="dueDate" value="${esc(task.dueDate || "")}" aria-label="Due" data-empty="No due day"></div>`
+    + `<div class="setup-field"><span>Time</span><input type="time" name="dueTime" value="${esc(task.dueTime || "")}" aria-label="Time"></div>`
+    + `<div class="setup-field"><span>Priority</span><select name="priority" aria-label="Priority">${PRIORITY_NAMES.map((n, i) => `<option value="${i}"${task.priority === i ? " selected" : ""}>${n}</option>`).join("")}</select></div>`
+    + `<div class="setup-field"><span>Repeat</span><select name="repeat" aria-label="Repeat">${opt(repeats, task.repeat || "", (v) => v ? v.charAt(0).toUpperCase() + v.slice(1) : "Doesn't repeat")}</select></div></div>`
+    + `<label class="setup-field"><span>Labels</span><input class="field" name="tags" value="${esc(task.tags.join(", "))}" placeholder="review, sprint"></label>`
+    + `<label class="setup-field"><span>Project</span><input class="field" name="project" value="${esc(task.project || "")}" list="task-projects" placeholder="None"><datalist id="task-projects">${(taskState[cardId].data.projects || []).map((p) => `<option value="${esc(p)}">`).join("")}</datalist></label>`
+    + `<label class="check-line"><input class="fx-check" type="checkbox" name="someday"${task.someday ? " checked" : ""}> Someday (no due day)</label>`
+    + `<div class="setup-field"><span>Links</span><div class="task-links" data-links></div>`
+    + `<input class="field" name="newLink" placeholder="Paste a link, fm#123 or PMHUB-123, then press Enter" aria-label="Add a link"></div>`
+    + `<div class="setup-field"><span>Subtasks</span><div class="task-subtasks">${task.subtasks.map((s) => `<label class="check-line"><input class="fx-check" type="checkbox" data-sub="${esc(s.id)}"${s.doneAt ? " checked" : ""}> ${esc(s.title)}</label>`).join("")}`
+    + `<input class="field" name="newSub" placeholder="Add a subtask and press Enter" maxlength="300"></div></div>`
+    + `</div><p class="setup-error" role="alert" hidden></p>`
+    + `<div class="team-foot"><button class="mini danger" type="button" data-task-delete>Delete</button><span class="spacer"></span><button class="mini" value="cancel" formnovalidate>Cancel</button><button class="mini primary" value="save" data-task-save>Save</button></div></form>`;
+  document.body.append(dlg);
+  dlg.addEventListener("close", () => { dlg.remove(); loadTasks(cardId); });
+  dlg.showModal();
+  const f = dlg.querySelector("form").elements;
+  // The name is one line of text that wraps: as tall as it needs, and Enter saves rather than starting a new line.
+  const fit = () => { f.title.style.height = "auto"; f.title.style.height = `${f.title.scrollHeight}px`; };
+  f.title.addEventListener("input", () => {
+    if (/\n/.test(f.title.value)) f.title.value = f.title.value.replace(/\s*\n\s*/g, " ");
+    fit();
+  });
+  f.title.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+    e.preventDefault();
+    dlg.querySelector("[data-task-save]")?.click();
+  });
+  fit();
+  const fail = (err) => { const p = dlg.querySelector(".setup-error"); p.textContent = err.message; p.hidden = false; };
+  const path = `/api/tasks/${encodeURIComponent(task.id)}`;
+  dlg.querySelectorAll("select").forEach((el) => window.FelixDropdown?.enhance(el));
+  dlg.querySelectorAll('input[type="date"], input[type="time"]').forEach((el) => window.FelixPickers?.enhance(el));
+
+  // Links: each one a chip you can remove; paste a link, fm#123 or PMHUB-123 and press Enter to add one.
+  let links = task.links.map((l) => ({ ...l }));
+  const drawLinks = () => {
+    dlg.querySelector("[data-links]").innerHTML = links.map((l, i) => `<span class="link-chip"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+      + `<button type="button" data-unlink="${i}" aria-label="Remove ${esc(l.label)}">×</button></span>`).join("");
+  };
+  drawLinks();
+  dlg.querySelector("[data-links]").addEventListener("click", (e) => {
+    const x = e.target.closest("[data-unlink]");
+    if (!x) return;
+    links.splice(Number(x.dataset.unlink), 1);
+    drawLinks();
+  });
+  f.newLink.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const link = linkFor(f.newLink.value);
+    if (!link) return fail(new Error("That isn't a link, a PR like fm#123, or a ticket like PMHUB-123."));
+    dlg.querySelector(".setup-error").hidden = true;
+    if (!links.some((l) => l.url === link.url)) links.push(link);
+    f.newLink.value = "";
+    drawLinks();
+  });
+
+  dlg.querySelector(".task-subtasks").addEventListener("change", async (e) => {
+    const sub = e.target.dataset.sub;
+    if (sub) await window.FelixShell.request(`/api/tasks/${encodeURIComponent(sub)}`, { patch: { done: e.target.checked } }).catch(fail);
+  });
+  f.newSub.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const text = f.newSub.value.trim();
+    if (!text) return;
+    try {
+      const { task: s } = await window.FelixShell.request("/api/tasks", { text, parentId: task.id });
+      f.newSub.insertAdjacentHTML("beforebegin", `<label class="check-line"><input type="checkbox" data-sub="${esc(s.id)}"> ${esc(s.title)}</label>`);
+      f.newSub.value = "";
+    } catch (err) { fail(err); }
+  });
+  dlg.querySelector("[data-task-delete]").addEventListener("click", async () => {
+    const yes = await window.FelixShell.confirm({
+      title: `Delete "${task.title}"?`,
+      text: task.subtasks.length ? `Its ${task.subtasks.length === 1 ? "subtask goes" : `${task.subtasks.length} subtasks go`} too. This can't be undone.` : "This can't be undone.",
+      confirm: "Delete", danger: true,
+    });
+    if (!yes) return;
+    try { await window.FelixShell.request(`${path}/delete`, {}); dlg.close(); } catch (err) { fail(err); }
+  });
+  dlg.querySelector("[data-task-save]").addEventListener("click", async (e) => {
+    e.preventDefault();
+    const someday = f.someday.checked;
+    const patch = {
+      title: f.title.value, notes: f.notes.value, priority: Number(f.priority.value), repeat: f.repeat.value || null,
+      tags: f.tags.value.split(",").map((t) => t.trim()).filter(Boolean), project: f.project.value.trim() || null, links,
+      ...(someday ? { someday: true } : { someday: false, dueDate: f.dueDate.value || null, dueTime: f.dueTime.value || null }),
+    };
+    try { await window.FelixShell.request(path, { patch }); dlg.close(); } catch (err) { fail(err); }
+  });
+}
+
 // ---------- Open PRs ----------
 // Same list and browser cache as the Open PRs page, so either page opens instantly after the other.
 const PR_CACHE = "open-prs:last";
 let prs = readCache(PR_CACHE);
 let prError = null;
 let prLoading = false;
-let rel = null; // /api/releases
+let rel = null;
 let relError = null;
-let relActionError = null; // a failed Approve or Merge, kept until the next action
+let relActionError = null;
 
-const COUNTS = {
-  review: [
-    { status: "needs", label: "Need your review", color: "var(--warn)", test: (p) => PrStatus.needsReview(p) },
-    { status: "new-commits", label: "New commits since your review", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
-    { status: "claude-ready", label: "AI review waiting on you", color: "var(--accent)", test: (p, r) => PrStatus.claudeState(p, r)?.id === "ready" },
-  ],
-  mine: [
-    { status: "failing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
-    { status: "conflict", label: "Merge conflicts", color: "var(--bad)", test: (p) => p.mergeable === "CONFLICTING" },
-    { status: "in-queue", label: "In merge queue", color: "var(--accent)", test: (p) => Boolean(p.inMergeQueue) },
-    { status: "ready-merge", label: "Ready to merge", color: "var(--ok)", test: (p) => PrStatus.readyToMerge(p) },
-    { status: "changes", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
-    { status: "fix-ready", label: "AI fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
-  ],
-};
+/**
+ * Each count on the card, and the setting that says when it shows: always (muted at 0), only when something needs
+ * you, or never. At first the key ones always show and the others only when there are some.
+ */
+const COUNTS = [
+  { tab: "review", status: "needs", setting: "prsNeeds", label: "Need your review", color: "var(--warn)", test: (p) => PrStatus.needsReview(p) },
+  { tab: "review", status: "new-commits", setting: "prsNewCommits", label: "New commits since your review", color: "var(--alert)", test: (p) => Boolean(p.newCommits) },
+  { tab: "review", status: "claude-ready", setting: "prsAiReview", label: "AI review waiting", color: "var(--accent)", test: (p, r) => PrStatus.claudeState(p, r)?.id === "ready" },
+  { tab: "mine", status: "ready-merge", setting: "prsReadyMerge", label: "Ready to merge", color: "var(--ok)", test: (p) => PrStatus.readyToMerge(p) },
+  { tab: "mine", status: "failing", setting: "prsFailing", label: "Checks failing", color: "var(--bad)", test: (p) => p.checks.state === "failing" },
+  { tab: "mine", status: "conflict", setting: "prsConflict", label: "Merge conflicts", color: "var(--bad)", test: (p) => p.mergeable === "CONFLICTING" },
+  { tab: "mine", status: "in-queue", setting: "prsQueue", label: "In merge queue", color: "var(--accent)", test: (p) => Boolean(p.inMergeQueue) },
+  { tab: "mine", status: "changes", setting: "prsChanges", label: "Changes requested", color: "var(--alert)", test: (p) => p.changesRequestedBy.length > 0 },
+  { tab: "mine", status: "fix-ready", setting: "prsAiFix", label: "AI fix needs you", color: "var(--warn)", test: (p, r) => PrStatus.fixState(p, r)?.id === "ready" },
+];
 
+/** Whether a repo ("fm" or "bm") is one the card shows, as Settings says. */
+const prRepoShown = (key) => settings.prsRepos === "both" || settings.prsRepos === key;
+
+/**
+ * The big "8 to review · 10 mine" numbers, then the counts worth a look, each opening the PR page filtered.
+ * @param {Record<string, object[]>} lists Every PR in each tab.
+ * @param {object} reviews
+ * @returns {string}
+ */
+function prCountsHtml(lists, reviews) {
+  // With one repo picked in Settings, the links open the page filtered to it too.
+  const repo = settings.prsRepos === "both" ? "" : `repo=${settings.prsRepos}`;
+  const total = (tab, label) => `<a href="/prs/${tab}${repo ? `?${repo}` : ""}"><span class="n">${lists[tab].length}</span><span class="t">${label}</span></a>`;
+  const rows = COUNTS.map((c) => ({ ...c, n: lists[c.tab].filter((p) => c.test(p, reviews)).length }))
+    .filter((c) => settings[c.setting] === "always" || (settings[c.setting] === "some" && c.n))
+    .map((c) => `<a class="count${c.n ? "" : " zero"}" href="/prs/${c.tab}?status=${c.status}${repo ? `&${repo}` : ""}"><span class="dot" style="background:${c.color}"></span>${esc(c.label)}<span class="n">${c.n}</span></a>`);
+  return `${settings.prsTotals ? `<div class="totals">${total("review", "to review")}${total("mine", "mine")}</div>` : ""}${rows.join("")}`;
+}
+
+/**
+ * Draws the Open PRs card from the last list.
+ */
 function renderPrs() {
-  const body = $("prs-body");
-  if (!prs?.lists) {
-    body.innerHTML = prError ? `<div class="error">${esc(prError)}</div>` : skeleton(5);
-    return;
+  if (!prs?.lists) return fillCard("prs", prError ? `<div class="error">${esc(prError)}</div>` : skeleton(5));
+  const lists = Object.fromEntries(["review", "mine"].map((tab) => [tab, prs.lists[tab].filter((r) => prRepoShown(r.key)).flatMap((r) => r.prs)]));
+  fillCard("prs", `${prError ? `<div class="error">${esc(prError)} Showing the last list.</div>` : ""}`
+    + `${prCountsHtml(lists, prs.reviews || {})}${settings.prsReleases ? releasesHtml() : ""}${footHtml(prs.fetchedAt, prLoading)}`);
+}
+
+/**
+ * A status pill, a link when it has one.
+ * @param {{ cls: string, label: string, url?: string, title?: string } | null} st
+ * @returns {string}
+ */
+function pillHtml(st) {
+  if (!st) return "";
+  const title = st.title ? ` title="${esc(st.title)}"` : "";
+  return st.url
+    ? `<a class="pill ${st.cls}" href="${esc(st.url)}" target="_blank" rel="noopener"${title}>${esc(st.label)}</a>`
+    : `<span class="pill ${st.cls}"${title}>${esc(st.label)}</span>`;
+}
+
+/**
+ * Approve and Merge for an open release PR, as it allows.
+ * @param {{ url: string, number: number, iApproved: boolean, mergeState: string, inMergeQueue: boolean }} o
+ * @returns {string}
+ */
+function releaseActsHtml(o) {
+  if (o.inMergeQueue) return "";
+  const clean = o.mergeState === "CLEAN";
+  const approve = !o.iApproved && !clean ? `<button class="mini" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">Approve</button>` : "";
+  const merge = clean ? `<button class="mini primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging deploys these packages to dev.">Merge</button>` : "";
+  return `<span class="acts">${approve}${merge}</span>`;
+}
+
+/**
+ * One repo's release line: its open release PR with status and actions, or when the last one merged.
+ * @param {{ key: string, error?: string, open?: object, last?: object, mine: object[] }} r
+ * @returns {string}
+ */
+function releaseRowHtml(r) {
+  const head = `<span class="rk">${esc(r.key)}</span>`;
+  if (r.error) return `<div class="relrow">${head}<span class="yours">Couldn't load: ${esc(r.error)}</span></div>`;
+  const o = r.open;
+  if (!o) {
+    const last = r.last ? ` · last <a class="num" href="${esc(r.last.url)}" target="_blank" rel="noopener">#${r.last.number}</a> ${ago(r.last.mergedAt)}` : "";
+    return `<div class="relrow">${head}<span class="yours">No open release${last}</span></div>`;
   }
-  const reviews = prs.reviews || {};
-  const group = (tab, title) => {
-    const list = prs.lists[tab].flatMap((r) => r.prs);
-    const rows = COUNTS[tab].map((c) => {
-      const n = list.filter((p) => c.test(p, reviews)).length;
-      return `<a class="count${n ? "" : " zero"}" href="/prs/${tab}?status=${c.status}"><span class="dot" style="background:${c.color}"></span>${esc(c.label)}<span class="n">${n}</span></a>`;
-    }).join("");
-    return `<div class="pr-group"><a class="total" href="/prs/${tab}"><span class="n">${list.length}</span><span class="t">${title}</span></a>${rows}</div>`;
-  };
-  const updated = `Updated ${ago(prs.fetchedAt)} · ${fmtTime(prs.fetchedAt)}${prLoading ? " · refreshing…" : ""}`;
-  body.innerHTML = `${prError ? `<div class="error">${esc(prError)} Showing the last list.</div>` : ""}`
-    + `<div class="stack"><div class="pr-groups">${group("review", "Needs my review")}${group("mine", "My PRs")}</div>${releasesHtml()}<div class="card-foot">${esc(updated)}</div></div>`;
+  return `<div class="relrow">${head}<a class="num" href="${esc(o.url)}" target="_blank" rel="noopener" title="${r.mine.length} of your PRs">#${o.number}</a>`
+    + `${pillHtml(PrStatus.releaseStatus(o))}${releaseActsHtml(o)}</div>`;
 }
 
-// One row per repo for its open release PR: status, how many of my PRs it ships, and Approve or Merge.
+/**
+ * The Releases section: one line per repo.
+ * @returns {string}
+ */
 function releasesHtml() {
-  if (!rel) return relError ? `<div class="rels"><span class="label">Releases</span><div class="card-foot">Couldn't load releases. ${esc(relError)}</div></div>` : "";
-  const pill = (st) => !st ? "" : st.url
-    ? `<a class="pill ${st.cls}" href="${esc(st.url)}" target="_blank" rel="noopener"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</a>`
-    : `<span class="pill ${st.cls}"${st.title ? ` title="${esc(st.title)}"` : ""}>${esc(st.label)}</span>`;
-  const devPill = (run) => !run ? "" : run.status !== "completed" ? pill({ cls: "run", label: "Dev deploying", url: run.url })
-    : pill({ cls: run.conclusion === "success" ? "ok" : "bad", label: run.conclusion === "success" ? "On dev" : `Dev ${run.conclusion}`, url: run.url });
-  const rows = rel.repos.map((r) => {
-    if (r.error) return `<div class="relrow"><span class="rk">${esc(r.key)}</span><span class="yours">Couldn't load: ${esc(r.error)}</span></div>`;
-    const o = r.open, last = r.last;
-    const acts = !o || o.inMergeQueue ? "" : `${!o.iApproved && o.mergeState !== "CLEAN" ? `<button class="mini" type="button" data-rel-approve="${esc(o.url)}" title="Approve #${o.number} on GitHub as you">Approve</button>` : ""}${o.mergeState === "CLEAN" ? `<button class="mini primary" type="button" data-rel-merge="${esc(o.url)}" title="Add #${o.number} to the merge queue. Merging deploys these packages to dev.">Merge</button>` : ""}`;
-    const openLine = o
-      ? `<span class="tag">Open</span><a class="num" href="${esc(o.url)}" target="_blank" rel="noopener">#${o.number}</a>${pill(PrStatus.releaseStatus(o))}${o.iApproved ? pill({ cls: "ok", label: "You approved" }) : ""}<span class="yours">${r.mine.length} of yours</span><span class="acts">${acts}</span>`
-      : `<span class="tag">Open</span><span class="yours">No open release</span>`;
-    const lastLine = last
-      ? `<span class="tag">Last</span><a class="num" href="${esc(last.url)}" target="_blank" rel="noopener">#${last.number}</a><span class="yours">merged ${ago(last.mergedAt)}</span>${devPill(last.dev)}${pill(PrStatus.prodStatus(last.prod, ago))}`
-      : `<span class="tag">Last</span><span class="yours">No merged release yet</span>`;
-    return `<div class="relrepo"><span class="rk">${esc(r.key)}</span><div class="lines"><div class="relrow">${openLine}</div><div class="relrow">${lastLine}</div></div></div>`;
-  }).join("");
-  return `<div class="rels"><div class="head"><span class="label">Releases</span><a href="/prs/releases">Details →</a></div>${relActionError ? `<div class="error">${esc(relActionError)}</div>` : ""}${rows}</div>`;
+  if (!rel) return relError ? `<div class="rels"><span class="label">Releases</span><span class="sub">Couldn't load releases. ${esc(relError)}</span></div>` : "";
+  return `<div class="rels"><div class="head"><span class="label">Releases</span><a href="/prs/releases">Details →</a></div>`
+    + `${relActionError ? `<div class="error">${esc(relActionError)}</div>` : ""}${rel.repos.filter((r) => prRepoShown(r.key)).map(releaseRowHtml).join("")}</div>`;
 }
 
+/**
+ * Loads the release PRs and redraws the card.
+ */
 async function loadReleases() {
   try {
-    const res = await fetch("/api/releases", { cache: "no-store" });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
-    rel = body;
+    rel = await fetchJson("/api/releases");
     relError = null;
   } catch (e) {
     relError = e.message;
@@ -409,7 +2387,13 @@ async function loadReleases() {
   renderPrs();
 }
 
-// Approve and Merge act on GitHub, so the first click only asks; a second click within 4 seconds acts.
+/**
+ * Approve or Merge a release PR. They act on GitHub, so the first click only asks; a second click within
+ * 4 seconds acts.
+ * @param {HTMLButtonElement} button
+ * @param {string} path
+ * @param {string} ask What the button says while it waits for the second click.
+ */
 async function releaseAction(button, path, ask) {
   if (!button.classList.contains("confirm")) {
     const original = button.innerHTML;
@@ -430,23 +2414,21 @@ async function releaseAction(button, path, ask) {
   await loadReleases();
 }
 
-$("prs-body").addEventListener("click", (e) => {
+$("grid").addEventListener("click", (e) => {
   let b;
   if ((b = e.target.closest("[data-rel-approve]"))) return releaseAction(b, "/api/release/approve", "Click again to approve");
   if ((b = e.target.closest("[data-rel-merge]"))) return releaseAction(b, "/api/merge", "Click again to merge");
 });
 
+/**
+ * Loads the PR list, and the releases unless Settings hides them (then GitHub isn't asked for them).
+ */
 async function loadPrs() {
-  loadReleases();
+  if (settings.prsReleases) loadReleases();
   prLoading = true;
   renderPrs();
   try {
-    let res;
-    try { res = await fetch("/api/prs", { cache: "no-store" }); }
-    catch { throw new Error("Can't reach the local server. Start it with ./prs start."); }
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
-    prs = body;
+    prs = await fetchJson("/api/prs");
     prError = null;
     saveCache(PR_CACHE, prs);
   } catch (e) {
@@ -457,38 +2439,456 @@ async function loadPrs() {
   }
 }
 
-// ---------- Refresh ----------
-function renderToday() {
-  $("today").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+// ---------- AI usage ----------
+const AI_CACHE = "felix:ai-usage";
+let ai = readCache(AI_CACHE);
+let aiError = null;
+let aiLoading = false;
+
+/**
+ * Formats an amount of money, for example $1,234.50.
+ * @param {number | null | undefined} amount
+ * @param {string} [currency]
+ * @returns {string}
+ */
+const fmtMoney = (amount, currency = "USD") => amount == null ? "—" : amount.toLocaleString([], { style: "currency", currency });
+
+/**
+ * Escapes server text and shows its `backticked` commands as code.
+ * @param {string} text
+ * @returns {string}
+ */
+const codeText = (text) => esc(text).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+/**
+ * One limit: its label and percent used over a bar colored by severity, and when it resets under the bar when the
+ * card has room (on hover otherwise).
+ * @param {{ label: string, percent: number, severity: string, resetsAt: string | null }} m
+ * @param {string | null} [cycleEnd] When the tool's billing cycle ends, for limits that don't say when they reset.
+ * @returns {string}
+ */
+function meterHtml(m, cycleEnd = null) {
+  const pct = Math.round(m.percent);
+  const at = m.resetsAt || cycleEnd;
+  const title = at ? ` title="Resets ${esc(inTime(at))}, ${esc(new Date(at).toLocaleString())}"` : "";
+  const line = at ? `<span class="meter-reset roomy">Resets ${esc(inTime(at))} · ${esc(fmtWhen(at))}</span>` : "";
+  return `<div class="meter ${esc(m.severity)}"${title}><div class="meter-top"><span>${esc(m.label)}</span><span class="pct">${pct}%</span></div>`
+    + `<div class="bar" role="progressbar" aria-label="${esc(m.label)}" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(100, m.percent)}%"></span></div>${line}</div>`;
 }
 
-async function refreshAll(fresh) {
+/**
+ * A tool's limit bars, with its billing cycle's end standing in for limits that don't say when they reset.
+ * @param {{ limits: Array<object>, cycle?: { end: string } | null }} t
+ * @returns {string}
+ */
+const metersHtml = (t) => t.limits.map((m) => meterHtml(m, t.cycle?.end)).join("");
+
+/**
+ * Whether Cursor is signed in and answering, so Claude's limit alert can point to it.
+ * @returns {boolean}
+ */
+const cursorReady = () => Boolean(ai?.tools?.some((t) => t.tool === "cursor" && t.limits && !t.error));
+
+/**
+ * Claude's extra usage line: on or off, what it cost this month, and when the monthly count resets.
+ * @param {{ enabled: boolean, used: { amount: number, currency: string } | null, limit: { amount: number, currency: string } | null, resetsAt?: string } | null | undefined} x
+ * @returns {string}
+ */
+function claudeExtraHtml(x) {
+  if (!x) return "";
+  if (!x.enabled) return `<div class="ai-note">Extra usage off</div>`;
+  const used = `${fmtMoney(x.used?.amount, x.used?.currency)}${x.limit ? ` of ${fmtMoney(x.limit.amount, x.limit.currency)}` : ""} this month`;
+  const reset = x.resetsAt ? `Claude counts extra usage month to date and doesn't say when it resets, so this guesses the 1st: ${fmtDay(x.resetsAt)} (${daysAway(x.resetsAt)}).` : "";
+  return `<div class="ai-note" title="${esc(reset)}">Extra usage: ${esc(used)}</div>`;
+}
+
+/**
+ * The alert a wide card shows when one of Claude's limits is used up: until when, and that Cursor can take over.
+ * @param {{ limits: Array<{ label: string, percent: number, resetsAt: string | null }> }} t
+ * @returns {string}
+ */
+function claudeAlertHtml(t) {
+  const capped = t.limits.find((m) => m.percent >= 100);
+  if (!capped) return "";
+  const until = capped.resetsAt ? ` until ${fmtWhen(capped.resetsAt)}` : "";
+  return `<div class="ai-alert">At the "${esc(capped.label)}" limit${esc(until)}.${cursorReady() ? " Reviews and fixes can run on Cursor meanwhile." : ""}</div>`;
+}
+
+/**
+ * Cursor's extra line: on-demand spend, mine and the team pool's.
+ * @param {{ onDemand?: { individual: { used: number, limit: number } | null, pool: { used: number, limit: number } | null } | null }} t
+ * @returns {string}
+ */
+function cursorNotes(t) {
+  const od = t.onDemand;
+  const parts = [
+    od?.individual && `on-demand ${fmtMoney(od.individual.used)} of ${fmtMoney(od.individual.limit)}`,
+    od?.pool && `team pool ${fmtMoney(od.pool.used)} of ${fmtMoney(od.pool.limit)}`,
+  ].filter(Boolean);
+  return parts.length ? `<div class="ai-note">${esc(parts.join(" · ").replace(/^./, (c) => c.toUpperCase()))}</div>` : "";
+}
+
+/** Each tool's spend line under its bars, on small and wide cards alike. */
+const AI_SPEND = { claude: (t) => claudeExtraHtml(t.extra), cursor: cursorNotes };
+
+/** Everything a wide card shows under a tool's bars: Claude's limit alert, then the spend line (unless Settings hides it). */
+const AI_NOTES = {
+  claude: (t) => `${claudeAlertHtml(t)}${settings.aiSpend ? AI_SPEND.claude(t) : ""}`,
+  cursor: (t) => (settings.aiSpend ? AI_SPEND.cursor(t) : ""),
+};
+
+/**
+ * A limit's colour: amber and red from the levels set in Settings (80% and 100% at first). Claude's own colour stands
+ * while Settings lets Claude pick its own.
+ * @param {string} tool
+ * @param {{ percent: number, severity: string }} m
+ * @returns {string}
+ */
+function aiSeverity(tool, m) {
+  if (tool === "claude" && settings.aiOwnColours) return m.severity;
+  return m.percent >= settings.aiBadAt ? "critical" : m.percent >= settings.aiWarnAt ? "warning" : "normal";
+}
+
+/**
+ * The tools the card shows, as Settings says, each limit coloured by aiSeverity.
+ * @returns {Array<Record<string, any>>}
+ */
+const aiTools = () => (ai?.tools || []).filter((t) => settings[t.tool === "cursor" ? "aiCursor" : "aiClaude"])
+  .map((t) => (t.limits ? { ...t, limits: t.limits.map((m) => ({ ...m, severity: aiSeverity(t.tool, m) })) } : t));
+
+/**
+ * The short line at the card's foot: when the most used limit resets, such as "Claude weekly resets in 2 days".
+ * @param {Array<{ name: string, limits?: Array<{ label: string, percent: number, resetsAt: string | null }> }>} tools
+ * @returns {string}
+ */
+function soonestLimitNote(tools) {
+  const top = tools.flatMap((t) => (t.limits || []).filter((m) => m.resetsAt).map((m) => ({ ...m, tool: t.name })))
+    .sort((a, b) => b.percent - a.percent)[0];
+  if (!top) return "";
+  return esc(`${top.tool} ${top.label.toLowerCase()} resets ${inTime(top.resetsAt)}`);
+}
+
+const SHORT = { "Weekly · all models": "Weekly", "Included usage": "Included", "Auto and Composer": "Auto", "Named models (API)": "API" };
+
+/**
+ * A limit's name made short for the overview's small bars: "Session (5 hours)" is "Session", "Weekly · Fable" is
+ * "Fable", "Named models (API)" is "API". The details show the full names.
+ * @param {string} label
+ * @returns {string}
+ */
+const shortLabel = (label) => SHORT[label] || label.replace(/\s*\(.*\)$/, "").replace(/^Weekly · /, "");
+
+/**
+ * The limit closest to running out, which leads a tool's overview.
+ * @param {Array<{ percent: number }>} limits
+ * @returns {object}
+ */
+const topLimit = (limits) => [...limits].sort((a, b) => b.percent - a.percent)[0];
+
+/**
+ * One tool in the overview: name and plan, its most pressing limit large with when it resets, and a small bar for
+ * each of its limits. Hovering it (or focusing it, or tapping it) shows the details.
+ * @param {{ tool: string, name: string, plan?: string | null, limits?: Array<object>, cycle?: { end: string } | null, error?: { code: string, message: string } }} t
+ * @returns {string}
+ */
+function aiRowHtml(t) {
+  const head = `<div class="ai-row-top"><b>${esc(t.name)}</b><span>${esc(t.plan || "")}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></div>`;
+  if (!t.limits?.length) {
+    const why = t.error ? codeText(t.error.message) : "No numbers yet.";
+    return `<div class="ai-row" data-ai-row="${esc(t.tool)}" tabindex="0">${head}<div class="ai-note">${why}</div></div>`;
+  }
+  const top = topLimit(t.limits);
+  const at = top.resetsAt || t.cycle?.end;
+  const when = at ? `Resets ${esc(inTime(at))}` : "";
+  const minis = t.limits.map((m) => `<div class="ai-mini ${esc(m.severity)}"><div class="kvm"><span>${esc(shortLabel(m.label))}</span><b>${Math.round(m.percent)}%</b></div>`
+    + `<div class="bar"><span style="width:${Math.min(100, m.percent)}%"></span></div></div>`).join("");
+  return `<div class="ai-row" data-ai-row="${esc(t.tool)}" tabindex="0" aria-label="${esc(t.name)} usage: ${esc(top.label)} ${Math.round(top.percent)}%. Shows details.">${head}`
+    + `<div class="ai-lead ${esc(top.severity)}"><span class="pct">${Math.round(top.percent)}%</span><span class="what"><b>${esc(top.label)}</b><span>${when}</span></span></div>`
+    + `<div class="ai-minis">${minis}</div></div>`;
+}
+
+/**
+ * A tool's details, shown on hover: every limit with its bar and when it resets, its spend (Claude's extra usage, or
+ * Cursor's on-demand and team pool), Claude's alert when a limit is used up, and a link to the tool's usage page.
+ * @param {{ tool: string, name: string, url: string, plan?: string | null, limits?: Array<object>, cycle?: { end: string } | null, error?: { code: string, message: string } }} t
+ * @returns {string}
+ */
+function aiDetailHtml(t) {
+  const link = `<a class="ai-open" href="${esc(t.url)}" target="_blank" rel="noopener">Usage page<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>`;
+  const err = t.error ? `<div class="ai-note">${codeText(t.error.message)}${t.limits ? " Showing the last numbers." : ""}</div>`
+    // While a tool limits how often its usage is checked, its last numbers show with their time, not an error.
+    : t.limited ? `<div class="ai-note">As of ${esc(fmtWhen(t.fetchedAt))}. ${esc(t.name)} limits how often this is checked.</div>` : "";
+  const cycle = t.cycle?.end ? `<div class="ai-note">Billing cycle ends ${esc(fmtWhen(t.cycle.end))}</div>` : "";
+  const body = t.limits ? `${metersHtml(t)}${AI_NOTES[t.tool]?.(t) || ""}${cycle}` : "";
+  return `<div class="ai-pop-h"><b>${esc(t.name)}</b><span>${esc(t.plan || "")}</span>${link}</div>${err}<div class="ai-pop-b">${body}</div>`;
+}
+
+/**
+ * Draws the AI usage card from the last answer, or a skeleton while the first one loads: an overview of every tool,
+ * with each tool's details on hover.
+ */
+function renderAi() {
+  if (!ai) return fillCard("ai", aiError ? `<div class="error">${esc(aiError)}</div>` : skeleton(4));
+  fillCard("ai", `${aiError ? `<div class="error">${esc(aiError)} Showing the last numbers.</div>` : ""}`
+    + `<div class="ai-rows">${aiTools().map(aiRowHtml).join("")}</div>`
+    + footHtml(ai.fetchedAt, aiLoading, soonestLimitNote(aiTools())));
+  if (aiPop.tool) showAiPop(aiPop.tool);
+}
+
+// The details popover: one for the page, placed beside the hovered tool and kept inside the window.
+const aiPop = { el: null, tool: "", timer: 0 };
+
+/**
+ * Shows a tool's details beside its row in the overview.
+ * @param {string} tool
+ */
+function showAiPop(tool) {
+  const row = document.querySelector(`[data-ai-row="${tool}"]`);
+  const t = aiTools().find((x) => x.tool === tool);
+  if (!row || !t) return hideAiPop(true);
+  clearTimeout(aiPop.timer);
+  if (!aiPop.el) {
+    aiPop.el = Object.assign(document.createElement("div"), { className: "ai-pop", role: "dialog" });
+    aiPop.el.addEventListener("mouseenter", () => clearTimeout(aiPop.timer));
+    aiPop.el.addEventListener("mouseleave", () => hideAiPop());
+    document.body.append(aiPop.el);
+  }
+  aiPop.tool = tool;
+  aiPop.el.setAttribute("aria-label", `${t.name} usage`);
+  aiPop.el.innerHTML = aiDetailHtml(t);
+  document.querySelectorAll("[data-ai-row]").forEach((r) => r.classList.toggle("open", r === row));
+  const r = row.getBoundingClientRect();
+  const w = aiPop.el.offsetWidth;
+  const h = aiPop.el.offsetHeight;
+  const left = r.right + 10 + w <= innerWidth - 8 ? r.right + 10 : Math.max(8, r.left - 10 - w);
+  const top = Math.max(8, Math.min(r.top - 6, innerHeight - h - 8));
+  Object.assign(aiPop.el.style, { left: `${left}px`, top: `${top}px` });
+  aiPop.el.classList.add("on");
+}
+
+/**
+ * Hides the details, a moment later unless the pointer moves onto them.
+ * @param {boolean} [now]
+ */
+function hideAiPop(now = false) {
+  clearTimeout(aiPop.timer);
+  const go = () => {
+    aiPop.tool = "";
+    aiPop.el?.classList.remove("on");
+    document.querySelectorAll("[data-ai-row].open").forEach((r) => r.classList.remove("open"));
+  };
+  if (now) go();
+  else aiPop.timer = setTimeout(go, 160);
+}
+
+$("grid").addEventListener("mouseover", (e) => {
+  const row = e.target.closest("[data-ai-row]");
+  if (row && row.dataset.aiRow !== aiPop.tool) showAiPop(row.dataset.aiRow);
+  else if (row) clearTimeout(aiPop.timer);
+});
+$("grid").addEventListener("mouseout", (e) => {
+  const row = e.target.closest("[data-ai-row]");
+  if (row && !row.contains(e.relatedTarget)) hideAiPop();
+});
+$("grid").addEventListener("focusin", (e) => {
+  const row = e.target.closest("[data-ai-row]");
+  if (row) showAiPop(row.dataset.aiRow);
+});
+$("grid").addEventListener("focusout", (e) => { if (e.target.closest("[data-ai-row]")) hideAiPop(); });
+$("grid").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-ai-row]");
+  if (!row) return;
+  if (aiPop.tool === row.dataset.aiRow && aiPop.el?.classList.contains("on")) hideAiPop(true);
+  else showAiPop(row.dataset.aiRow);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideAiPop(true); });
+addEventListener("scroll", () => hideAiPop(true), true);
+
+/**
+ * Loads AI usage from the server and keeps a copy in the browser so the card draws at once next time.
+ * @param {boolean} [fresh] Ask the tools again instead of the server's cache (2 minutes, unless Settings says otherwise).
+ */
+async function loadAi(fresh = false) {
+  aiLoading = true;
+  renderAi();
+  try {
+    ai = await fetchJson(`/api/ai-usage${fresh ? "?fresh=1" : ""}`);
+    aiError = null;
+    saveCache(AI_CACHE, ai);
+  } catch (e) {
+    aiError = e.message;
+  } finally {
+    aiLoading = false;
+    renderAi();
+  }
+}
+
+// ---------- Refresh and settings ----------
+let pollTimer = 0;
+let pollDue = false;
+let scheduledMs = null;
+
+/**
+ * How often the live cards reload: the Auto refresh settings in work mode, never in personal mode (its cards
+ * are examples so far).
+ * @returns {number} Milliseconds, or 0 for no automatic reload.
+ */
+const pollMs = () => settings.mode === "work" && settings.autoRefresh ? settings.refreshMinutes * 60e3 : 0;
+
+/** Each live work card's loader, by card id; `fresh` skips the server's cache. */
+const CARD_LOADERS = {
+  ic: (fresh) => loadIc(fresh), jira: (fresh) => loadJira(fresh), prs: () => loadPrs(), ai: (fresh) => loadAi(fresh),
+  cal: (fresh) => loadCal(fresh), slack: (fresh) => loadSlack(fresh), ooo: (fresh) => loadOoo(fresh), tasks: () => loadTasks("tasks"),
+};
+const cardTimers = {};
+const cardsDue = new Set();
+
+/**
+ * The cards that reload with the others, on the Auto refresh timer: those whose own Refresh every is "With the
+ * other cards".
+ * @returns {string[]}
+ */
+const sharedCards = () => Object.keys(CARD_LOADERS).filter((id) => settings[`${id}Refresh`] === 0);
+
+/**
+ * Starts each card's own reload timer, for cards with their own Refresh every. A hidden window waits, like the main
+ * timer, and reloads them when it's shown again.
+ */
+function scheduleCards() {
+  for (const id of Object.keys(CARD_LOADERS)) {
+    clearInterval(cardTimers[id]);
+    const minutes = settings[`${id}Refresh`];
+    if (settings.mode !== "work" || !settings.autoRefresh || minutes <= 0) continue;
+    cardTimers[id] = setInterval(() => (document.hidden ? cardsDue.add(id) : CARD_LOADERS[id](false)), minutes * 60e3);
+  }
+}
+
+/**
+ * Starts the countdown to the next automatic reload, and the ring that shows it.
+ */
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  pollDue = false;
+  scheduledMs = pollMs();
+  if (scheduledMs) pollTimer = setTimeout(poll, scheduledMs);
+  FelixShell.restartRing(scheduledMs);
+}
+
+/**
+ * Reloads the live cards (every one, or only those named) and starts the countdown to the next automatic reload.
+ * @param {boolean} fresh Skip the server's caches (on-call keeps an hour, AI usage 2 minutes, unless Settings says otherwise).
+ * @param {string[]} [only] The cards to reload; all of them when left out.
+ * @returns {Promise<void>}
+ */
+async function loadAll(fresh, only = Object.keys(CARD_LOADERS)) {
+  schedulePoll();
+  if (settings.mode !== "work") return Promise.all([loadTasks("ptasks"), loadBuddy()]);
+  await Promise.all(only.map((id) => CARD_LOADERS[id](fresh)));
+}
+
+/**
+ * The Refresh button and the R key: reload everything past the server's caches, with the button spinning.
+ * @returns {Promise<void>}
+ */
+async function refreshAll() {
+  if (settings.mode !== "work") return;
   $("refresh").classList.add("spinning");
-  await Promise.all([loadIc(fresh), loadPrs()]);
+  await loadAll(true);
   $("refresh").classList.remove("spinning");
 }
 
-$("refresh").addEventListener("click", () => refreshAll(true));
+/**
+ * The automatic reload. A hidden window waits instead, which keeps the GitHub limit for work that needs it, and
+ * reloads as soon as it is shown again.
+ */
+function poll() {
+  if (document.hidden) pollDue = true;
+  else loadAll(false, sharedCards());
+}
+
+/** What a change to each card's settings needs from the server: these keys change what the card asks for. */
+const RELOAD_ON = {
+  ic: ["icDays", "icLookahead"], jira: ["jiraBoard", "jiraWhose"], prs: ["prsReleases"], ai: ["aiClaude", "aiCursor"],
+  cal: ["calDays", "calDeclined"], ooo: ["oooAhead", "oooView"], tasks: ["tasksDoneToday"], ptasks: ["tasksDoneToday"],
+  // Felix's check-ins: the Personal home, friend mode and quiet hours decide what it shows.
+  buddy: ["mode", "felixOn", "felixFriendOn", "felixQuietOn", "felixQuietFrom", "felixQuietTo"],
+};
+
+/**
+ * Follows a settings change on the cards: the classes every card reads, each card's view and who it shows when its
+ * opening setting changed, the card timers, a reload for cards whose data depends on what changed, and a redraw.
+ * @param {Record<string, unknown>} prev The settings before the change.
+ */
+function followCardSettings(prev) {
+  const root = document.documentElement.classList;
+  root.toggle("no-card-icons", !settings.cardIcons);
+  root.toggle("no-card-links", !settings.cardLinks);
+  root.toggle("no-card-updated", !settings.cardUpdated);
+  const changed = (key) => prev[key] !== settings[key];
+  if (Object.keys(CARD_LOADERS).some((id) => changed(`${id}Refresh`)) || changed("autoRefresh") || changed("mode")) scheduleCards();
+  if (changed("oooView")) oooView = settings.oooView === "last" ? oooView : settings.oooView;
+  if (changed("oooWho")) oooWho = settings.oooWho === "last" ? oooWho : settings.oooWho;
+  const reload = new Set(Object.keys(RELOAD_ON).filter((id) => RELOAD_ON[id].some(changed)));
+  for (const id of Object.keys(TASK_CARDS)) {
+    const st = taskState[id];
+    // A view turned off in Settings takes the card back to Today.
+    const view = changed(TASK_CARDS[id].setting) ? openingView(id) : taskViews(id).includes(st.view) ? st.view : "today";
+    if (view !== st.view) reload.add(id);
+    st.view = view;
+  }
+  renderCards();
+  const live = settings.mode === "work" ? Object.keys(CARD_LOADERS) : ["ptasks", "buddy"];
+  for (const id of live.filter((x) => reload.has(x))) {
+    if (id === "ptasks") loadTasks(id);
+    else if (id === "buddy") loadBuddy();
+    else CARD_LOADERS[id](false);
+  }
+}
+
+/**
+ * Applies settings: the mode's cards, Fit to screen, and the reload timer.
+ * @param {Record<string, unknown>} next Clean settings.
+ * @param {boolean} [first] The first draw of the page.
+ */
+function applySettings(next, first = false) {
+  const modeChanged = first || next.mode !== settings.mode;
+  const prev = first ? {} : settings;
+  settings = next;
+  document.documentElement.classList.toggle("fit", Boolean(settings.fitToScreen));
+  FelixShell.setMode(settings.mode);
+  if (modeChanged) drawGrid();
+  // After a mode change the cards load in full below, so only the mode counts as changed here.
+  followCardSettings(modeChanged ? { ...settings, mode: prev.mode } : prev);
+  // Each mode loads its own cards when it opens (loadAll picks Personal's or Work's).
+  if (modeChanged) loadAll(false);
+  else if (pollMs() !== scheduledMs) schedulePoll();
+}
+
+/**
+ * The top bar's Personal and Work switch: changes the cards at once and saves the choice.
+ * @param {string} mode
+ */
+function switchMode(mode) {
+  applySettings({ ...settings, mode });
+  FelixShell.saveSettings({ mode }).catch(() => {});
+}
+
+$("refresh").addEventListener("click", refreshAll);
 document.addEventListener("keydown", (e) => {
-  if (e.key.toLowerCase() === "r" && !e.metaKey && !e.ctrlKey && !e.altKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) refreshAll(true);
+  if (e.key.toLowerCase() === "r" && !e.metaKey && !e.ctrlKey && !e.altKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) refreshAll();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  if (pollDue) loadAll(false, sharedCards());
+  for (const id of cardsDue) CARD_LOADERS[id](false);
+  cardsDue.clear();
+});
+window.addEventListener("storage", (e) => {
+  if (e.key === FelixShell.SETTINGS_CACHE) applySettings(cleanSettings(JSON.parse(e.newValue || "null")));
 });
 
-// Every minute: redraw "on now" and the countdowns, and reload when the day changes (the server
-// keeps on-call data for an hour and per day). PRs reload every 5 minutes, like the PR page.
-let shownDay = startOfDay(Date.now());
-setInterval(() => {
-  renderToday();
-  if (startOfDay(Date.now()) !== shownDay) { shownDay = startOfDay(Date.now()); loadIc(); }
-  else renderIc();
-  renderPrs();
-}, 60e3);
-setInterval(() => loadIc(), 60 * 60e3);
-setInterval(() => loadPrs(), 5 * 60e3);
-
-renderToday();
-renderIc();
-renderPrs();
-refreshAll(false);
+applySettings(settings, true);
+FelixShell.loadSettings().then((s) => applySettings(cleanSettings(s))).catch(() => {});
 </script>
 </body>
 </html>

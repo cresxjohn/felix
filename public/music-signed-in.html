@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signing in · Felix</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/theme.css">
+<style>
+/* Where a music sign-in window ends: how it went, then it closes itself. */
+body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+.done { max-width: 360px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 24px; display: grid; gap: 10px; text-align: center; }
+.done h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.done p { margin: 0; color: var(--muted); font-size: 14px; }
+.done.ok h1 { color: var(--ok); }
+.done.bad h1 { color: var(--bad); }
+.acts { display: flex; gap: 8px; justify-content: center; margin-top: 6px; }
+.btn { height: 34px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r-box); background: var(--surface); font: inherit; font-weight: 500; cursor: pointer; color: inherit; text-decoration: none; display: inline-flex; align-items: center; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<main class="done" id="done" aria-live="polite">
+  <h1 id="title">Checking…</h1>
+  <p id="text"></p>
+  <div class="acts" id="acts"></div>
+</main>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const source = new URLSearchParams(location.search).get("source") || "";
+
+/**
+ * Shows how the sign-in went.
+ * @param {{ cls: string, title: string, text: string, acts: string }} view acts is markup.
+ */
+function show({ cls, title, text, acts }) {
+  $("done").className = `done ${cls}`;
+  $("title").textContent = title;
+  $("text").textContent = text;
+  $("acts").innerHTML = acts;
+  document.title = `${title} · Felix`;
+}
+
+const closeButton = `<button class="btn" type="button" data-close>Close</button>`;
+
+/**
+ * What to show for a source's setup after its sign-in came back.
+ * @param {{ name: string, connected: boolean, account: string | null, error: string | null } | undefined} s
+ * @returns {{ cls: string, title: string, text: string, acts: string }}
+ */
+function viewFor(s) {
+  if (!s) return { cls: "bad", title: "Something went wrong", text: "Felix doesn't know that music source.", acts: closeButton };
+  if (s.connected && !s.error) {
+    return { cls: "ok", title: `Signed in to ${s.name}`, text: `${s.account ? `As ${s.account}. ` : ""}This window closes itself; the player in Felix is ready.`, acts: closeButton };
+  }
+  const retry = `<a class="btn primary" href="/api/music/connect/${encodeURIComponent(source)}?popup=1">Try again</a>`;
+  return { cls: "bad", title: "Didn't sign in", text: s.error || "The sign-in didn't finish.", acts: retry + closeButton };
+}
+
+/**
+ * Reads the source's setup from Felix, shows it, and closes the window after a good sign-in.
+ */
+async function load() {
+  try {
+    const { sources } = await (await fetch("/api/music", { cache: "no-store" })).json();
+    const view = viewFor(sources?.[source]);
+    show(view);
+    if (view.cls === "ok") setTimeout(() => window.close(), 1500);
+  } catch {
+    show({ cls: "bad", title: "Couldn't check", text: "Is Felix running on this Mac?", acts: closeButton });
+  }
+}
+
+$("acts").addEventListener("click", (e) => {
+  if (e.target.closest("[data-close]")) window.close();
+});
+load();
+</script>
+</body>
+</html>

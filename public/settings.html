@@ -1,0 +1,1319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · Felix</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1113" media="(prefers-color-scheme: dark)">
+<script src="/app.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/shell.css">
+<script src="/shell.js"></script>
+<script src="/music.js"></script>
+<script src="/felix-voice.js"></script>
+<script src="/voice-device.js"></script>
+<script src="/felix.js"></script>
+<script src="/dropdown.js"></script>
+<script src="/ai-models.js"></script>
+<style>
+/* Settings: a list of sections on the left, grouped by kind, and one card per section on the right, drawn from
+   /settings-schema.mjs. Every change saves at once. */
+.page { width: 100%; max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+.main { display: grid; gap: 16px; align-content: start; min-width: 0; container: main / inline-size; }
+/* The side menu: no boxes, just room and a thin line between categories, so the groups read at a glance. */
+.side { position: sticky; top: 16px; display: grid; gap: 0; max-height: calc(100dvh - 32px); overflow: auto; padding: 4px 2px 12px; scrollbar-width: thin; }
+.side .cat { display: grid; gap: 1px; padding: 14px 0; }
+.side .cat:first-child { padding-top: 2px; }
+.side .cat + .cat { border-top: 1px solid var(--line); }
+.side .cat > span { color: var(--muted); font: 600 11px/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px 6px; }
+.side a { display: block; padding: 7px 10px; border-radius: 9px; color: var(--fg); text-decoration: none; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none; }
+.side a:hover { background: var(--surface-2); }
+.side a:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.side a[aria-current="true"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.group { scroll-margin-top: 16px; }
+/* A run of settings, under its small heading when it has one. On a wide window they flow down two columns, so a
+   setting that depends on another stays under it. */
+.rows > .row { break-inside: avoid; }
+.rows > .row.dep { break-before: avoid; }
+@container main (min-width: 980px) { .rows:has(> .row:nth-child(4)) { columns: 2; column-gap: 40px; } }
+.tools { display: flex; gap: 10px; align-items: center; }
+.search { flex: 1; height: 38px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface-2); color: var(--fg); }
+.search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.btn { height: 38px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface); font: 600 13px/1 var(--sans); cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: .5; cursor: default; pointer-events: none; }
+.btn.small { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+.btn.confirm { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
+.group { background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--card-shadow); border-radius: var(--r-card); padding: var(--pad); display: grid; gap: 4px; }
+.group-head { display: flex; align-items: center; gap: 12px; }
+.group-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.group-head .btn { margin-left: auto; }
+.group > p { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
+.row { display: flex; align-items: center; gap: 14px; padding: 9px 0; border-top: 1px solid var(--line); }
+.row .text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.row label { font-weight: 600; font-size: 14px; }
+.row .help { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+/* Long help shows its first sentence; More shows the rest. */
+.more-btn { border: 0; background: none; padding: 0; color: var(--link); font: inherit; cursor: pointer; }
+.more-btn:hover { text-decoration: underline; }
+/* A setting that depends on the one above it sits under it, and dims while that one is off. */
+.row.dep { padding-left: 22px; }
+.row.off .text { opacity: .55; }
+/* Related settings in a section, under a small heading. */
+.part { padding: 14px 0 2px; color: var(--muted); font: 600 12px/1.2 var(--sans); border-top: 1px solid var(--line); }
+.row .state { color: var(--muted); font-size: 12px; min-width: 44px; text-align: right; }
+.row .state.bad { color: var(--bad); }
+.row .state.ok { color: var(--ok); }
+.row .acts { display: flex; gap: 8px; flex: none; }
+/* Voice on this device: the plan, where the files are, a thin progress bar while downloading, and the test result. */
+.row.vd { align-items: flex-start; }
+.row.vd .vd-line { display: block; font-size: 13px; color: var(--fg); }
+.row.vd .vd-line b { font-weight: 600; }
+.vd-bar { display: block; height: 4px; margin-top: 6px; max-width: 360px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.vd-bar i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--accent); transition: width .3s ease; }
+.vd-acts { flex-wrap: wrap; justify-content: flex-end; max-width: 300px; }
+.row .help.bad { color: var(--bad); }
+.steps a { color: var(--link); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); text-decoration: none; display: inline-flex; align-items: center; }
+.btn.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+.steps { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; display: grid; gap: 2px; }
+.code-line { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.code-line code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 6px 10px; font: 12px var(--mono); background: var(--surface-2); border: 0; border-radius: var(--r-tag); }
+.row .dd-btn { height: 34px; }
+.row .field { flex: none; width: 240px; height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--r-box); background: var(--surface-2); color: var(--fg); font: 13px var(--sans); }
+.row textarea.field { height: auto; padding: 8px 10px; line-height: 1.5; resize: vertical; }
+.row .field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.row .field:disabled { opacity: .5; }
+/* The memory page: Felix's notes, searchable, each with its day and your own words, Edit and Delete. */
+.mem { display: grid; gap: 10px; }
+.mem-tools { display: flex; gap: 8px; align-items: center; }
+.mem-search { position: relative; flex: 1; min-width: 0; display: flex; }
+.mem-search svg { position: absolute; left: 11px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.row .mem-search .field { flex: 1; width: auto; padding-left: 34px; }
+a.btn { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+.mem-tools .btn { height: 34px; padding: 0 12px; font-size: 13px; border-radius: var(--r-box); }
+.mem-tools .btn svg { width: 15px; height: 15px; }
+.mem-list { display: grid; gap: 8px; max-height: 420px; overflow: auto; }
+.mem-note { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-box); background: var(--surface-2); }
+.mem-note.archived { opacity: .6; }
+.mem-note .mem-text { font-size: 14px; }
+.mem-note .mem-meta { color: var(--muted); font-size: 12px; }
+.mem-note .acts { justify-content: flex-end; }
+.mem-note textarea.field { width: 100%; }
+.mem-empty { color: var(--muted); font-size: 13px; }
+/* A list with nothing in it: a small drawing in the app's line style, a title and one line. */
+.mem-blank { display: grid; justify-items: center; gap: 4px; padding: 22px 16px 18px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--r-box); animation: felix-in .35s cubic-bezier(0.22, 1, 0.36, 1); }
+.mem-blank svg { width: 96px; height: 72px; margin-bottom: 6px; overflow: visible; }
+.mem-blank strong { font-size: 14px; }
+.mem-blank p { margin: 0; max-width: 380px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.mem-blank .tile { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.75; }
+.mem-blank .line { fill: none; stroke: var(--muted); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.mem-blank .line.thick { stroke-width: 3.5; }
+.mem-blank .spark { fill: var(--accent); opacity: .85; }
+/* Colour swatches: a round chip per colour; the picked one gets a ring in its own colour. */
+.swatches { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; max-width: 320px; }
+.swatch { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: var(--sw); cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); transition: transform .15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow .15s; }
+.swatch:hover { transform: scale(1.1); }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--sw); }
+.swatch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-soft), 0 0 0 5px var(--sw); }
+.switch { appearance: none; position: relative; flex: none; width: 42px; height: 24px; margin: 0; border-radius: var(--r-pill); background: var(--line-strong); cursor: pointer; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(18px); }
+.empty, .error { padding: 14px 16px; border-radius: var(--r-box); font-size: 13px; }
+.empty { color: var(--muted); background: var(--surface); border: 1px dashed var(--line-strong); }
+.error { color: var(--bad); background: var(--bad-bg); }
+#groups { display: grid; gap: 16px; }
+/* Narrower windows: the sections become a row of chips that stays at the top. */
+@container app (max-width: 899px) {
+  .page { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+  .side { display: flex; gap: 6px; top: 0; z-index: 5; max-height: none; overflow-x: auto; overflow-y: hidden; padding: 8px 0; background: var(--bg); scrollbar-width: none; }
+  .side .cat, .side .cat + .cat { display: contents; padding: 0; border: 0; }
+  .side .cat > span { display: none; }
+  .side a { flex: none; border: 1px solid var(--line-strong); border-radius: var(--r-pill); padding: 4px 12px; font-size: 13px; }
+  .side a[aria-current="true"] { border-color: transparent; }
+  .group { scroll-margin-top: 60px; }
+}
+@container app (max-width: 599px) { .row { flex-wrap: wrap; } .tools { flex-wrap: wrap; } .row.dep { padding-left: 12px; } }
+/* Back to top: a round button at the bottom right, clear of the Felix bar, that shows once you've scrolled down. */
+.to-top {
+  position: fixed; right: 24px; bottom: 28px; z-index: 40; display: grid; place-items: center; width: 42px; height: 42px; padding: 0;
+  border: 0; border-radius: 50%; background: var(--raised); color: var(--fg); box-shadow: var(--pop-shadow); cursor: pointer;
+  opacity: 0; transform: translateY(10px) scale(.92); pointer-events: none; transition: opacity .2s ease, transform .25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.to-top.show { opacity: 1; transform: none; pointer-events: auto; }
+.to-top:hover { color: var(--accent-ink); }
+.to-top:focus-visible { outline: none; box-shadow: var(--pop-shadow), 0 0 0 3px var(--accent-soft); }
+.to-top svg { width: 18px; height: 18px; }
+@media (prefers-reduced-motion: reduce) { .to-top { transition: opacity .2s ease; transform: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar" id="topbar"></header>
+  <button class="to-top" id="to-top" type="button" aria-label="Back to top" title="Back to top" tabindex="-1">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+  </button>
+  <main class="page">
+    <nav class="side" id="side" aria-label="Settings sections"></nav>
+    <div class="main">
+      <div class="tools">
+        <input class="search" id="search" type="search" placeholder="Search settings" aria-label="Search settings" autocomplete="off">
+        <button class="btn" id="reset-all" type="button" title="Put every setting back to its default">Reset all</button>
+      </div>
+      <div class="error" id="error" role="alert" hidden></div>
+      <div id="groups"></div>
+      <div class="empty" id="no-match" hidden>No settings match your search.</div>
+    </div>
+  </main>
+  <footer class="dock" id="dock"></footer>
+</div>
+<script type="module">
+import { GROUPS, SETTINGS, applies, changeFor, cleanSettings, placeholderFor, settingsIn } from "/settings-schema.mjs";
+
+const $ = (id) => document.getElementById(id);
+let values = cleanSettings(FelixShell.cachedSettings());
+/** @type {Array<{ id: string, name: string }>} Cursor's models, from `cursor-agent models`; empty until loaded. */
+let cursorModels = [];
+const SAMPLES = [
+  "Hey, it's Felix. Want me to check what's waiting on your review?",
+  "Morning! Coffee first, then we'll get through those pull requests.",
+  "Nice work today. Everything's green, so head out whenever you're ready.",
+  "Heads up, a review just came in. No rush, it can wait until after lunch.",
+  "You're all caught up. Want some music while you focus?",
+  "Your next meeting is in ten minutes, so there's time to grab some water.",
+];
+let lastSample = -1;
+
+FelixShell.mount({ title: "Settings", refresh: false });
+
+/**
+ * Escapes text for HTML.
+ * @param {unknown} s
+ * @returns {string}
+ */
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/**
+ * The models a model setting offers for the AI tool picked with it, the same lists as Open PRs: Auto first, then
+ * Claude's or Cursor's models. On Auto there is only Auto. A saved model the list doesn't have yet (Cursor's
+ * load later) stays in it.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {Array<{ id: string, name: string }>}
+ */
+function modelChoices(s) {
+  const tool = values[s.tool];
+  const list = { claude: window.FelixModels.CLAUDE_MODELS, cursor: cursorModels }[tool] || [];
+  const choices = [{ id: "auto", name: tool === "auto" ? "Auto: Felix picks" : "Auto: Felix picks for each question" }, ...list];
+  const current = values[s.key];
+  return choices.some((c) => c.id === current) ? choices : [...choices, { id: current, name: current }];
+}
+
+/**
+ * A model setting's menu items, with the saved one selected.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {string}
+ */
+const modelOptionsHtml = (s) => modelChoices(s)
+  .map((m) => `<option value="${esc(m.id)}"${m.id === values[s.key] ? " selected" : ""}>${esc(m.name)}</option>`).join("");
+
+/**
+ * The control for a setting: a switch for on and off, a menu for a choice or a model, a box for text. Text saves
+ * when you leave the box or press Return.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {string}
+ */
+function controlHtml(s) {
+  if (s.type === "boolean") return `<input class="switch" type="checkbox" role="switch" id="set-${s.key}" data-key="${s.key}"${values[s.key] ? " checked" : ""}>`;
+  if (s.devices) return `<select id="set-${s.key}" data-key="${s.key}">${micOptionsHtml(s)}</select>`;
+  if (s.voices) return `<select id="set-${s.key}" data-key="${s.key}">${voiceOptionsHtml(s)}</select>`;
+  if (s.type === "text" && s.lines) {
+    return `<textarea class="field" id="set-${s.key}" data-key="${s.key}" rows="${s.lines}" maxlength="${s.max}" spellcheck="false">${esc(values[s.key])}</textarea>`;
+  }
+  if (s.type === "text") {
+    return `<input class="field" type="text" id="set-${s.key}" data-key="${s.key}" maxlength="${s.max}" spellcheck="false" autocomplete="off"`
+      + ` value="${esc(values[s.key])}" placeholder="${esc(placeholderFor(s, values))}">`;
+  }
+  if (s.type === "model") return `<select id="set-${s.key}" data-key="${s.key}">${modelOptionsHtml(s)}</select>`;
+  if (s.swatches) {
+    return `<div class="swatches" role="radiogroup" id="set-${s.key}" aria-label="${esc(s.label)}">${s.options.map((o, i) => `<button type="button" class="swatch" role="radio"`
+      + ` data-swatch="${s.key}" data-i="${i}" aria-checked="${o.value === values[s.key]}" title="${esc(o.label)}" aria-label="${esc(o.label)}" style="--sw:${o.swatch}"></button>`).join("")}</div>`;
+  }
+  const options = s.options.map((o, i) => `<option value="${i}"${o.value === values[s.key] ? " selected" : ""}>${esc(o.label)}</option>`).join("");
+  return `<select id="set-${s.key}" data-key="${s.key}">${options}</select>`;
+}
+
+/** @type {Array<{ id: string, name: string }>} This Mac's microphones, as the browser lists them; empty until loaded. */
+let mics = [];
+
+/**
+ * A microphone setting's menu items: the Mac's default first, then each microphone. A saved one that isn't
+ * plugged in now stays in the list, so it isn't lost.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {string}
+ */
+function micOptionsHtml(s) {
+  const current = String(values[s.key] || "");
+  const list = [{ id: "", name: "The Mac's default" }, ...mics];
+  if (!list.some((m) => m.id === current)) list.push({ id: current, name: "A microphone that isn't connected" });
+  return list.map((m) => `<option value="${esc(m.id)}"${m.id === current ? " selected" : ""}>${esc(m.name)}</option>`).join("");
+}
+
+/**
+ * Lists this Mac's microphones for the menu. Their names show once the page may use the microphone.
+ * @returns {Promise<void>}
+ */
+async function loadMics() {
+  try {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    mics = all.filter((d) => d.kind === "audioinput" && d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications")
+      .map((d, i) => ({ id: d.deviceId, name: d.label || `Microphone ${i + 1}` }));
+    accept(values);
+  } catch {
+    mics = [];
+  }
+}
+
+/**
+ * A Play sample button, for settings you'd want to hear, like Felix's voice and speed.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {string}
+ */
+const sampleHtml = (s) => (s.sample ? `<button class="btn small" type="button" data-sample title="Hear Felix say a line in this voice and speed">Play sample</button>` : "");
+
+/**
+ * Help text kept short: its first sentence, and a More button for the rest.
+ * @param {string} text
+ * @returns {string}
+ */
+function shortHelp(text) {
+  const cut = text.search(/[.!?]["”)]?\s/);
+  if (cut < 0 || cut + 2 >= text.length) return esc(text);
+  const end = text.indexOf(" ", cut) + 1;
+  return `${esc(text.slice(0, end))}<button class="more-btn" type="button" data-more>More</button><span hidden>${esc(text.slice(end))}</span>`;
+}
+
+/**
+ * One setting's row: its name, what it does, its control and whether it saved. A setting that depends on another in
+ * its section sits indented under it; the section's own on switch (Felix, Friend mode) doesn't count, or every row
+ * would be indented. Search reads the section's title too, so "jira" finds every Jira setting.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {string}
+ */
+function rowHtml(s) {
+  const above = s.requires && SETTINGS.find((x) => x.key === s.requires);
+  const dep = above && above.group === s.group && above !== settingsIn(s.group)[0];
+  const title = GROUPS.find((g) => g.id === s.group)?.title || "";
+  return `<div class="row${dep ? " dep" : ""}" data-row="${s.key}" data-find="${esc(`${s.label} ${s.help} ${title}`.toLowerCase())}">`
+    + `<div class="text"><label for="set-${s.key}">${esc(s.label)}</label><span class="help">${shortHelp(s.help)}</span></div>`
+    + `${sampleHtml(s)}${controlHtml(s)}</div>`;
+}
+
+/**
+ * A section's settings in runs: the ones with no `part` first, then each part under its small heading.
+ * @param {string} group
+ * @returns {string}
+ */
+function rowsHtml(group) {
+  const runs = [];
+  // Hidden settings are ones Felix sets himself, like how long he's paused.
+  for (const s of settingsIn(group).filter((x) => !x.hidden)) {
+    if (!runs.length || (s.part && s.part !== runs.at(-1).part)) runs.push({ part: s.part || "", list: [] });
+    runs.at(-1).list.push(s);
+  }
+  return runs.map((r) => `<div data-part>${r.part ? `<div class="part">${esc(r.part)}</div>` : ""}<div class="rows">${r.list.map(rowHtml).join("")}</div></div>`).join("");
+}
+
+/**
+ * A line of text to paste somewhere, with its Copy button.
+ * @param {string} id The code element's id.
+ * @returns {string}
+ */
+const codeLineHtml = (id) => `<span class="code-line"><code id="${id}">…</code><button class="btn small" type="button" data-copy="${id}">Copy</button></span>`;
+
+/**
+ * A row with no setting behind it, such as the App group's and the music sources'.
+ * @param {{ id: string, label: string, find: string, help: string, end?: string }} row help and end are markup.
+ * @returns {string}
+ */
+const extraRowHtml = ({ id, label, find, help, end = "" }) => `<div class="row" data-row="${id}" data-find="${esc(`${label} ${find}`.toLowerCase())}">`
+  + `<div class="text"><strong>${esc(label)}</strong>${help}</div>${end}</div>`;
+
+const MUSIC_SOURCES = {
+  spotify: {
+    name: "Spotify", find: "spotify music sign in login premium",
+    signIn: "Music plays right here in Felix, so you don't need the Spotify app. Needs Spotify Premium.",
+    again: "Sign in again so Felix can play music itself, without the Spotify app.",
+    more: "Sign in again so the player can save songs and show what you played recently.",
+  },
+};
+let musicSources = null;
+
+/**
+ * One music source's row: who's signed in, and Sign in or Sign out.
+ * @param {string} id
+ * @returns {string}
+ */
+function musicRowHtml(id) {
+  const m = MUSIC_SOURCES[id];
+  return extraRowHtml({
+    id: `music-${id}`, label: m.name, find: m.find,
+    help: `<span class="help" id="music-${id}-status">Checking…</span>`,
+    end: `<div class="acts" id="music-${id}-acts"></div>`,
+  });
+}
+
+/** The icons the memory list uses, in the app's line style. */
+const MEM_ICONS = {
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>`,
+  export: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14"/></svg>`,
+};
+
+/** Small drawings for an empty list: a notebook for notes, a speech bubble for phrases, a magnifier for no match. */
+const MEM_DRAWINGS = {
+  notes: `<rect x="26" y="8" width="44" height="56" rx="7" class="tile"/><path d="M26 20h-5M26 32h-5M26 44h-5M26 56h-5" class="line"/>`
+    + `<path d="M38 24h20M38 34h20M38 44h12" class="line"/><path d="M74 12l1.5 3.5L79 17l-3.5 1.5L74 22l-1.5-3.5L69 17l3.5-1.5z" class="spark"/>`,
+  phrases: `<path d="M18 14h52a8 8 0 0 1 8 8v22a8 8 0 0 1-8 8H40l-12 10V52H18a8 8 0 0 1-8-8V22a8 8 0 0 1 8-8z" class="tile"/>`
+    + `<path d="M24 28h40M24 38h24" class="line"/><circle cx="80" cy="14" r="5" class="spark"/>`,
+  search: `<circle cx="44" cy="32" r="20" class="tile"/><path d="M58 46l14 14" class="line thick"/><path d="M36 32h16" class="line"/>`,
+};
+
+/**
+ * An empty list: its drawing, a title and one line.
+ * @param {keyof typeof MEM_DRAWINGS} kind
+ * @param {string} title
+ * @param {string} text
+ * @returns {string}
+ */
+const memBlank = (kind, title, text) => `<div class="mem-blank"><svg viewBox="0 0 96 72" aria-hidden="true">${MEM_DRAWINGS[kind]}</svg><strong>${title}</strong><p>${text}</p></div>`;
+
+/** Rows some groups add under their settings. */
+const GROUP_EXTRAS = {
+  music: () => Object.keys(MUSIC_SOURCES).map(musicRowHtml).join(""),
+  voice: () => `<div class="row" data-row="felix-words" data-find="names words dictionary team on call jira auto"><div class="text"><strong>Words Felix adds on his own</strong>`
+    + `<span class="help" id="felix-auto-words">Checking…</span></div></div>`
+    + `<div data-part><div class="part">Voice on this device</div><div class="rows">`
+    + `<div class="row vd" data-row="voice-device" data-find="ipad voice device download kokoro webgpu model mac this device"><div class="text">`
+    + `<strong>Felix's voice made here</strong><span class="help" id="vd-plan">Checking what this device can do…</span>`
+    + `<span class="vd-line" id="vd-mac">On the Mac: checking…</span><span class="vd-line" id="vd-here">On this device: checking…</span>`
+    + `<span class="vd-bar" id="vd-bar" hidden><i></i></span><span class="help" id="vd-test-result" hidden></span></div>`
+    + `<div class="acts vd-acts"><button class="btn small" type="button" data-vd="mac">Download to the Mac</button>`
+    + `<button class="btn small" type="button" data-vd="here">Download here</button>`
+    + `<button class="btn small" type="button" data-vd="test" hidden>Play a test line</button>`
+    + `<button class="btn small" type="button" data-vd="unstick" hidden>Try again</button>`
+    + `<button class="btn small" type="button" data-vd="remove" hidden>Remove</button></div></div></div></div>`,
+  felix: () => `<div class="row" data-row="felix-budget" data-find="usage budget today requests claude cursor limit"><div class="text"><strong>Felix's usage today</strong>`
+    + `<span class="help" id="felix-budget">Checking…</span></div></div>`
+    + `<div class="row mem" data-row="felix-phrases" data-find="learned phrases my words commands"><div class="text"><strong>Your learned phrases</strong>`
+    + `<span class="help">Your own words for Felix's commands, which run right here with no AI.</span></div><div class="mem-list" id="felix-phrases"><p class="mem-empty">Loading…</p></div></div>`,
+  memory: () => `<div class="row mem" data-row="memory-notes" data-find="memory notes remember forget delete edit export search what felix knows">`
+    + `<div class="mem-tools"><label class="mem-search">${MEM_ICONS.search}<input class="field" id="mem-q" type="search" placeholder="Search what Felix remembers" aria-label="Search what Felix remembers" autocomplete="off"></label>`
+    + `<a class="btn" href="/api/felix/memory/export" download title="Save every note as a JSON file">${MEM_ICONS.export}Export</a></div>`
+    + `<div class="mem-list" id="mem-list"><p class="mem-empty">Loading…</p></div></div>`,
+};
+
+/**
+ * What a music source's row says and its buttons, for its sign-in.
+ * @param {string} id
+ * @param {{ connected: boolean, outdated: boolean, account: string | null, error: string | null }} s
+ * @returns {{ text: string, cls: string, acts: string }}
+ */
+function musicStage(id, s) {
+  const m = MUSIC_SOURCES[id];
+  const acts = `<button class="btn small primary" type="button" data-music-signin="${id}">Sign in with ${m.name}</button>`;
+  const signOut = `<button class="btn small" type="button" data-music-disconnect="${id}">Sign out</button>`;
+  const who = s.account ? `Signed in as ${s.account}.` : "Signed in.";
+  if (s.connected && s.outdated) return { text: `${who} ${m.again}`, cls: "bad", acts: acts + signOut };
+  if (s.connected && s.missing?.length) return { text: `${who} ${m.more}`, cls: "", acts: acts + signOut };
+  if (s.connected) return { text: `${who} The player in the bottom bar can play from it.`, cls: "ok", acts: signOut };
+  return { text: s.error || m.signIn, cls: s.error ? "bad" : "", acts };
+}
+
+/**
+ * Shows each music source's sign-in from the server's answer.
+ */
+function renderMusic() {
+  if (!musicSources) return;
+  for (const [id, s] of Object.entries(musicSources)) {
+    const stage = musicStage(id, s);
+    $(`music-${id}-status`).textContent = stage.text;
+    $(`music-${id}-status`).className = `help ${stage.cls}`;
+    $(`music-${id}-acts`).innerHTML = stage.acts;
+  }
+}
+
+/**
+ * Takes a music answer and redraws the rows. One from the server, when something changed, goes to the player too;
+ * one from the player ("felix:music") doesn't need to.
+ * @param {object} sources
+ * @param {boolean} [tellPlayer]
+ */
+function acceptMusic(sources, tellPlayer = true) {
+  const changed = JSON.stringify(sources) !== JSON.stringify(musicSources);
+  musicSources = sources;
+  renderMusic();
+  if (changed && tellPlayer) window.FelixMusic?.reload();
+}
+
+/**
+ * Loads each music source's setup.
+ * @returns {Promise<void>}
+ */
+async function loadMusic() {
+  try {
+    acceptMusic((await FelixShell.request("/api/music")).sources);
+  } catch (e) {
+    showError(`Couldn't check music: ${e.message}`);
+  }
+}
+
+/**
+ * Signs a music source out after a second click.
+ * @param {HTMLButtonElement} button
+ */
+async function disconnectMusic(button) {
+  if (!button.classList.contains("confirm")) {
+    button.classList.add("confirm");
+    button.textContent = "Click again";
+    return setTimeout(() => { if (button.isConnected) { button.classList.remove("confirm"); button.textContent = "Sign out"; } }, 4000);
+  }
+  try {
+    acceptMusic((await FelixShell.request("/api/music/disconnect", { source: button.dataset.musicDisconnect })).sources);
+  } catch (e) {
+    showError(`Couldn't sign out: ${e.message}`);
+  }
+}
+
+const CONNECTIONS = [
+  { id: "jira", name: "Jira", find: "jira atlassian token board sprint", card: "My Jira Board" },
+  { id: "datadog", name: "Datadog", find: "datadog on call incident commander token", card: "Incident Commander" },
+  { id: "google", name: "Google Calendar", find: "google calendar bridge apps script vacation tracker out of office invites", card: "Calendar and Team out of office" },
+  { id: "slack", name: "Slack", find: "slack token attendance post", off: "Not connected. Until it is, Start my day gives you its messages to copy and post yourself." },
+];
+let connected = null;
+
+/**
+ * The Connections group: each account a card uses, who it's connected as, and Disconnect. Connecting happens on the
+ * card itself; after a disconnect the card shows its setup again.
+ * @returns {string}
+ */
+function connectionsGroupHtml() {
+  const rows = CONNECTIONS.map((c) => ({ id: `conn-${c.id}`, label: c.name, find: c.find,
+    help: `<span class="help" id="conn-${c.id}-status">Checking…</span>`, end: `<div class="acts" id="conn-${c.id}-acts"></div>` }));
+  return `<section class="group" id="connections" data-group="connections" aria-labelledby="g-connections"><div class="group-head"><h2 id="g-connections">Connections</h2></div>`
+    + `<p>The accounts your cards read from. Connect each one from its card on Home; disconnecting removes its token from your Mac's Keychain.</p>${rows.map(extraRowHtml).join("")}</section>`;
+}
+
+/**
+ * What a connection's row says, and the service to disconnect (null when there's nothing to disconnect).
+ * @param {typeof CONNECTIONS[number]} c
+ * @returns {{ text: string, service: string | null }}
+ */
+function connectionStage(c) {
+  const off = { text: c.off || `Not connected. Set it up from the ${c.card} card on Home.`, service: null };
+  if (c.id === "google") {
+    const g = connected.google;
+    if (g.bridge) return { text: "Connected through your Apps Script bridge. To shut the script off too, archive its deployment in Apps Script.", service: "google-bridge" };
+    if (g.app.connected) return { text: `Signed in with your Google app${g.app.email ? ` as ${g.app.email}` : ""}.`, service: "google-work" };
+    return off;
+  }
+  const s = connected[c.id];
+  if (!s?.connected) return off;
+  if (c.id === "jira") return { text: `Connected as ${s.who}, board ${s.board}.`, service: "jira" };
+  return { text: "Connected.", service: c.id };
+}
+
+/** Shows each connection's state from the server's answer. */
+function renderConnections() {
+  if (!connected) return;
+  for (const c of CONNECTIONS) {
+    if (!$(`conn-${c.id}-status`)) continue;
+    const stage = connectionStage(c);
+    $(`conn-${c.id}-status`).textContent = stage.text;
+    $(`conn-${c.id}-status`).className = `help${stage.service ? " ok" : ""}`;
+    $(`conn-${c.id}-acts`).innerHTML = stage.service ? `<button class="btn small" type="button" data-disconnect="${stage.service}">Disconnect</button>` : "";
+  }
+}
+
+/** Loads which accounts are connected. */
+async function loadConnections() {
+  try {
+    connected = await FelixShell.request("/api/connections");
+    renderConnections();
+  } catch (e) {
+    showError(`Couldn't check connections: ${e.message}`);
+  }
+}
+
+/**
+ * Disconnects an account after a second click.
+ * @param {HTMLButtonElement} button
+ */
+async function disconnectService(button) {
+  if (!button.classList.contains("confirm")) {
+    button.classList.add("confirm");
+    button.textContent = "Click again";
+    return setTimeout(() => { if (button.isConnected) { button.classList.remove("confirm"); button.textContent = "Disconnect"; } }, 4000);
+  }
+  button.disabled = true;
+  try {
+    await FelixShell.request(`/api/disconnect/${button.dataset.disconnect}`, {});
+  } catch (e) {
+    showError(`Couldn't disconnect: ${e.message}`);
+  }
+  loadConnections();
+}
+
+/**
+ * The App group: whether Felix is installed, how to uninstall or reinstall it, and whether Chrome can save its
+ * launcher.
+ * @returns {string}
+ */
+function appGroupHtml() {
+  const rows = [
+    { id: "app-installed", label: "Felix app", find: "install installed dock window", help: `<span class="help" id="app-status"></span>`,
+      end: `<button class="btn small" type="button" data-install hidden title="Install Felix as an app with its own window and Dock icon">Install</button>` },
+    { id: "app-reload", label: "Reload Felix", find: "reload refresh hard reload restart window",
+      help: `<span class="help">Loads the whole window again, bottom bar included. Same as ⇧⌘R. ⌘R reloads only the page you're on.</span>`,
+      end: `<button class="btn small" type="button" data-reload-app>Reload</button>` },
+    { id: "app-launcher", label: "App launcher", find: "launcher applications focus slack opens behind",
+      help: `<span class="help" id="launcher-help">Checking…</span><span id="launcher-fix" hidden>${codeLineHtml("launcher-cmd")}</span>`,
+      end: `<span class="state" id="launcher-state"></span>` },
+    { id: "app-reinstall", label: "Reinstall Felix", find: "remove uninstall reinstall chrome",
+      help: `<span class="help">A page can't remove its own app, so Chrome has to do it:</span><ol class="steps">`
+        + `<li id="step-fix" hidden>Fix the launcher folder first: click <strong>Copy</strong> above, paste it in Terminal, press Return and type your Mac password.</li>`
+        + `<li>Click <strong>Open in app</strong> at the right of Chrome's address bar. If Slack or another app comes up instead, click Chrome in the Dock and choose <strong>Felix</strong> from the <strong>Window</strong> menu at the top of the screen.</li>`
+        + `<li>In the Felix window, the one with no address bar, click its own <strong>⋮</strong> at the top right. Chrome's usual ⋮ menu doesn't have it. Choose <strong>Uninstall Felix…</strong>, then <strong>Remove</strong>.</li>`
+        + `<li>Open this page in a Chrome tab again and click <strong>Install</strong> in the Felix app row above.</li></ol>` },
+  ];
+  return `<section class="group" id="app" data-group="app" aria-labelledby="g-app"><div class="group-head"><h2 id="g-app">App</h2></div>`
+    + `<p>Felix as an app, with its own window and Dock icon.</p>${rows.map(extraRowHtml).join("")}</section>`;
+}
+
+/**
+ * The list on the left: each kind of setting and its sections, in Home's order for the cards. A section added later
+ * that isn't listed here still shows, under More.
+ */
+const NAV = [
+  { title: "General", ids: ["home", "refresh"] },
+  { title: "Cards", ids: ["ic", "jira", "prs", "ai", "cal", "slack", "ooo", "tasks"] },
+  { title: "Felix", ids: ["felix", "friend", "memory"] },
+  { title: "Music", ids: ["music"] },
+  { title: "Work day", ids: ["shift"] },
+  { title: "Accounts", ids: ["connections", "app"] },
+];
+const EXTRA_SECTIONS = { connections: "Connections", app: "App" };
+
+/**
+ * The kinds and their sections, with any section NAV doesn't list added under More.
+ * @returns {Array<{ title: string, ids: string[] }>}
+ */
+function navCats() {
+  const listed = new Set(NAV.flatMap((c) => c.ids));
+  const more = GROUPS.map((g) => g.id).filter((id) => !listed.has(id));
+  return more.length ? [...NAV, { title: "More", ids: more }] : NAV;
+}
+
+/**
+ * A section's name, for the list on the left.
+ * @param {string} id
+ * @returns {string}
+ */
+const sectionTitle = (id) => GROUPS.find((g) => g.id === id)?.title || EXTRA_SECTIONS[id] || id;
+
+/**
+ * One section: Connections and App draw their own; a settings group gets its title, a short about line, Reset, its
+ * settings and any rows it adds.
+ * @param {string} id
+ * @returns {string}
+ */
+function sectionHtml(id) {
+  if (id === "connections") return connectionsGroupHtml();
+  if (id === "app") return appGroupHtml();
+  const g = GROUPS.find((x) => x.id === id);
+  if (!g) return "";
+  const reset = settingsIn(g.id).length ? `<button class="btn small" type="button" data-reset="${g.id}" title="Put this section's settings back to their defaults">Reset</button>` : "";
+  return `<section class="group" id="${g.id}" data-group="${g.id}" aria-labelledby="g-${g.id}">`
+    + `<div class="group-head"><h2 id="g-${g.id}">${esc(g.title)}</h2>${reset}</div>`
+    + `<p>${shortHelp(g.about)}</p>${rowsHtml(g.id)}${GROUP_EXTRAS[g.id]?.() || ""}</section>`;
+}
+
+/**
+ * Draws the list on the left and every section with its settings at their current values, in the list's order.
+ */
+function render() {
+  const cats = navCats();
+  $("side").innerHTML = cats.map((c) => `<div class="cat" data-cat><span>${esc(c.title)}</span>`
+    + `${c.ids.map((id) => `<a href="#${id}" data-nav="${id}">${esc(sectionTitle(id))}</a>`).join("")}</div>`).join("");
+  $("groups").innerHTML = cats.flatMap((c) => c.ids).map(sectionHtml).join("");
+  renderConnections();
+  document.querySelectorAll("#groups select").forEach(FelixDropdown.enhance);
+  filter();
+}
+
+/**
+ * Marks the section in view in the list on the left: the last one whose top has passed the top of the window.
+ */
+function markCurrent() {
+  const sections = [...document.querySelectorAll("#groups > section:not([hidden])")];
+  const atEnd = innerHeight + scrollY >= document.documentElement.scrollHeight - 4;
+  const current = atEnd ? sections.at(-1) : sections.filter((el) => el.getBoundingClientRect().top <= 120).at(-1) || sections[0];
+  for (const a of document.querySelectorAll("[data-nav]")) {
+    const on = a.dataset.nav === current?.id;
+    a.setAttribute("aria-current", on ? "true" : "false");
+    if (on && a.parentElement.parentElement.scrollWidth > a.parentElement.parentElement.clientWidth) a.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+}
+
+/**
+ * Says whether Felix is installed in this browser, and shows Install while the browser offers it.
+ */
+function renderAppStatus() {
+  const app = window.FelixApp;
+  document.querySelector("#groups [data-install]").hidden = !app?.canInstall();
+  let text = "Installed. Chrome shows Open in app in the address bar when you're on a Felix page.";
+  if (app?.isApp()) text = "Installed. You're in its window now.";
+  else if (app?.canInstall()) text = "Not installed in this browser yet.";
+  $("app-status").textContent = text;
+}
+
+/**
+ * Asks the server whether Chrome can save Felix's launcher, and shows the Terminal fix when it can't.
+ */
+async function checkLauncher() {
+  const state = $("launcher-state");
+  try {
+    const check = await (await fetch("/api/app/launcher", { cache: "no-store" })).json();
+    if (!check.checked) {
+      $("launcher-help").textContent = "Only checked on a Mac.";
+      return;
+    }
+    state.className = `state ${check.ok ? "ok" : "bad"}`;
+    state.textContent = check.ok ? "OK" : "Needs a fix";
+    $("launcher-help").textContent = check.ok
+      ? `Chrome can save Felix's launcher in ${check.folder}.`
+      : `Chrome can't save Felix's launcher because another user owns ${check.folder}. That's why opening Felix can bring Slack or another app forward. This Terminal command fixes it; then reinstall Felix below.`;
+    $("launcher-cmd").textContent = check.fix || "";
+    $("launcher-fix").hidden = check.ok;
+    $("step-fix").hidden = check.ok;
+  } catch {
+    $("launcher-help").textContent = "Couldn't check. Is the local server running?";
+  }
+}
+
+/**
+ * Copies a code line's text and says so on its button for a moment.
+ * @param {HTMLButtonElement} button
+ */
+async function copyCode(button) {
+  try {
+    await navigator.clipboard.writeText($(button.dataset.copy).textContent);
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Select and copy";
+  }
+  setTimeout(() => { button.textContent = "Copy"; }, 2000);
+}
+
+/**
+ * Shows only the settings whose name or description has every word of the search.
+ */
+function filter() {
+  const words = $("search").value.toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  for (const group of document.querySelectorAll("[data-group]")) {
+    let inGroup = 0;
+    for (const row of group.querySelectorAll("[data-row]")) {
+      const match = words.every((w) => row.dataset.find.includes(w));
+      row.hidden = !match;
+      inGroup += match ? 1 : 0;
+    }
+    // A run and its small heading show while one of its rows does.
+    for (const part of group.querySelectorAll("[data-part]")) part.hidden = ![...part.querySelectorAll("[data-row]")].some((r) => !r.hidden);
+    group.hidden = !inGroup;
+    shown += inGroup;
+    const link = document.querySelector(`[data-nav="${group.id}"]`);
+    if (link) link.hidden = !inGroup;
+  }
+  for (const cat of document.querySelectorAll("[data-cat]")) cat.hidden = ![...cat.querySelectorAll("[data-nav]")].some((a) => !a.hidden);
+  $("no-match").hidden = shown > 0;
+  markCurrent();
+}
+
+/**
+ * Shows a problem at the top of the page, or clears it.
+ * @param {string} [message]
+ */
+function showError(message = "") {
+  $("error").textContent = message;
+  $("error").hidden = !message;
+}
+
+/**
+ * Takes the server's settings as the page's own, and sets every control and the mode switch to match.
+ * @param {Record<string, unknown>} saved
+ */
+function accept(saved) {
+  values = cleanSettings(saved);
+  FelixShell.setMode(values.mode);
+  for (const s of SETTINGS) {
+    const el = $(`set-${s.key}`);
+    if (!el) continue;
+    if (s.type === "boolean") el.checked = Boolean(values[s.key]);
+    else if (s.type === "model") el.innerHTML = modelOptionsHtml(s);
+    else if (s.devices) el.innerHTML = micOptionsHtml(s);
+    else if (s.voices) el.innerHTML = voiceOptionsHtml(s);
+    else if (s.type === "text") {
+      if (document.activeElement !== el) el.value = String(values[s.key]);
+      el.placeholder = placeholderFor(s, values);
+    }
+    else if (s.swatches) el.querySelectorAll(".swatch").forEach((b, i) => b.setAttribute("aria-checked", String(s.options[i].value === values[s.key])));
+    else el.value = String(s.options.findIndex((o) => o.value === values[s.key]));
+    el.disabled = !applies(s, values) || (s.type === "model" && values[s.tool] === "auto");
+    el.closest(".row")?.classList.toggle("off", !applies(s, values));
+    // A setting that doesn't apply has nothing to hear either.
+    const sample = el.closest(".row")?.querySelector("[data-sample]");
+    if (sample) sample.disabled = !applies(s, values);
+    FelixDropdown.sync(el);
+  }
+  showError();
+}
+
+/**
+ * Saves one setting and says so in Felix's toast ("Saved · Refresh every: 1 minute"), or puts the control back and
+ * says why when the server refuses.
+ * @param {string} key
+ * @param {unknown} value
+ */
+async function saveOne(key, value) {
+  const s = SETTINGS.find((x) => x.key === key);
+  try {
+    accept(await FelixShell.saveSettings(changeFor(key, value)));
+    FelixShell.toast("Saved", { detail: s ? `${s.label}: ${valueText(s, values[key])}` : "", id: `setting:${key}` });
+  } catch (e) {
+    accept(values);
+    FelixShell.toast("Not saved", { tone: "bad", detail: e.message, id: `setting:${key}` });
+  }
+}
+
+/**
+ * A setting's value said for the toast: On or Off, the picked option's label, or the text.
+ * @param {(typeof SETTINGS)[number]} s
+ * @param {unknown} value
+ * @returns {string}
+ */
+function valueText(s, value) {
+  if (s.type === "boolean") return value ? "On" : "Off";
+  const option = s.options?.find((o) => o.value === value);
+  if (option) return option.label;
+  return String(value ?? "").trim() || "Default";
+}
+
+/**
+ * Puts settings back to their defaults and redraws.
+ * @param {string[]} [keys] Leave out for all of them.
+ */
+async function reset(keys) {
+  try {
+    accept(await FelixShell.resetSettings(keys));
+    FelixShell.toast(keys ? "Reset to defaults" : "Every setting is back to its default");
+  } catch (e) {
+    FelixShell.toast("Couldn't reset", { tone: "bad", detail: e.message });
+  }
+}
+
+/**
+ * The value a control now shows, as the setting stores it.
+ * @param {HTMLInputElement | HTMLSelectElement} el
+ * @returns {unknown}
+ */
+function controlValue(el) {
+  if (el.type === "checkbox") return el.checked;
+  const s = SETTINGS.find((x) => x.key === el.dataset.key);
+  if (s.devices || s.voices) return el.value;
+  if (s.type === "text") return s.lines ? el.value.replace(/\r/g, "") : el.value.trim();
+  return s.type === "model" ? el.value : s.options[Number(el.value)].value;
+}
+
+/**
+ * Loads Cursor's models for the model menu, once; the menu keeps Auto and Claude's meanwhile.
+ * @returns {Promise<void>}
+ */
+async function loadCursorModels() {
+  try {
+    cursorModels = (await (await fetch("/api/models", { cache: "no-store" })).json()).cursor || [];
+    accept(values);
+  } catch {
+    cursorModels = [];
+  }
+}
+
+/**
+ * Plays a random line in Felix's voice and speed as saved, a different one each time; a second click stops it.
+ * @param {HTMLButtonElement} button
+ * @returns {Promise<void>}
+ */
+async function playSample(button) {
+  const voice = window.FelixVoice;
+  const playing = Boolean(button.dataset.playing);
+  document.querySelectorAll("[data-sample]").forEach(samplePlaying(false));
+  if (playing) return voice.stopSpeaking();
+  let pick = Math.floor(Math.random() * SAMPLES.length);
+  if (pick === lastSample) pick = (pick + 1) % SAMPLES.length;
+  lastSample = pick;
+  samplePlaying(true)(button);
+  const played = await voice.speak(SAMPLES[pick]);
+  const stopped = !button.dataset.playing;
+  samplePlaying(false)(button);
+  if (!played && !stopped) showError("Couldn't play the sample. Is the local server running?");
+}
+
+/**
+ * Shows a Play sample button as playing, with Stop, or idle.
+ * @param {boolean} on
+ * @returns {(button: HTMLElement) => void}
+ */
+const samplePlaying = (on) => (button) => {
+  if (on) button.dataset.playing = "1";
+  else delete button.dataset.playing;
+  button.textContent = on ? "Stop" : "Play sample";
+};
+
+/**
+ * Resets after a second click within 4 seconds, since it can't be undone.
+ * @param {HTMLButtonElement} button
+ * @param {string[]} [keys]
+ */
+function confirmReset(button, keys) {
+  if (button.classList.contains("confirm")) return reset(keys);
+  const original = button.textContent;
+  button.classList.add("confirm");
+  button.textContent = "Click again to reset";
+  setTimeout(() => { if (button.isConnected) { button.classList.remove("confirm"); button.textContent = original; } }, 4000);
+}
+
+/** @type {Array<{ id: string, text: string, quote: string, kind: string, saidAt: string, archived?: boolean }>} Felix's notes. */
+let memoryNotes = [];
+/** @type {string | null} The note being edited. */
+let editingNote = null;
+
+// ---------- Voice on this device ----------
+
+/**
+ * A size in MB, the short way.
+ * @param {number} bytes
+ * @returns {string}
+ */
+const mb = (bytes) => `${Math.round(bytes / 1e6)} MB`;
+
+/**
+ * How far a download has got, as "45%", or "" before its size is known.
+ * @param {{ got: number, total: number }} j
+ * @returns {string}
+ */
+const pct = (j) => (j.total ? `${Math.floor((j.got / j.total) * 100)}%` : "");
+
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let vdMacTimer;
+
+/**
+ * Shows where this device's voice files are: on the Mac (and "Download to the Mac" as it goes), and here.
+ */
+async function voiceDevice() {
+  const dev = window.FelixVoiceDevice;
+  if (!$("vd-plan") || !dev) return;
+  const plan = await dev.detect();
+  $("vd-plan").textContent = plan.webgpu
+    ? `This device can make Felix's voice on its graphics chip, with the ${plan.mb} MB ${plan.f16 ? "half-size" : "full"} model.`
+    : `This device has no WebGPU, so it would use the ${plan.mb} MB compact model on its processor, which is much slower.`;
+  dev.watch(() => paintHere());
+  paintMac();
+  paintHere();
+}
+
+/**
+ * The Mac's copy of the files this device needs, and its download while one runs.
+ */
+async function paintMac() {
+  clearTimeout(vdMacTimer);
+  const dev = window.FelixVoiceDevice;
+  const line = $("vd-mac");
+  if (!line) return;
+  const plan = await dev.detect();
+  try {
+    const { files, job } = await (await fetch("/api/voice-web", { cache: "no-store" })).json();
+    const names = dev.macNames(plan.variant);
+    const have = names.filter((n) => files[n] !== null && files[n] !== undefined);
+    const bytes = have.reduce((sum, n) => sum + files[n], 0);
+    const mine = job && job.variant === plan.variant ? job : null;
+    if (mine?.running) {
+      line.innerHTML = `<b>On the Mac:</b> downloading ${mine.done + 1} of ${mine.count}, ${esc(mine.file.split("/").pop())} ${pct(mine)}`;
+      vdMacTimer = setTimeout(paintMac, 1000);
+    } else if (mine?.error) line.innerHTML = `<b>On the Mac:</b> stopped: ${esc(mine.error)}`;
+    else if (have.length === names.length) line.innerHTML = `<b>On the Mac:</b> ready, ${mb(bytes)}`;
+    else line.innerHTML = `<b>On the Mac:</b> ${have.length ? `${have.length} of ${names.length} files` : "not downloaded yet"}. A device fetches what's missing from the internet through the Mac.`;
+    const button = document.querySelector('[data-vd="mac"]');
+    if (button) {
+      button.hidden = have.length === names.length;
+      button.disabled = Boolean(mine?.running);
+    }
+  } catch {
+    line.innerHTML = "<b>On the Mac:</b> couldn't check.";
+  }
+}
+
+/**
+ * This device's copy, and its download while one runs.
+ */
+async function paintHere() {
+  const dev = window.FelixVoiceDevice;
+  const line = $("vd-here");
+  if (!line) return;
+  const s = await dev.status();
+  const j = dev.job();
+  const bar = $("vd-bar");
+  bar.hidden = !j?.running;
+  if (j?.running) {
+    const share = j.count ? (j.done + (j.total ? j.got / j.total : 0)) / j.count : 0;
+    bar.firstElementChild.style.width = `${Math.round(share * 100)}%`;
+    line.innerHTML = `<b>On this device:</b> downloading ${j.done + 1} of ${j.count}, ${esc(j.file.split("/").pop())} ${pct(j)}`
+      + `${j.from ? ` from ${j.from === "mac" ? "the Mac" : "the internet"}` : ""}`;
+  } else if (j?.error) line.innerHTML = `<b>On this device:</b> stopped: ${esc(j.error)}. Download here tries again.`;
+  else if (s.ready && dev.stuck()) {
+    line.innerHTML = dev.stuckWhy() === "crashed"
+      ? "<b>On this device:</b> downloaded, but loading it closed the app, so the Mac makes Felix's voice."
+      : "<b>On this device:</b> downloaded, but it got stuck making speech here, so the Mac makes Felix's voice.";
+  }
+  else if (s.ready) line.innerHTML = "<b>On this device:</b> ready.";
+  else line.innerHTML = `<b>On this device:</b> ${s.have ? `${s.have} of ${s.count} files` : "not downloaded yet"}.`;
+  const show = (name, on) => { const b = document.querySelector(`[data-vd="${name}"]`); if (b) b.hidden = !on; };
+  show("here", !s.ready && !j?.running);
+  show("remove", s.have > 0 && !j?.running);
+  show("test", s.ready && !j?.running);
+  show("unstick", s.ready && dev.stuck());
+  const here = document.querySelector('[data-vd="here"]');
+  if (here) here.textContent = s.have ? "Finish downloading" : "Download here";
+}
+
+$("groups").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-vd]");
+  if (!b) return;
+  const dev = window.FelixVoiceDevice;
+  const what = b.dataset.vd;
+  if (what === "mac") {
+    const plan = await dev.detect();
+    b.disabled = true;
+    await FelixShell.request("/api/voice-web/download", { variant: plan.variant }).catch((err) => FelixShell.toast(err.message));
+    return paintMac();
+  }
+  if (what === "here") {
+    dev.download().then(() => { paintHere(); paintMac(); });
+    return paintHere();
+  }
+  if (what === "unstick") {
+    dev.unstick();
+    return paintHere();
+  }
+  if (what === "remove") {
+    const yes = await FelixShell.confirm({ title: "Remove the voice from this device?", text: "Felix's voice files come off this device. Download here gets them back, from the Mac.", confirm: "Remove", danger: true });
+    if (!yes) return;
+    await dev.remove();
+    return paintHere();
+  }
+  if (what === "test") {
+    const out = $("vd-test-result");
+    out.hidden = false;
+    out.textContent = "Making a test line on this device…";
+    b.disabled = true;
+    // Which step it's on, and for how long, so a slow start shows as progress rather than a hang.
+    const ticker = setInterval(() => {
+      const at = dev.step();
+      if (at) out.textContent = `${at.name}… ${Math.round(at.ms / 1000)} s`;
+    }, 500);
+    try {
+      const prefs = FelixShell.cachedSettings() || {};
+      const r = await dev.test(`Hi, I'm ${prefs.felixName || "Felix"}. This line was made right here on this device.`, { voice: prefs.felixVoice, speed: Number(prefs.felixSpeed) || 1 });
+      // Through Felix's player, which this tap unlocked: an iPad blocks sound from a new player once the tap is over.
+      window.FelixVoice?.playBlob(r.blob);
+      const speed = r.playsMs / r.madeMs;
+      out.textContent = `Made in ${(r.madeMs / 1000).toFixed(1)} s, plays for ${(r.playsMs / 1000).toFixed(1)} s: `
+        + (speed >= 1 ? `${speed.toFixed(1)}× faster than it plays, so no pauses.` : `${(1 / speed).toFixed(1)}× slower than it plays, so he'd pause.`)
+        + (r.firstLoadMs > 500 ? ` Loading the voice took ${(r.firstLoadMs / 1000).toFixed(1)} s, once.` : "");
+    } catch (err) {
+      out.textContent = `Couldn't make it here: ${err.message}`;
+    } finally {
+      clearInterval(ticker);
+      b.disabled = false;
+    }
+  }
+});
+
+/**
+ * Loads Felix's notes for the memory page.
+ * @returns {Promise<void>}
+ */
+async function loadMemory() {
+  try {
+    memoryNotes = (await (await fetch("/api/felix/memory", { cache: "no-store" })).json()).notes || [];
+  } catch {
+    memoryNotes = [];
+  }
+  renderMemory();
+}
+
+/**
+ * Draws the notes that match the search, newest first, with archived ones last.
+ */
+function renderMemory() {
+  const list = $("mem-list");
+  if (!list) return;
+  const words = ($("mem-q")?.value || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = memoryNotes.filter((n) => words.every((w) => `${n.text} ${n.quote} ${n.kind}`.toLowerCase().includes(w)))
+    .sort((a, b) => Number(Boolean(a.archived)) - Number(Boolean(b.archived)) || Date.parse(b.saidAt) - Date.parse(a.saidAt));
+  if (!memoryNotes.length) {
+    list.innerHTML = memBlank("notes", "Nothing remembered yet", "Felix learns from what you tell him, a little while after you talk. His notes show up here.");
+    return;
+  }
+  if (!shown.length) {
+    list.innerHTML = memBlank("search", "No notes match", "Try another word, or clear the search.");
+    return;
+  }
+  list.innerHTML = shown.map((n) => {
+    const day = new Date(n.saidAt).toLocaleDateString([], { month: "short", day: "numeric" });
+    const text = editingNote === n.id
+      ? `<textarea class="field" rows="2" maxlength="200" data-mem-text="${esc(n.id)}">${esc(n.text)}</textarea>`
+      : `<span class="mem-text">${esc(n.text)}</span>`;
+    const acts = editingNote === n.id
+      ? `<button class="btn small primary" type="button" data-mem-save="${esc(n.id)}">Save</button><button class="btn small" type="button" data-mem-cancel>Cancel</button>`
+      : `<button class="btn small" type="button" data-mem-edit="${esc(n.id)}">Edit</button><button class="btn small" type="button" data-mem-delete="${esc(n.id)}">Delete</button>`;
+    return `<div class="mem-note${n.archived ? " archived" : ""}">${text}`
+      + `<span class="mem-meta">${esc(day)} · you said “${esc(n.quote)}”${n.archived ? " · archived" : ""}</span><div class="acts">${acts}</div></div>`;
+  }).join("");
+}
+
+/**
+ * Saves a note's new words, or deletes a note after a second click.
+ * @param {MouseEvent} e
+ * @returns {Promise<void>}
+ */
+async function onMemoryClick(e) {
+  const t = /** @type {HTMLElement} */ (e.target);
+  const edit = t.closest("[data-mem-edit]");
+  const save = t.closest("[data-mem-save]");
+  const del = t.closest("[data-mem-delete]");
+  if (t.closest("[data-mem-cancel]")) {
+    editingNote = null;
+    return renderMemory();
+  }
+  if (edit) {
+    editingNote = edit.dataset.memEdit;
+    renderMemory();
+    return $("mem-list").querySelector("textarea")?.focus();
+  }
+  try {
+    if (save) {
+      const id = save.dataset.memSave;
+      const text = $("mem-list").querySelector(`[data-mem-text="${CSS.escape(id)}"]`).value;
+      const { note } = await FelixShell.request("/api/felix/memory/edit", { id, text });
+      memoryNotes = memoryNotes.map((n) => (n.id === id ? note : n));
+      editingNote = null;
+      renderMemory();
+    }
+    if (del && !del.classList.contains("confirm")) {
+      del.classList.add("confirm");
+      del.textContent = "Click again";
+      return setTimeout(() => { if (del.isConnected) { del.classList.remove("confirm"); del.textContent = "Delete"; } }, 4000);
+    }
+    if (del) {
+      await FelixShell.request("/api/felix/memory/delete", { id: del.dataset.memDelete });
+      memoryNotes = memoryNotes.filter((n) => n.id !== del.dataset.memDelete);
+      renderMemory();
+    }
+  } catch (err) {
+    showError(`Couldn't change that note: ${err.message}`);
+  }
+}
+
+$("groups").addEventListener("click", (e) => { if (e.target.closest(".mem")) onMemoryClick(e); });
+$("groups").addEventListener("click", (e) => { if (e.target.closest("[data-reload-app]")) FelixShell.hardReload(); });
+
+/**
+ * Shows Felix's use of AI today and how full Claude's plan is.
+ * @returns {Promise<void>}
+ */
+async function loadBudget() {
+  const el = $("felix-budget");
+  if (!el) return;
+  try {
+    const b = await (await fetch("/api/felix/budget", { cache: "no-store" })).json();
+    const ai = b.today.claude + b.today.cursor;
+    const share = b.claudeShare === null ? "Claude's plan usage isn't readable right now." : `Claude's fullest limit is ${Math.round(b.claudeShare)}% used${b.leanAt && b.claudeShare >= b.leanAt ? ", so Felix is using lighter models" : ""}.`;
+    el.textContent = `${ai} AI answer${ai === 1 ? "" : "s"} (${b.today.claude} Claude, ${b.today.cursor} Cursor) and ${b.today.local} on this Mac with no AI. ${share}`;
+  } catch {
+    el.textContent = "Couldn't check. Is the local server running?";
+  }
+}
+
+/** @type {Array<{ name: string, lang: string }>} The Mac's own English voices; empty until loaded. */
+let macVoices = [];
+
+/**
+ * The Mac voice menu: the Mac's default first, then each English voice with its accent.
+ * @param {import("/settings-schema.mjs").Setting} s
+ * @returns {string}
+ */
+function voiceOptionsHtml(s) {
+  const current = String(values[s.key] || "");
+  const accents = { en_US: "American", en_GB: "British", en_AU: "Australian", en_IN: "Indian", en_IE: "Irish", en_ZA: "South African", en_SC: "Scottish" };
+  const list = [{ id: "", name: "The Mac's default voice" }, ...macVoices.map((v) => ({ id: v.name, name: `${v.name} (${accents[v.lang] || v.lang})` }))];
+  if (current && !list.some((v) => v.id === current)) list.push({ id: current, name: current });
+  return list.map((v) => `<option value="${esc(v.id)}"${v.id === current ? " selected" : ""}>${esc(v.name)}</option>`).join("");
+}
+
+/**
+ * Loads the Mac's voices for the Mac voice menu.
+ * @returns {Promise<void>}
+ */
+async function loadVoices() {
+  try {
+    macVoices = (await (await fetch("/api/felix/voices", { cache: "no-store" })).json()).mac || [];
+    accept(values);
+  } catch {
+    macVoices = [];
+  }
+}
+
+/**
+ * Shows the names and words Felix added on his own, from your team, the on-call schedules and Jira.
+ * @returns {Promise<void>}
+ */
+async function loadWords() {
+  const el = $("felix-auto-words");
+  if (!el) return;
+  try {
+    const { auto } = await (await fetch("/api/felix/words", { cache: "no-store" })).json();
+    el.textContent = auto.length ? auto.join(", ") : "None yet.";
+  } catch {
+    el.textContent = "Couldn't check. Is the local server running?";
+  }
+}
+
+/**
+ * Lists your learned phrases, each with a Remove button.
+ * @returns {Promise<void>}
+ */
+async function loadPhrases() {
+  const list = $("felix-phrases");
+  if (!list) return;
+  try {
+    const { phrases } = await (await fetch("/api/felix/phrases", { cache: "no-store" })).json();
+    list.innerHTML = phrases.length
+      ? phrases.map((p) => `<div class="mem-note"><span class="mem-text">“${esc(p.phrase)}” runs “${esc(p.command)}”</span>`
+        + `<div class="acts"><button class="btn small" type="button" data-phrase-remove="${esc(p.phrase)}">Remove</button></div></div>`).join("")
+      : memBlank("phrases", "No phrases yet", "When Felix works out what you meant, he offers to remember it.");
+  } catch {
+    list.innerHTML = `<p class="mem-empty">Couldn't load them.</p>`;
+  }
+}
+
+$("groups").addEventListener("click", async (e) => {
+  const remove = e.target.closest("[data-phrase-remove]");
+  if (!remove) return;
+  try {
+    await FelixShell.request("/api/felix/phrases/delete", { phrase: remove.dataset.phraseRemove });
+    loadPhrases();
+  } catch (err) {
+    showError(`Couldn't remove it: ${err.message}`);
+  }
+});
+$("groups").addEventListener("input", (e) => { if (e.target.id === "mem-q") renderMemory(); });
+
+$("groups").addEventListener("change", (e) => {
+  const key = e.target.dataset.key;
+  if (key) saveOne(key, controlValue(e.target));
+});
+// Return in a one-line text box saves it, the way leaving the box does.
+$("groups").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.matches("input.field")) e.target.blur();
+});
+$("groups").addEventListener("click", (e) => {
+  const swatch = e.target.closest("[data-swatch]");
+  if (swatch) {
+    const s = SETTINGS.find((x) => x.key === swatch.dataset.swatch);
+    const option = s.options[Number(swatch.dataset.i)];
+    if (option.value !== values[s.key]) saveOne(s.key, option.value);
+  }
+  const b = e.target.closest("[data-reset]");
+  if (b) confirmReset(b, settingsIn(b.dataset.reset).map((s) => s.key));
+  const copy = e.target.closest("[data-copy]");
+  if (copy) copyCode(copy);
+  const unlink = e.target.closest("[data-disconnect]");
+  if (unlink) disconnectService(unlink);
+  const off = e.target.closest("[data-music-disconnect]");
+  if (off) disconnectMusic(off);
+  const on = e.target.closest("[data-music-signin]");
+  if (on) window.FelixMusic?.signIn(on.dataset.musicSignin);
+  const sample = e.target.closest("[data-sample]");
+  if (sample) playSample(sample);
+});
+addEventListener("felix:music", (e) => { if (e.detail) acceptMusic(e.detail, false); });
+addEventListener("felix:app", renderAppStatus);
+$("reset-all").addEventListener("click", (e) => confirmReset(e.currentTarget));
+$("search").addEventListener("input", filter);
+addEventListener("scroll", markCurrent, { passive: true });
+// Back to top shows once you're a screen's worth down, and glides up (or jumps, with reduced motion).
+const toTop = $("to-top");
+const showToTop = () => {
+  const on = scrollY > innerHeight * 0.8;
+  toTop.classList.toggle("show", on);
+  toTop.tabIndex = on ? 0 : -1;
+};
+addEventListener("scroll", showToTop, { passive: true });
+toTop.addEventListener("click", () => {
+  scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  $("search")?.focus({ preventScroll: true });
+});
+showToTop();
+addEventListener("resize", markCurrent);
+// More shows the rest of a long help line.
+$("groups").addEventListener("click", (e) => {
+  const more = e.target.closest("[data-more]");
+  if (!more) return;
+  more.nextElementSibling.hidden = false;
+  more.remove();
+});
+
+render();
+accept(values);
+loadMusic();
+loadConnections();
+loadCursorModels();
+loadMics();
+loadMemory();
+voiceDevice();
+loadBudget();
+loadPhrases();
+loadVoices();
+loadWords();
+navigator.mediaDevices?.addEventListener?.("devicechange", loadMics);
+// /settings#jira lands on that section, even on a reload, where the browser would put back the old scroll place.
+if (location.hash) {
+  history.scrollRestoration = "manual";
+  document.getElementById(location.hash.slice(1))?.scrollIntoView();
+}
+markCurrent();
+renderAppStatus();
+checkLauncher();
+FelixShell.loadSettings().then(accept).catch((e) => showError(e.message));
+</script>
+</body>
+</html>

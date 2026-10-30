@@ -1,49 +1,205 @@
-/* Shared look for every Felix page: PURE PM Hub colors (pms-spa TailwindColors.js) and Roboto. */
+/* Shared look for every Felix page: one design system, four themes. Felix himself (his pill, face and chat) also
+   has a purple AI colour, --ai, in each. Work is graphite with a cobalt accent;
+   Personal is olive with warm neutrals. Each has a dark and a light version: the page follows the Mac's setting
+   unless Settings picks one (html[data-theme]), and html[data-mode] says which mode is showing.
+   The token names also keep the older ones (--accent-bg, --ok-bg, --neutral-bg, --code-bg, --mark) as aliases. */
 :root {
-  --bg: #E8EEF2;          /* indigo-50 */
-  --surface: #FFFFFF;
-  --fg: #343B53;          /* gray-800 */
-  --muted: #636C82;       /* gray-700 */
-  --line: #DDE1E7;        /* gray-300 */
-  --accent: #2563EB;      /* blue-600 */
-  --accent-hover: #1D4ED8;
-  --accent-bg: #E1EDF6;   /* blue-50 */
-  --link: #0891B2;        /* cyan-600 */
-  --mark: #FFE29B;        /* yellow-200 */
-  --ok: #047857;   --ok-bg: #D1FAE5;     /* green-700 / 100 */
-  --warn: #8D6747; --warn-bg: #FFF2D8;   /* yellow-800 / 100 */
-  --alert: #C2410C; --alert-bg: #FFEDD5; /* orange-700 / 100 */
-  --bad: #B91C1C;  --bad-bg: #FEE2E2;    /* red-700 / 100 */
-  --neutral-bg: #EBEEEF;  /* gray-100 */
-  --code-bg: #F4F8FD;     /* gray-1000 */
-  --sans: Roboto, -apple-system, "Segoe UI", system-ui, sans-serif;
-  --mono: "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Corners, the same on every page: cards and bars; buttons, inputs, menus and boxes inside cards; small tags,
+     code and keys; and pills for chips, switches and segmented controls. */
+  --r-card: 16px;
+  --r-box: 10px;
+  --r-tag: 6px;
+  --r-pill: 999px;
+  /* Felix's own colours, the same in every theme: a flowing gradient from orange through pink and purple to blue
+     and cyan, for his pill, his voice and his chat only. */
+  --ai-grad: linear-gradient(115deg, #F6A623, #F4436C 25%, #D64EEA 48%, #8F6BFA 66%, #3D9BF5 84%, #1FC6E0);
+  /* The same colours as a ring, for edges and glows that turn round (shell.css animates --felix-turn). */
+  --ai-stops: #F6A623, #F4436C, #D64EEA, #8F6BFA, #3D9BF5, #1FC6E0, #F6A623;
+  --ai-ring: conic-gradient(from var(--felix-turn, 0deg), var(--ai-stops));
+  --ai-orange: #F6A623; --ai-pink: #F4436C; --ai-magenta: #D64EEA; --ai-violet: #8F6BFA; --ai-blue: #3D9BF5; --ai-cyan: #1FC6E0;
+
+  /* Work · light */
   color-scheme: light;
+  --mark-face: #F1EDE0; --mark-eye: #151B24; --mark-smile: #2F55D4; --mark-ring: #C9D0DA;
+  --bg: #F2F4F7; --surface: #FFFFFF; --surface-2: #F4F6F9; --raised: #FFFFFF; --seg-on: #FFFFFF;
+  --fg: #151B26; --muted: #586274; --faint: #8A93A3;
+  --line: #E1E5EB; --line-strong: #C9D0DA;
+  --accent: #2F55D4; --accent-hover: #2546B5; --on-accent: #FFFFFF; --accent-soft: #E9EEFD; --accent-ink: #1E3FA8; --link: #2148C0;
+  --ok: #157A4A; --ok-soft: #E3F4EA; --warn: #8A5A00; --warn-soft: #FBF0D3;
+  --alert: #B4480F; --alert-soft: #FDEADF; --bad: #B42318; --bad-soft: #FDE7E5;
+  --info: #2F55D4; --info-soft: #E9EEFD; --neutral-soft: #EEF1F5;
+  --card-border: #E1E5EB; --card-shadow: none;
+  --pop-shadow: 0 0 0 1px #E1E5EB, 0 14px 36px rgba(21, 27, 38, .16);
+  --felix-bg: #EEF2FE; --felix-line: #2F55D4;
+  --ai: #B83BD9; --ai-soft: #F8E9FC; --ai-ink: #8C1FAE; --on-ai: #FFFFFF; --ai-glow: rgba(184, 59, 217, .22);
+  --scrim: rgba(30, 32, 22, .22);
+  --pad: 16px; --row: 34px;
+
+  --accent-bg: var(--accent-soft); --ok-bg: var(--ok-soft); --warn-bg: var(--warn-soft); --alert-bg: var(--alert-soft);
+  --bad-bg: var(--bad-soft); --neutral-bg: var(--neutral-soft); --code-bg: var(--surface-2); --mark: var(--warn-soft);
 }
+
+/* Personal · light: near-white with a warm olive tint, lighter than before (Oct 31) */
+html[data-mode="personal"] {
+  --mark-face: #F1EDE0; --mark-eye: #1A1D14; --mark-smile: #5C6B23; --mark-ring: #CBCAB4;
+  --bg: #F8F7F1; --surface: #FFFFFC; --surface-2: #F4F3EA; --raised: #FFFFFE; --seg-on: #FFFFFF;
+  --fg: #23251A; --muted: #5E604C; --faint: #94967E;
+  --line: #EAE9DD; --line-strong: #D6D5C3;
+  --accent: #5C6B23; --accent-hover: #4B5819; --on-accent: #FFFFFF; --accent-soft: #EEF1DD; --accent-ink: #434E16; --link: #556320;
+  --ok: #4B5819; --ok-soft: #EEF1DD; --warn: #835600; --warn-soft: #FAEED1;
+  --alert: #A8460F; --alert-soft: #FBE5D6; --bad: #B3261E; --bad-soft: #FBE3E0;
+  --info: #2D5C88; --info-soft: #E2ECF6; --neutral-soft: #F1F0E6;
+  --card-border: transparent; --card-shadow: 0 1px 3px rgba(60, 62, 30, .06), 0 6px 18px rgba(60, 62, 30, .045);
+  --pop-shadow: 0 0 0 1px #EAE9DD, 0 18px 44px rgba(60, 62, 30, .14);
+  --felix-bg: #F3F5E6; --felix-line: #5C6B23;
+  --ai: #A9449F; --ai-soft: #F6E8F3; --ai-ink: #7E2A76; --on-ai: #FFFFFF; --ai-glow: rgba(169, 68, 159, .2);
+  --pad: 20px; --row: 38px;
+}
+
+/* The dark themes, drawn when the Mac is in dark mode (unless Settings says light) or when Settings says dark.
+   The same two blocks appear twice, once for each way in. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #292E3F;          /* gray-900 */
-    --surface: #343B53;     /* gray-800 */
-    --fg: #F6F7F8;          /* gray-75 */
-    --muted: #939EB1;       /* gray-500 */
-    --line: #4A5270;
-    --accent: #4593FF;      /* blue-500 */
-    --accent-hover: #6BB8FE;
-    --accent-bg: #2B3A63;
-    --link: #22D3EE;        /* cyan-400 */
-    --mark: #664833;        /* yellow-900 */
-    --ok: #77E3A9;   --ok-bg: #1F4136;
-    --warn: #FFC122; --warn-bg: #4A3E22;
-    --alert: #FF8E31; --alert-bg: #4D3020;
-    --bad: #F87171;  --bad-bg: #4F2A33;
-    --neutral-bg: #3E4561;
-    --code-bg: #2C3247;
+  html:not([data-theme="light"]) {
     color-scheme: dark;
+    --mark-face: #F1EDE0; --mark-eye: #16181B; --mark-smile: #2F55D4; --mark-ring: transparent;
+    --bg: #0F1113; --surface: #16181B; --surface-2: #1D2024; --raised: #212429; --seg-on: #2E3238;
+    --fg: #ECEEF1; --muted: #A1A7B0; --faint: #7A808A;
+    --line: #272A30; --line-strong: #363A42;
+    --accent: #6EA8FF; --accent-hover: #8DBBFF; --on-accent: #06121F; --accent-soft: #172539; --accent-ink: #B7D3FF; --link: #86B6FF;
+    --ok: #5ED394; --ok-soft: #12301F; --warn: #F1C452; --warn-soft: #30270F;
+    --alert: #FF9E62; --alert-soft: #3A2416; --bad: #FF7E76; --bad-soft: #3E1B1D;
+    --info: #6EA8FF; --info-soft: #172539; --neutral-soft: #23262B;
+    --card-border: #24272C; --card-shadow: none;
+    --pop-shadow: 0 0 0 1px #2C3036, 0 18px 48px rgba(0, 0, 0, .55);
+    --felix-bg: #141C28; --felix-line: #3F6FB5;
+    --ai: #DA7BF2; --ai-soft: #2E1A37; --ai-ink: #F1C9FA; --on-ai: #24082C; --ai-glow: rgba(218, 123, 242, .28);
+    --scrim: rgba(4, 6, 4, .5);
+  }
+  html[data-mode="personal"]:not([data-theme="light"]) {
+    --mark-face: #F1EDE0; --mark-eye: #1A1D14; --mark-smile: #5C6B23; --mark-ring: transparent;
+    --bg: #12140E; --surface: #1A1D14; --surface-2: #22261A; --raised: #262A1D; --seg-on: #343A27;
+    --fg: #EEEEE2; --muted: #B0B29A; --faint: #7F826B;
+    --line: #2F3324; --line-strong: #40452F;
+    --accent: #AEB86A; --accent-hover: #C6CF85; --on-accent: #1A1D0B; --accent-soft: #2B3019; --accent-ink: #D6DDA0; --link: #C2CB7E;
+    --ok: #AEB86A; --ok-soft: #2B3019; --warn: #F0C35A; --warn-soft: #33290F;
+    --alert: #FFA06B; --alert-soft: #3B2717; --bad: #FF8A80; --bad-soft: #3E1E1C;
+    --info: #9CC4EA; --info-soft: #1C2A36; --neutral-soft: #262A1E;
+    --card-border: transparent; --card-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --pop-shadow: 0 0 0 1px #343927, 0 20px 52px rgba(0, 0, 0, .6);
+    --felix-bg: #1F2614; --felix-line: #7E8A3E;
+    --ai: #DE8AD6; --ai-soft: #301D30; --ai-ink: #F4CDEF; --on-ai: #270C24; --ai-glow: rgba(222, 138, 214, .26);
   }
 }
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --mark-face: #F1EDE0; --mark-eye: #16181B; --mark-smile: #2F55D4; --mark-ring: transparent;
+  --bg: #0F1113; --surface: #16181B; --surface-2: #1D2024; --raised: #212429; --seg-on: #2E3238;
+  --fg: #ECEEF1; --muted: #A1A7B0; --faint: #7A808A;
+  --line: #272A30; --line-strong: #363A42;
+  --accent: #6EA8FF; --accent-hover: #8DBBFF; --on-accent: #06121F; --accent-soft: #172539; --accent-ink: #B7D3FF; --link: #86B6FF;
+  --ok: #5ED394; --ok-soft: #12301F; --warn: #F1C452; --warn-soft: #30270F;
+  --alert: #FF9E62; --alert-soft: #3A2416; --bad: #FF7E76; --bad-soft: #3E1B1D;
+  --info: #6EA8FF; --info-soft: #172539; --neutral-soft: #23262B;
+  --card-border: #24272C; --card-shadow: none;
+  --pop-shadow: 0 0 0 1px #2C3036, 0 18px 48px rgba(0, 0, 0, .55);
+  --felix-bg: #141C28; --felix-line: #3F6FB5;
+  --ai: #DA7BF2; --ai-soft: #2E1A37; --ai-ink: #F1C9FA; --on-ai: #24082C; --ai-glow: rgba(218, 123, 242, .28);
+  --scrim: rgba(4, 6, 4, .5);
+}
+html[data-theme="dark"][data-mode="personal"] {
+  --mark-face: #F1EDE0; --mark-eye: #1A1D14; --mark-smile: #5C6B23; --mark-ring: transparent;
+  --bg: #12140E; --surface: #1A1D14; --surface-2: #22261A; --raised: #262A1D; --seg-on: #343A27;
+  --fg: #EEEEE2; --muted: #B0B29A; --faint: #7F826B;
+  --line: #2F3324; --line-strong: #40452F;
+  --accent: #AEB86A; --accent-hover: #C6CF85; --on-accent: #1A1D0B; --accent-soft: #2B3019; --accent-ink: #D6DDA0; --link: #C2CB7E;
+  --ok: #AEB86A; --ok-soft: #2B3019; --warn: #F0C35A; --warn-soft: #33290F;
+  --alert: #FFA06B; --alert-soft: #3B2717; --bad: #FF8A80; --bad-soft: #3E1E1C;
+  --info: #9CC4EA; --info-soft: #1C2A36; --neutral-soft: #262A1E;
+  --card-border: transparent; --card-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  --pop-shadow: 0 0 0 1px #343927, 0 20px 52px rgba(0, 0, 0, .6);
+  --felix-bg: #1F2614; --felix-line: #7E8A3E;
+  --ai: #DE8AD6; --ai-soft: #301D30; --ai-ink: #F4CDEF; --on-ai: #270C24; --ai-glow: rgba(222, 138, 214, .26);
+}
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
-button, select, input { font: inherit; color: inherit; }
+button, select, input, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: var(--accent-soft); color: var(--fg); }
+input, textarea { caret-color: var(--accent); }
+html { scrollbar-color: var(--line-strong) transparent; }
+
+/* Your own colour for a mode (Settings → Home and layout). shell.js puts the picked colour in --accent-work or
+   --accent-personal and adds accent-work / accent-personal to <html>; every accent shade is worked out from it here,
+   so one pick colours buttons, links, highlights, the selected tab and Felix's smile, and gently tints the page,
+   the cards, the soft fills and the lines. The modes' own colours keep their hand-tuned values above. Dark mode
+   lightens the colour so it still reads on a dark card, and tints its greys more faintly. */
+html.accent-work[data-mode="work"] { --accent-base: var(--accent-work); }
+html.accent-personal[data-mode="personal"] { --accent-base: var(--accent-personal); }
+html.accent-work[data-mode="work"], html.accent-personal[data-mode="personal"] {
+  --accent: var(--accent-base);
+  --accent-hover: color-mix(in oklab, var(--accent-base) 82%, black);
+  --on-accent: #FFFFFF;
+  --accent-soft: color-mix(in oklab, var(--accent-base) 12%, var(--surface));
+  --accent-bg: var(--accent-soft);
+  --accent-ink: color-mix(in oklab, var(--accent-base) 72%, black);
+  --link: color-mix(in oklab, var(--accent-base) 88%, black);
+  --mark-smile: var(--accent-base);
+  --felix-line: var(--accent-base);
+  --felix-bg: color-mix(in oklab, var(--accent-base) 9%, var(--surface));
+  --bg: color-mix(in oklab, var(--accent-base) 6%, #F6F6F4);
+  --surface: color-mix(in oklab, var(--accent-base) 1.5%, #FFFFFF);
+  --surface-2: color-mix(in oklab, var(--accent-base) 5%, #F7F7F5);
+  --raised: color-mix(in oklab, var(--accent-base) 1%, #FFFFFF);
+  --line: color-mix(in oklab, var(--accent-base) 9%, #E7E7E3);
+  --line-strong: color-mix(in oklab, var(--accent-base) 14%, #D2D2CC);
+  --neutral-soft: color-mix(in oklab, var(--accent-base) 6%, #EFEFEB);
+  --mark-ring: var(--line-strong);
+}
+html.accent-work[data-mode="work"] { --card-border: var(--line); }
+@media (prefers-color-scheme: dark) {
+  html.accent-work:not([data-theme="light"])[data-mode="work"], html.accent-personal:not([data-theme="light"])[data-mode="personal"] {
+    --accent: color-mix(in oklab, var(--accent-base) 55%, white);
+    --accent-hover: color-mix(in oklab, var(--accent-base) 42%, white);
+    --on-accent: color-mix(in oklab, var(--accent-base) 35%, black);
+    --accent-soft: color-mix(in oklab, var(--accent-base) 24%, var(--surface));
+    --accent-bg: var(--accent-soft);
+    --accent-ink: color-mix(in oklab, var(--accent-base) 30%, white);
+    --link: color-mix(in oklab, var(--accent-base) 45%, white);
+    --mark-smile: color-mix(in oklab, var(--accent-base) 55%, white);
+    --felix-line: color-mix(in oklab, var(--accent-base) 55%, white);
+    --felix-bg: color-mix(in oklab, var(--accent-base) 16%, var(--surface));
+    --bg: color-mix(in oklab, var(--accent-base) 7%, #0F1012);
+    --surface: color-mix(in oklab, var(--accent-base) 5%, #16171A);
+    --surface-2: color-mix(in oklab, var(--accent-base) 6%, #1D1E21);
+    --raised: color-mix(in oklab, var(--accent-base) 6%, #212226);
+    --seg-on: color-mix(in oklab, var(--accent-base) 8%, #2D2F33);
+    --line: color-mix(in oklab, var(--accent-base) 8%, #27282C);
+    --line-strong: color-mix(in oklab, var(--accent-base) 10%, #36373C);
+    --neutral-soft: color-mix(in oklab, var(--accent-base) 6%, #232428);
+  }
+}
+html.accent-work[data-theme="dark"][data-mode="work"], html.accent-personal[data-theme="dark"][data-mode="personal"] {
+  --accent: color-mix(in oklab, var(--accent-base) 55%, white);
+  --accent-hover: color-mix(in oklab, var(--accent-base) 42%, white);
+  --on-accent: color-mix(in oklab, var(--accent-base) 35%, black);
+  --accent-soft: color-mix(in oklab, var(--accent-base) 24%, var(--surface));
+  --accent-bg: var(--accent-soft);
+  --accent-ink: color-mix(in oklab, var(--accent-base) 30%, white);
+  --link: color-mix(in oklab, var(--accent-base) 45%, white);
+  --mark-smile: color-mix(in oklab, var(--accent-base) 55%, white);
+  --felix-line: color-mix(in oklab, var(--accent-base) 55%, white);
+  --felix-bg: color-mix(in oklab, var(--accent-base) 16%, var(--surface));
+  --bg: color-mix(in oklab, var(--accent-base) 7%, #0F1012);
+  --surface: color-mix(in oklab, var(--accent-base) 5%, #16171A);
+  --surface-2: color-mix(in oklab, var(--accent-base) 6%, #1D1E21);
+  --raised: color-mix(in oklab, var(--accent-base) 6%, #212226);
+  --seg-on: color-mix(in oklab, var(--accent-base) 8%, #2D2F33);
+  --line: color-mix(in oklab, var(--accent-base) 8%, #27282C);
+  --line-strong: color-mix(in oklab, var(--accent-base) 10%, #36373C);
+  --neutral-soft: color-mix(in oklab, var(--accent-base) 6%, #232428);
+}

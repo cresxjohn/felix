@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Felix">
+  <!-- Felix app icon, Work colours: logo 2a on a cobalt macOS tile (824 px tile in a 1024 canvas). -->
+  <g transform="scale(16)">
+    <rect x="6.25" y="6.25" width="51.5" height="51.5" rx="11.6" fill="#2F55D4"/>
+    <circle cx="32" cy="33" r="17.5" fill="#F1EDE0"/>
+    <rect x="25.6" y="25.2" width="4.1" height="7.9" rx="2.05" fill="#151B24"/>
+    <path d="M34.3 30.6q2.2-3.4 4.4 0" fill="none" stroke="#151B24" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M25.9 37.4c3.4 3.4 8.8 3.4 12.2 0" fill="none" stroke="#2F55D4" stroke-width="2.9" stroke-linecap="round"/>
+  </g>
+</svg>

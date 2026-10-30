@@ -1,0 +1,179 @@
+/* The music player (music.js), the card the orb in the bottom bar opens: the song playing at the top (cover, title,
+   artist, a progress bar you can click, the controls and the volume), then a search box and the tabs, and the
+   library, an opened list, search results, Up next or Recently played below. Music.js adds this file to the page.
+   What's on shows with a tint, a ring or a dot, never a coloured edge. */
+.music-panel.mx { width: min(340px, calc(100vw - 16px)); max-height: calc(100vh - 96px); outline: none; }
+.music-panel.mx.full { height: min(600px, calc(100vh - 96px)); }
+
+.mx-now { display: grid; gap: 10px; padding: 14px 14px 12px; }
+.mx-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mx-art {
+  display: inline-grid; place-items: center; flex: none; width: 56px; height: 56px; border-radius: var(--r-box); overflow: hidden;
+  background: var(--accent-soft); color: var(--accent-ink);
+}
+.mx-art img { width: 100%; height: 100%; object-fit: cover; }
+.mx-art svg { width: 20px; height: 20px; }
+.mx-track { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.mx-track b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-track span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-track .warn { color: var(--alert); white-space: normal; }
+.mx-primary {
+  justify-self: start; padding: 8px 14px; border: 0; border-radius: var(--r-box); background: var(--accent); color: var(--on-accent);
+  font: 600 13px var(--sans); cursor: pointer;
+}
+.mx-primary:hover { background: var(--accent-hover); }
+
+/* The progress bar: a thin line that fills as the song plays, with a knob on hover or focus. */
+.mx-seek { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mx-seek > span { flex: none; min-width: 30px; }
+.mx-seek > span:last-child { text-align: right; }
+.mx-rail { position: relative; flex: 1; height: 16px; cursor: pointer; touch-action: none; border-radius: var(--r-pill); }
+.mx-rail::before, .mx-rail > i { content: ""; position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: var(--r-pill); }
+.mx-rail::before { right: 0; background: var(--line-strong); }
+.mx-rail > i { width: var(--at, 0%); background: var(--accent); transition: width 1s linear; }
+.mx-rail::after {
+  content: ""; position: absolute; top: 50%; left: var(--at, 0%); width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px var(--raised); opacity: 0; transition: opacity .15s, left 1s linear;
+}
+.mx-rail:hover::after, .mx-rail:focus-visible::after { opacity: 1; }
+.mx-rail:focus-visible { outline: none; }
+.mx-rail:focus-visible::before { box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* Round icon buttons: shuffle, repeat, the heart, the tabs. On shows as the accent colour, with a dot under
+   shuffle and repeat, and a tint behind a tab. */
+.mx-icon {
+  position: relative; display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer; text-decoration: none;
+}
+.mx-icon svg { width: 16px; height: 16px; }
+.mx-icon:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+.mx-icon:disabled { opacity: .35; cursor: default; }
+.mx-icon.on, .mx-icon.on:hover:not(:disabled) { color: var(--accent); }
+.mx-ctl .mx-icon.on::after { content: ""; position: absolute; bottom: 1px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.mx-small { width: 26px; height: 26px; }
+.mx-small svg { width: 14px; height: 14px; }
+
+.mx-ctl { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.mx-play {
+  display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); cursor: pointer;
+}
+.mx-play svg { width: 18px; height: 18px; }
+.mx-play:hover:not(:disabled) { background: var(--accent-hover); }
+.mx-play:disabled { opacity: .4; cursor: default; }
+.mx-play.small { width: 32px; height: 32px; }
+.mx-play.small svg { width: 14px; height: 14px; }
+
+/* The volume: the speaker (mute), a slider and the device playing. */
+.mx-vol { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mx-vol .mx-icon { width: 26px; height: 26px; }
+.mx-vol .mx-icon svg { width: 15px; height: 15px; }
+.mx-range { flex: 1; min-width: 0; height: 16px; margin: 0; background: none; cursor: pointer; appearance: none; -webkit-appearance: none; }
+.mx-range::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-pill); background: linear-gradient(to right, var(--muted) var(--fill, 0%), var(--line-strong) var(--fill, 0%)); }
+.mx-range::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border: 0; border-radius: 50%; background: var(--fg); }
+.mx-range::-moz-range-track { height: 4px; border-radius: var(--r-pill); background: var(--line-strong); }
+.mx-range::-moz-range-progress { height: 4px; border-radius: var(--r-pill); background: var(--muted); }
+.mx-range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: var(--fg); }
+.mx-range:hover::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line-strong) var(--fill, 0%)); }
+.mx-range:focus-visible { outline: none; }
+.mx-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-soft); }
+.mx-device { flex: none; max-width: 40%; color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The one note asking you to sign in again for something new. */
+.mx-notes:empty { display: none; }
+.mx-note {
+  display: flex; align-items: center; gap: 6px; margin: 0 12px 10px; padding: 6px 4px 6px 12px; border-radius: var(--r-box);
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; line-height: 1.35;
+}
+.mx-note span { flex: 1; }
+.mx-note .mx-icon { color: var(--accent-ink); }
+.mx-link { padding: 2px; border: 0; background: none; color: var(--link); font: 600 12px/1.2 var(--sans); cursor: pointer; }
+.mx-link:hover { text-decoration: underline; }
+
+/* The search box and the tabs. */
+.mx-nav { display: flex; align-items: center; gap: 2px; padding: 8px 8px 8px 10px; border-top: 1px solid var(--line); }
+.mx-search {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 32px; margin-right: 4px; padding: 0 3px 0 10px;
+  border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted);
+}
+.mx-search:focus-within { box-shadow: 0 0 0 1.5px var(--accent); }
+.mx-search > svg { flex: none; width: 14px; height: 14px; }
+.mx-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: none; background: none; color: var(--fg); font-size: 13px; appearance: none; }
+.mx-search input::-webkit-search-cancel-button { display: none; }
+.mx-search input::placeholder { color: var(--faint); }
+.mx-nav .mx-icon.on, .mx-nav .mx-icon.on:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* The lower half: rows of songs and lists. The one playing now is tinted. */
+.mx-body { flex: 1; min-height: 0; overflow: auto; padding: 0 6px 8px; scrollbar-width: thin; overscroll-behavior: contain; }
+.mx-list { display: grid; gap: 1px; }
+.mx-label { margin: 12px 8px 4px; color: var(--faint); font: 600 11px/1 var(--sans); }
+.mx-row { position: relative; display: flex; align-items: center; min-width: 0; border-radius: var(--r-box); }
+.mx-row:hover, .mx-row:focus-within { background: var(--surface-2); }
+.mx-row.is-now, .mx-row.is-now:hover { background: var(--accent-soft); }
+.mx-row.is-now .mx-name b { color: var(--accent-ink); }
+.mx-row.off { opacity: .45; }
+.mx-item {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 0; border-radius: inherit;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+div.mx-item, .mx-item:disabled { cursor: default; }
+.mx-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mx-cover {
+  display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--r-tag); object-fit: cover;
+  background: var(--neutral-soft); color: var(--muted);
+}
+.mx-cover svg { width: 16px; height: 16px; }
+.mx-cover.round { border-radius: 50%; }
+.mx-cover.liked { background: var(--accent-soft); color: var(--accent); }
+.mx-num { flex: none; width: 22px; color: var(--faint); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.mx-name { flex: 1; min-width: 0; display: grid; }
+.mx-name b { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-name span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-dur { flex: none; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mx-add { margin-right: 4px; opacity: 0; transition: opacity .12s; }
+.mx-row:hover .mx-add, .mx-row:focus-within .mx-add, .mx-add.on { opacity: 1; }
+@media (hover: none) { .mx-add { opacity: 1; } }
+
+/* An opened list's header: back, its cover and name, and Play. It stays in view as the songs scroll. */
+.mx-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 8px 4px 8px 0; background: var(--raised); box-shadow: 0 1px 0 var(--line); }
+.mx-head .mx-cover { width: 44px; height: 44px; }
+.mx-head .mx-name b { font-size: 14px; font-weight: 600; }
+
+/* Empty, failed and loading. */
+.mx-empty { display: grid; justify-items: start; gap: 6px; padding: 16px 10px; color: var(--muted); font-size: 13px; }
+.mx-empty.warn span { color: var(--alert); }
+.mx-skel > div { display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
+.mx-skel i { flex: none; width: 36px; height: 36px; border-radius: var(--r-tag); background: var(--line); }
+.mx-skel span { flex: 1; display: grid; gap: 7px; }
+.mx-skel b { width: 68%; height: 9px; border-radius: var(--r-pill); background: var(--line); }
+.mx-skel b + b { width: 40%; }
+.mx-skel i, .mx-skel b { animation: mx-pulse 1.4s ease-in-out infinite; }
+@keyframes mx-pulse { 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) {
+  .mx-skel i, .mx-skel b { animation: none; }
+  .mx-rail > i, .mx-rail::after { transition: none; }
+}
+
+/* Lyrics: the line being sung in full colour and weight, the ones before it faded, the ones after it easy to read.
+   Each line is a button that jumps the song there. Scrolling by hand pauses following along, and "Back to now"
+   picks it up again. */
+.mx-lyrics { display: grid; gap: 2px; padding: 14px 4px 45%; }
+.mx-ly {
+  padding: 5px 8px; border: 0; border-radius: var(--r-box); background: none; color: var(--muted); text-align: left;
+  font: 600 16px/1.4 var(--sans); cursor: pointer; transition: color .25s, opacity .25s;
+}
+.mx-ly:hover { background: var(--surface-2); color: var(--fg); }
+.mx-ly:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mx-ly.past { opacity: .5; }
+.mx-ly.now { color: var(--fg); font-weight: 700; opacity: 1; }
+.mx-chip {
+  position: sticky; bottom: 10px; z-index: 1; display: block; margin: -36px auto 0; padding: 7px 14px; border: 0; border-radius: var(--r-pill);
+  background: var(--accent); color: var(--on-accent); font: 600 12px/1 var(--sans); cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+}
+.mx-chip:hover { background: var(--accent-hover); }
+.mx-plain { padding: 4px 8px 16px; color: var(--fg); font-size: 14px; line-height: 1.65; white-space: pre-wrap; }
+.mx-credit { margin: 0; padding: 6px 8px 4px; color: var(--faint); font-size: 11px; }
+.mx-skel-ly { display: grid; gap: 14px; padding: 18px 12px; }
+.mx-skel-ly b { width: 78%; height: 12px; }
+.mx-skel-ly b:nth-child(2n) { width: 56%; }
+.mx-skel-ly b:nth-child(3n) { width: 68%; }

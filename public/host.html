@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" class="host">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Felix</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Felix">
+<meta name="application-name" content="Felix">
+<meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1113" media="(prefers-color-scheme: dark)">
+<script src="/app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/shell.css">
+<script src="/shell.js"></script>
+<script src="/music.js"></script>
+<script src="/voice-device.js"></script>
+<script src="/felix-voice.js"></script>
+<script src="/felix.js"></script>
+<script src="/felix-hints.js"></script>
+<script src="/felix-idle.js"></script>
+</head>
+<body>
+<!-- The loading screen, drawn before anything else loads: Felix's face settles in, smiles, winks once and his name
+     rises under it, until the first page has drawn (shell.js fades it out). -->
+<div class="boot" id="boot" role="status" aria-label="Felix is starting">
+  <svg class="mark boot-face" viewBox="0 0 64 64" aria-hidden="true">
+    <circle class="face" cx="32" cy="32" r="28"/>
+    <rect class="eye" x="21" y="20" width="6.5" height="12.5" rx="3.25"/>
+    <rect class="eye boot-eye2" x="36.5" y="20" width="6.5" height="12.5" rx="3.25"/>
+    <path class="wink boot-wink" d="M36 28.5q3.5-5.5 7 0"/>
+    <path class="smile boot-smile" pathLength="100" d="M21.5 40c5.8 5.8 15.2 5.8 21 0"/>
+  </svg>
+  <span class="boot-name">Felix</span>
+</div>
+<!-- Felix's lasting outer page: every Felix page the window opens loads in a frame here, and the bottom bar stays,
+     so the music carries on between pages. The server sends this for a window's own page loads (shell.js). -->
+<div class="host-app">
+  <div class="host-frames" id="felix-pages"></div>
+  <footer class="dock" id="dock"></footer>
+</div>
+<script>FelixShell.mountHost();</script>
+</body>
+</html>

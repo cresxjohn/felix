@@ -1,0 +1,29 @@
+{
+  "id": "/",
+  "name": "Felix",
+  "short_name": "Felix",
+  "description": "Felix: my buddy. On-call, PRs and AI usage at a glance.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
+  "background_color": "#0F1113",
+  "theme_color": "#0F1113",
+  "categories": ["productivity", "developer"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/home-wide.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Felix home: who is on call, open PRs and AI usage" }
+  ],
+  "shortcuts": [
+    { "name": "Open PRs", "url": "/prs", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Needs my review", "short_name": "Review", "url": "/prs/review", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "My PRs", "url": "/prs/mine", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Releases", "url": "/prs/releases", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ]
+}

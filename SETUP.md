@@ -79,11 +79,21 @@ The server expects this layout. The folder *above* `felix` is the workspace that
 └── felix/                       this project
     ├── server.mjs               the server (no npm packages needed)
     ├── datadog.mjs              the Incident Commander card's data
+    ├── ai-usage.mjs             the AI usage card's data (Claude and Cursor limits)
+    ├── keychain.mjs             reads secrets from the Keychain
+    ├── tailnet.mjs              which pages may send change requests (localhost, tailnet)
+    ├── settings.mjs             keeps your settings in data/settings.json
+    ├── test/                    tests (./prs test)
     ├── prs                      start / stop script
     ├── public/home.html         the home page (cards)
     ├── public/index.html        the Open PRs page
-    ├── public/theme.css         colors and fonts both pages share
-    ├── public/pr-status.js      PR state rules both pages share
+    ├── public/settings.html     the Settings page
+    ├── public/settings-schema.mjs  every setting, its default and allowed values
+    ├── public/shell.js, .css    the top bar and bottom bar every page shares
+    ├── public/theme.css         colors and fonts every page shares
+    ├── public/pr-status.js      PR state rules both PR views share
+    ├── public/layout.js         where each home card sits on the 12-column grid, per mode
+    ├── public/cards.js          each home card's title and icon, and examples for cards to come
     ├── skills/review-pr/        the /review-pr skill reviews use
     ├── hooks/report.sh          tells the server what a Claude session is doing
     ├── README.md                what it does and how it works
@@ -183,6 +193,7 @@ The Open PRs page sends these, so keep `/prs` open in a pinned tab; the home pag
 
 - `data/reviews.json`: every Claude review and fix session, its status, its step log and its report
 - `data/server.log`: the server's log
+- `data/settings.json`: your Felix settings (mode, Fit to screen, auto refresh); change them on the Settings page
 - `hooks/settings.json`: rewritten on every server start; don't edit it
 - `~/Library/LaunchAgents/local.felix.plist`: the start-at-login entry (made by `./prs install`)
 - `~/.warp/launch_configurations/openprs-*.yaml`: short-lived files that open Warp windows; they delete themselves
